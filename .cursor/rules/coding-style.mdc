@@ -1,0 +1,45 @@
+---
+description: Functional iteration, arrow functions, and lodash guidelines
+globs: "**/*.{ts,tsx,js,jsx}"
+alwaysApply: false
+---
+
+# Coding Style
+
+## No For Loops
+
+Never use `for`, `for...of`, or `for...in` loops. Always use functional array methods instead:
+
+- `Array.find()` instead of looping to find an element
+- `Array.map()` instead of looping to transform elements
+- `Array.filter()` instead of looping to select elements
+- `Array.reduce()` when accumulating a result
+- `Array.some()` / `Array.every()` for boolean checks
+- `Array.forEach()` only when side effects are truly needed
+
+## Arrow Functions
+
+Always use arrow functions when the body is a single expression:
+
+```typescript
+// BAD
+.filter(function(item) { return item.property; })
+const fn = function(x) { return x * 2; }
+
+// GOOD
+.filter(item => item.property)
+const fn = (x) => x * 2
+```
+
+This applies to callbacks, inline functions, and named single-expression functions.
+
+## Lodash Usage
+
+Only applies if the project uses `lodash` or `lodash-es`.
+
+- **Use lodash for**: `meanBy`, `sumBy`, `maxBy`, `minBy`, `groupBy`, `times`.
+- **Don't use lodash for**: native equivalents like `Array.map()`, `Array.flatMap()`, `Array.reduce()`.
+- **`chain()`**: Only for 3+ operations, never for single operations.
+- If lodash improves readability, use it.
+- If lodash doesn't improve readability, use native methods.
+- Optimize for both brevity and clarity.

@@ -1,0 +1,91 @@
+---
+description: React state and MobX State Tree patterns for local and global state
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# State Management
+
+## React Built-in State
+
+Prefer React's built-in state for component-local state. Keep state as close to where it's used as possible.
+
+```tsx
+const Component = () => {
+  const [count, setCount] = useState(0)
+  return <button onClick={() => setCount(count + 1)}>{count}</button>
+}
+```
+
+## MobX State Tree (MST) for Global State
+
+Use MobX State Tree for global / shared state. Define store models in `@/state`.
+
+```tsx
+import { types } from 'mobx-state-tree'
+
+export const CounterStore = types
+  .model('CounterStore', {
+    count: types.optional(types.number, 0),
+  })
+  .actions((self) => ({
+    increment() {
+      self.count += 1
+    },
+    decrement() {
+      self.count -= 1
+    },
+  }))
+  .views((self) => ({
+    get isPositive() {
+      return self.count > 0
+    },
+  }))
+```
+
+```tsx
+import { CounterStore } from './CounterStore'
+import { types, Instance } from 'mobx-state-tree'
+
+export const RootStore = types.model('RootStore', {
+  counter: types.optional(CounterStore, {}),
+})
+
+export type IRootStore = Instance<typeof RootStore>
+```
+
+```tsx
+import { RootStore, IRootStore } from '@/state/RootStore'
+import { createContext, useContext } from 'react'
+
+const StoreContext = createContext<IRootStore | null>(null)
+
+export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
+  const store = RootStore.create({})
+  return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>
+}
+
+export const useStore = () => {
+  const store = useContext(StoreContext)
+  if (!store) throw new Error('useStore must be used within a StoreProvider')
+  return store
+}
+```
+
+```tsx
+import { useStore } from '@/state/StoreProvider'
+import { observer } from 'mobx-react-lite'
+
+const Counter = observer(() => {
+  const { counter } = useStore()
+  return <button onClick={() => counter.increment()}>{counter.count}</button>
+})
+```
+
+## Best Practices
+
+- Keep state minimal; derive computed values using MST `.views()`
+- Wrap components that read MST observables with `observer` from `mobx-react-lite`
+- Use React context for simple shared UI state (theme, modals)
+- Use MST for complex domain / global state (cart, user, app settings)
+- Avoid prop drilling with composition patterns

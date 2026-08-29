@@ -1,0 +1,45 @@
+---
+description: React Router v7 patterns, route organization, and lazy loading
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Routing & Navigation
+
+## React Router
+
+Use React Router v7 with `BrowserRouter`. Routes are defined in `@/pages/AppRoutes.tsx`.
+
+```tsx
+import { BrowserRouter, Route, Routes } from 'react-router'
+
+export const AppRoutes = () => (
+  <BrowserRouter>
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  </BrowserRouter>
+)
+```
+
+## Best Practices
+
+- Define all routes in `AppRoutes.tsx` for a single source of truth
+- Use `<Link>` from `react-router` for internal navigation (never `<a>` tags)
+- Use `useNavigate()` for programmatic navigation
+- Use `useParams()` and `useSearchParams()` for reading route/query params
+- Place page components in `@/pages/` — one file per route
+- Use lazy loading with `React.lazy()` and `<Suspense>` for code splitting heavy pages
+
+```tsx
+import { lazy, Suspense } from 'react'
+const HeavyPage = lazy(() => import('@/pages/HeavyPage'))
+
+<Route path="/heavy" element={
+  <Suspense fallback={<div>Loading…</div>}>
+    <HeavyPage />
+  </Suspense>
+} />
+```

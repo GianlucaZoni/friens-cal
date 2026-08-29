@@ -1,0 +1,34 @@
+---
+description: Core project conventions that apply to all interactions
+alwaysApply: true
+---
+
+# Project Conventions
+
+## Package Manager
+
+Always use `npm` as the package manager.
+
+```bash
+npm install
+npm run dev
+npm run build
+npm run lint
+```
+
+## Response Format
+
+After applying changes, respond with a brief bullet list explaining **why** each change was made (intent, reasoning, architectural impact) — not **how** (which lines changed, what code was added/removed). Keep it concise. Skip detailed explanations unless explicitly asked.
+
+## Code Analysis
+
+Before designing or implementing any request, analyze the codebase for similar implementations and take inspiration from good patterns.
+
+## Verify Function Existence
+
+Always verify that a function or method actually exists before using it — even if the user suggests it by name. Users can misremember names (e.g. `Object.fromPairs` doesn't exist — it's `Object.fromEntries`). **Trust but verify.**
+
+## Code Comments Policy
+
+1. ABSOLUTELY do not add comments under any circumstance.
+2. Do not remove existing comments in code.

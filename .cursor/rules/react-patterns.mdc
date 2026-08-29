@@ -1,0 +1,68 @@
+---
+description: TypeScript strictness, component composition, clsx, and ShadCn usage
+globs: "**/*.{ts,tsx,jsx}"
+alwaysApply: false
+---
+
+# React & TypeScript Patterns
+
+## Type Safety
+
+- Use TypeScript for all new code
+- Maintain strict type checking
+- Avoid `any` types unless absolutely necessary
+- Use proper type imports (`import type` when importing only types)
+
+```tsx
+import type { ComponentProps } from 'react'
+
+interface ButtonProps extends ComponentProps<'button'> {
+  variant?: 'primary' | 'secondary'
+}
+```
+
+## Component Composition
+
+Keep components focused and reusable. Follow composition patterns.
+
+```tsx
+const Card = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <div className={cn(s.card, className)}>{children}</div>
+)
+
+const CardHeader = ({ children }: { children: React.ReactNode }) => (
+  <div className={s.header}>{children}</div>
+)
+
+const CardBody = ({ children }: { children: React.ReactNode }) => (
+  <div className={s.body}>{children}</div>
+)
+```
+
+## Utility: `cn` from clsx
+
+Always use `cn` from `clsx` for className conditionals.
+
+```tsx
+import cn from 'clsx'
+
+const MyComponent = ({ className }: { className?: string }) => (
+  <div className={cn(s.component, className)} />
+)
+```
+
+## ShadCn Components
+
+Use components from ShadCn located in `@/components/ui` when available.
+
+```tsx
+import { Card } from '@/components/ui/card'
+```
+
+## Code Organization
+
+- Maintain separation of concerns
+- Use meaningful variable and function names
+- Prefer named exports for utilities
+- Follow ES linting rules — run `npm run lint` before committing
+- Fix linting errors immediately

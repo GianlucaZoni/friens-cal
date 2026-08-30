@@ -120,11 +120,21 @@ Kept, against the reviews, with reasons:
   until its first effect runs, which would render three columns for a frame on a
   phone; this one reads the query synchronously and also clears the sheet.
 
-### For the human
+### Answered by the human, on merge
+
+- **The right pane is the Hangouts pane.** "Events as Hangouts, or Candidates
+  for Hangouts." So the name is a **topic, not a type**: the pane's title is the
+  one place the two words sit under one, and inside it they stay apart in their
+  own regions, which is what CONTEXT.md actually forbids collapsing. Replaces
+  the placeholder "Candidates and Hangouts".
+- **`⇧⌘B` is settled.** The Chrome bookmarks-bar collision was checked in a
+  real browser and is a non-issue; `preventDefault` wins. Decision 2 stands with
+  nothing left hanging off it.
+- Shell verified visually by the human at merge, which closes the two checks the
+  hidden browser pane could not run (sheet animation, and force-closing the
+  sheet on crossing the breakpoint upward).
+
+### Still open
 
 - **"Pinned" is load-bearing vocabulary that CONTEXT.md does not define.**
   Tickets 09 and 16 both use it. Worth a glossary entry.
-- **The right pane has no name.** "Candidates and Hangouts" is accurate and
-  clumsy. Nothing in the map names it.
-- **`⇧⌘B` is still Chrome's bookmarks-bar chord**, as decision 2 knowingly
-  accepted. `preventDefault` wins here too.

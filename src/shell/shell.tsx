@@ -77,14 +77,16 @@ const SHEET_QUERY = `(max-width: ${SHEET_BREAKPOINT - 1}px)`
 /**
  * Everything that differs between the two panes, in one place.
  *
- * `title` is deliberately not "Candidates": the right pane holds pinned
- * Hangouts as well, and a Candidate and a Hangout are entirely different things
- * (CONTEXT.md) — a live derivation and a fact that was written down. Naming the
- * pane after one of them would fold the other into it.
+ * The right pane is **the Hangouts pane** — named by the human, and it is a
+ * topic and not a type: it holds committed Hangouts and the Candidates *for*
+ * Hangouts, which is what a Candidate is. The pane's name is the one place the
+ * two sit under one word; inside it they stay apart, in their own regions, as
+ * CONTEXT.md requires. It is deliberately not "Candidates", which would fold
+ * the committed ones into the computed ones.
  */
 const PANE: Record<Pane, { title: string; shortcut: string; icon: typeof PanelLeftIcon }> = {
   left: { title: 'Friends', shortcut: '⌘B', icon: PanelLeftIcon },
-  right: { title: 'Candidates and Hangouts', shortcut: '⇧⌘B', icon: PanelRightIcon },
+  right: { title: 'Hangouts', shortcut: '⇧⌘B', icon: PanelRightIcon },
 }
 
 /** Ticket 12 decision 3, and not a knob: both panes open, every load. */

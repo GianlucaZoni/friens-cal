@@ -1,5 +1,9 @@
 -- friens-cal — provisioning smoke test (ticket 04)
 --
+-- HISTORICAL. Already run; kept as the record of how the two locks were first
+-- proved. Do not run it again — `supabase/01-friend.sql` drops the throwaway
+-- table this file creates.
+--
 -- Paste this whole file into the Supabase SQL Editor and run it once.
 -- It does two things: installs the one extension the real schema needs, and
 -- creates a throwaway table that proves BOTH security locks work end to end.

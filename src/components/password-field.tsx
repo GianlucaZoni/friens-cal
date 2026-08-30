@@ -21,7 +21,6 @@ export const PasswordField = ({
   autoComplete,
   description,
   disabled,
-  invalid,
 }: {
   id: string
   label: string
@@ -30,12 +29,11 @@ export const PasswordField = ({
   autoComplete: string
   description?: React.ReactNode
   disabled?: boolean
-  invalid?: boolean
 }) => {
   const [shown, setShown] = useState(false)
 
   return (
-    <Field data-invalid={invalid || undefined}>
+    <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <InputGroup>
         <InputGroupInput
@@ -44,7 +42,6 @@ export const PasswordField = ({
           value={value}
           autoComplete={autoComplete}
           disabled={disabled}
-          aria-invalid={invalid || undefined}
           onChange={(e) => onChange(e.target.value)}
         />
         <InputGroupAddon align="inline-end">

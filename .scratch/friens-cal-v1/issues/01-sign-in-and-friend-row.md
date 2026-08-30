@@ -101,14 +101,38 @@ Against the live project at `localhost:5174`:
 1. Paste `supabase/01-friend.sql` into the Supabase SQL Editor and run it.
 2. Create a Friend from **Authentication → Users** in the dashboard (there is no
    signup until issue 14), and put the address and password in `.env` as
-   `FRIEND_TEST_EMAIL` / `FRIEND_TEST_PASSWORD`.
+   `FRIEND_TEST_EMAIL` / `FRIEND_TEST_PASSWORD`. Add `FRIEND_DISPLAY_NAME` too:
+   the trigger makes the row blank and the setup flow that fills it in is issue
+   03, so without it there is no name for the authenticated route to render.
 3. Run `node --env-file=.env scripts/verify-friend-row.mjs`. Each of its seven
    checks is one of the acceptance criteria above — a clean run closes the rest
    of this issue, including that a Friend can read the whole roster, update only
-   their own row, and never insert one.
+   their own row, and never insert one. Then sign in at `/` and the name from
+   step 2 is on screen.
 
 The remaining unticked criteria are unticked because they cannot be checked
 until step 1 has run — not because anything is known to be missing.
+
+### After review
+
+`/code-review` against `main`, both axes. Spec found no scope creep and no
+misimplementation. Applied from the two reports:
+
+- **`revoke execute on function public.handle_new_user()`** — both axes flagged
+  it independently. Ticket 07 §9 settles the `security definer`-in-an-exposed-
+  schema question with a revoke/grant pattern, and only half of it was applied.
+  `revoke all on table public.friend` now names `public` as well, so lock 1
+  covers the pseudo-role too.
+- **Sign-in failure is matched on `error.code === 'invalid_credentials'`**, not
+  on the English message.
+- **"Signing up is invite-only" is gone** from the sign-in footer — there are no
+  invites. CONTEXT.md calls it a hand-curated allowlist, and the replacement
+  echoes the line ticket 18 actually chose.
+- **`FRIEND_DISPLAY_NAME`** exists because the spec axis was right that "the
+  authenticated route renders the display name" was otherwise structurally
+  undemonstrable in this slice.
+- The SQL header no longer over-claims: re-running is safe, but
+  `create table if not exists` will not migrate an existing table.
 
 **No account was created from here.** Signup is currently ungated (the
 `before-user-created` allowlist hook is issue 14), so a script could have minted

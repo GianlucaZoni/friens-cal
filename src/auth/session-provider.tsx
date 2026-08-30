@@ -4,13 +4,18 @@ import { supabase } from '@/lib/supabase'
 import type { AuthError, User } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+/**
+ * What Supabase has told us, and nothing more. Deliberately NOT `SessionState`:
+ * the Friend row is a second, slower fact that arrives from a different query,
+ * and the two are joined only at the bottom of this file.
+ */
 type AuthState =
   | { status: 'loading' }
   | { status: 'signed-out' }
   | { status: 'signed-in'; user: User }
 
-/** The Friend row, remembered against the user it belongs to. */
-type LoadedFriend = { userId: string; friend: Friend | null }
+/** A fetched Friend row, tagged with whose it is. */
+type FetchedFriend = { forUserId: string; friend: Friend | null }
 
 /**
  * Sign-in copy.
@@ -18,17 +23,17 @@ type LoadedFriend = { userId: string; friend: Friend | null }
  * Ticket 18's catch-all — one sentence for every failure — is a SIGNUP
  * requirement, there to close the address-enumeration leak (issue 14). Sign-in
  * has no such leak to close: Supabase answers an unknown address and a wrong
- * password with the same `Invalid login credentials` either way. So this says
+ * password with the same `invalid_credentials` either way. So this says
  * the true thing rather than the vague one.
  */
 const signInErrorMessage = (error: AuthError): string =>
-  error.message === 'Invalid login credentials'
+  error.code === 'invalid_credentials'
     ? 'That email and password do not match.'
     : 'Could not sign in just now. Try again in a moment.'
 
 export const SessionProvider = ({ children }: { children: React.ReactNode }) => {
   const [auth, setAuth] = useState<AuthState>({ status: 'loading' })
-  const [loaded, setLoaded] = useState<LoadedFriend | null>(null)
+  const [fetched, setFetched] = useState<FetchedFriend | null>(null)
 
   useEffect(() => {
     let live = true
@@ -70,10 +75,10 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
           // missing rather than the query being wrong — the project does not
           // expose new tables automatically. See supabase/01-friend.sql.
           console.error('Could not load the signed-in Friend:', error.message)
-          setLoaded({ userId, friend: null })
+          setFetched({ forUserId: userId, friend: null })
           return
         }
-        setLoaded({ userId, friend: data })
+        setFetched({ forUserId: userId, friend: data })
       })
 
     return () => {
@@ -93,13 +98,13 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
   const value = useMemo<SessionValue>(() => {
     // Matching on the user id rather than clearing on sign-out is what keeps a
     // previous Friend's name from flashing on the next one's screen.
-    const friend = loaded !== null && loaded.userId === userId ? loaded.friend : null
+    const friend = fetched !== null && fetched.forUserId === userId ? fetched.friend : null
     return {
       state: auth.status === 'signed-in' ? { ...auth, friend } : auth,
       signIn,
       signOut,
     }
-  }, [auth, loaded, userId, signIn, signOut])
+  }, [auth, fetched, userId, signIn, signOut])
 
   return <SessionContext value={value}>{children}</SessionContext>
 }

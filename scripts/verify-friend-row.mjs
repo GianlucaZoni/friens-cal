@@ -6,6 +6,7 @@
  *
  * Needs FRIEND_TEST_EMAIL / FRIEND_TEST_PASSWORD in `.env` — a real Friend
  * created from the Supabase dashboard (there is no signup until issue 14).
+ * FRIEND_DISPLAY_NAME is optional; see section 5.
  *
  * Run it after pasting `supabase/01-friend.sql` into the SQL Editor. Every
  * check below is one of issue 01's acceptance criteria, so a clean run is the
@@ -85,22 +86,29 @@ ok(`the roster returned ${all.length} Friend row(s)`)
 /* ---------------------------------------------------------------- *
  * 5. A Friend may update their own row.
  * ---------------------------------------------------------------- */
-const probe = `verify-${Date.now()}`
 const { data: updated, error: updateErr } = await supabase
   .from('friend')
-  .update({ display_name: probe })
+  .update({ display_name: `verify-${Date.now()}` })
   .eq('id', auth.user.id)
   .select()
 if (updateErr) die('updating own Friend row failed', updateErr)
 if (updated.length !== 1) die(`updating own row touched ${updated.length} rows, expected 1`)
 ok('own Friend row is updatable')
 
+/*
+ * The row the trigger makes is blank, so nothing in issue 01 can put a name on
+ * screen — `display_name` is the setup flow's to write (issue 03). Setting
+ * FRIEND_DISPLAY_NAME stands in for that step, so the authenticated route has a
+ * real name to render and the acceptance criterion becomes checkable.
+ * Without it, whatever was there before is put back.
+ */
+const finalName = process.env.FRIEND_DISPLAY_NAME ?? mine.display_name
 const { error: restoreErr } = await supabase
   .from('friend')
-  .update({ display_name: mine.display_name })
+  .update({ display_name: finalName })
   .eq('id', auth.user.id)
-if (restoreErr) die('could not restore display_name', restoreErr)
-ok(`display_name restored to ${JSON.stringify(mine.display_name)}`)
+if (restoreErr) die('could not write the final display_name', restoreErr)
+ok(`display_name left as ${JSON.stringify(finalName)}`)
 
 /* ---------------------------------------------------------------- *
  * 6. And nobody else's. RLS makes this a no-op, not an error.

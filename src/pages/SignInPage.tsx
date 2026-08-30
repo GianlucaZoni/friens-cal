@@ -108,7 +108,14 @@ export const SignInPage = () => {
           </CardContent>
 
           <CardFooter>
-            <p className="text-xs text-muted-foreground">No account? Signing up is invite-only.</p>
+            {/*
+              Not "invite-only": there are no invites. CONTEXT.md calls it a
+              hand-curated allowlist, and this echoes the second line of the
+              signup rejection copy ticket 18 chose.
+            */}
+            <p className="text-xs text-muted-foreground">
+              No account? Everyone here was added by hand.
+            </p>
           </CardFooter>
         </Card>
       </div>

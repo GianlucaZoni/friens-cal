@@ -1,7 +1,9 @@
 -- friens-cal — issue 01: the `friend` table
 --
--- Paste this whole file into the Supabase SQL Editor and run it once. It is
--- idempotent: running it twice is a no-op, not an error.
+-- Paste this whole file into the Supabase SQL Editor and run it once. Re-running
+-- it is safe — but note it is `create table if not exists`, so it will NOT
+-- migrate a `friend` table that already exists. Changing a shipped column means
+-- a new file, not an edit to this one.
 --
 -- What it does:
 --   1. drops the provisioning smoke-test table (ticket 04's last loose end)
@@ -81,7 +83,7 @@ comment on table public.friend is
 -- The `update` grant is COLUMN-SCOPED, so `id` and `created_at` are not
 -- writable from the browser at all — RLS never has to defend them.
 -- ---------------------------------------------------------------------------
-revoke all on table public.friend from anon, authenticated;
+revoke all on table public.friend from public, anon, authenticated;
 
 grant select on table public.friend to authenticated;
 grant update (display_name, blobatar_seed, hue, tone, expression)
@@ -139,6 +141,12 @@ begin
   return new;
 end;
 $$;
+
+-- Ticket 07 §9's habit, applied here as well: a `security definer` function
+-- living in an exposed schema gets its default `execute` grant to PUBLIC taken
+-- away and handed back to nobody. PostgREST cannot expose a `returns trigger`
+-- function anyway, so this costs nothing and removes the need to know that.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created

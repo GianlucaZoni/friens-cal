@@ -102,7 +102,9 @@ ok('own Friend row is updatable')
  * real name to render and the acceptance criterion becomes checkable.
  * Without it, whatever was there before is put back.
  */
-const finalName = process.env.FRIEND_DISPLAY_NAME ?? mine.display_name
+// `||`, not `??`: .env.example ships the key with an empty value, and an empty
+// display name is not a display name.
+const finalName = process.env.FRIEND_DISPLAY_NAME || mine.display_name
 const { error: restoreErr } = await supabase
   .from('friend')
   .update({ display_name: finalName })

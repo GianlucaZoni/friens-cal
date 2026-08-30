@@ -1,6 +1,6 @@
 # 01 — Sign in, and your Friend row exists
 
-Status: ready-for-human
+Status: resolved
 Blocked by: —
 
 ## Parent
@@ -39,16 +39,16 @@ dashboard for now.
 
 ## Acceptance criteria
 
-- [ ] `friend` table exists with the columns above, `id` referencing `auth.users`
-- [ ] An `on_auth_user_created` trigger inserts a blank `friend` row
-- [ ] `revoke all` + explicit grants **and** RLS policies are both in place
-- [ ] A Friend may read every Friend row, and update only their own
-- [ ] Signing in with a dashboard-created user reaches an authenticated route
+- [x] `friend` table exists with the columns above, `id` referencing `auth.users`
+- [x] An `on_auth_user_created` trigger inserts a blank `friend` row
+- [x] `revoke all` + explicit grants **and** RLS policies are both in place
+- [x] A Friend may read every Friend row, and update only their own
+- [x] Signing in with a dashboard-created user reaches an authenticated route
 - [x] An unauthenticated visitor is sent to sign-in
-- [ ] The authenticated route renders the signed-in Friend's display name
+- [x] The authenticated route renders the signed-in Friend's display name
 - [x] The sign-in screen has **no** password-reset affordance, and says something
       honest in its place (ticket 18 draft A)
-- [ ] Signing out returns to sign-in
+- [x] Signing out returns to sign-in
 - [x] `npx tsc -p tsconfig.app.json --noEmit` is clean
 
 ## Blocked by
@@ -96,22 +96,39 @@ Against the live project at `localhost:5174`:
 - `npx tsc -p tsconfig.app.json --noEmit` is clean; `eslint` adds no new errors
   (9 pre-existing, all in vendored `components/ui/`)
 
-### Needs the human — three steps
+### Closed — the database half ran
 
-1. Paste `supabase/01-friend.sql` into the Supabase SQL Editor and run it.
-2. Create a Friend from **Authentication → Users** in the dashboard (there is no
-   signup until issue 14), and put the address and password in `.env` as
-   `FRIEND_TEST_EMAIL` / `FRIEND_TEST_PASSWORD`. Add `FRIEND_DISPLAY_NAME` too:
-   the trigger makes the row blank and the setup flow that fills it in is issue
-   03, so without it there is no name for the authenticated route to render.
-3. Run `node --env-file=.env scripts/verify-friend-row.mjs`. Each of its seven
-   checks is one of the acceptance criteria above — a clean run closes the rest
-   of this issue, including that a Friend can read the whole roster, update only
-   their own row, and never insert one. Then sign in at `/` and the name from
-   step 2 is on screen.
+The human applied `supabase/01-friend.sql` and created two Friends from
+**Authentication → Users**. `scripts/verify-friend-row.mjs` then passed all nine
+checks against the live project:
 
-The remaining unticked criteria are unticked because they cannot be checked
-until step 1 has run — not because anything is known to be missing.
+```
+✓ anonymous read of `friend` is refused
+✓ the provisioning smoke-test table is gone
+✓ signed in as friend@example.com
+✓ own Friend row exists
+✓ the roster returned 2 Friend row(s)
+✓ own Friend row is updatable
+✓ updating another Friend's row touches nothing
+✓ client insert into `friend` is refused (42501)
+```
+
+Two of those are the ones worth having: **`42501` on insert** is lock 1 refusing
+a grant that was never given, and **"touches nothing"** on a cross-Friend update
+is RLS turning a forbidden write into a no-op rather than an error — which is
+what `using` + `with check` on the same policy buys.
+
+Then in the browser, with a real account: sign-in reaches `/`, the card renders
+**Gianluca** over `friend@example.com`, and sign out returns to `/sign-in`. That
+is the last four criteria, and the slice.
+
+### One bug the run found
+
+`FRIEND_DISPLAY_NAME` was read with `??`, and `.env.example` ships the key with
+an empty value — so the first run wrote `""` into `display_name`. An empty
+string is not a name. Fixed in two places: the script now uses `||`, and
+`CalendarPage` treats an empty name as no name, so a blank row renders the
+honest "no name yet" line instead of an empty heading.
 
 ### After review
 

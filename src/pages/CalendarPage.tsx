@@ -16,7 +16,9 @@ export const CalendarPage = () => {
   if (state.status !== 'signed-in') return null
 
   const { user, friend } = state
-  const displayName = friend?.display_name ?? null
+  // An empty string is not a name. Treating it as one would render a blank
+  // title rather than the honest "no name yet" line below.
+  const displayName = friend?.display_name || null
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">

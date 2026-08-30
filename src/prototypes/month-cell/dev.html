@@ -1,0 +1,36 @@
+<!doctype html>
+<!--
+  PROTOTYPE — ticket 14. THROWAWAY, dev only.
+
+  A second Vite entry so the React prototype can be run WITHOUT touching
+  `App.tsx` / `AppRoutes.tsx`, which another agent owns. With the dev server
+  running, open:
+
+      http://localhost:5173/src/prototypes/month-cell/dev.html?variant=C
+
+  It is not part of `vite build` (only the root `index.html` is an entry), so
+  it cannot ship. For the no-build-step version, open `preview.html` over
+  file:// instead — but note that one draws CSS circles where this one draws
+  real blobatars.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype 14 — month cell</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import '/src/index.css'
+      import { StrictMode } from 'react'
+      import { createRoot } from 'react-dom/client'
+      import { createElement } from 'react'
+      import MonthCellPrototype from '/src/prototypes/month-cell/index.tsx'
+
+      createRoot(document.getElementById('root')).render(
+        createElement(StrictMode, null, createElement(MonthCellPrototype)),
+      )
+    </script>
+  </body>
+</html>

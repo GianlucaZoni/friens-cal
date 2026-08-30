@@ -1,0 +1,694 @@
+<!doctype html>
+<!--
+  PROTOTYPE — ticket 18: setup flow and profile editing. THROWAWAY.
+
+  Generated. Edit `preview.template.html`, then:
+      node src/prototypes/setup-flow/build-preview.mjs
+
+  Dependency-free twin of index.tsx / screens.tsx. Same five screens, same copy
+  drafts, same controls — but with the REAL blobatar@2.7.0 bundles inlined, so
+  the two claims this ticket had to check (reroll moves shape and never colour;
+  the six tone swatches are addressable) are checked against the library rather
+  than against a drawing of it. Double-click this file and it runs offline.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype 18 — setup flow and profile</title>
+    <style>
+      :root {
+        --bg: #fff; --fg: #0a0a0a; --muted: #f7f7f7; --muted-fg: #737373;
+        --border: #ebebeb; --card: #fff; --destructive: #c1362f;
+        --destructive-bg: rgba(193,54,47,0.08); --blend: darken;
+        --accent: #f0f0f0;
+      }
+      html.dark {
+        --bg: #0a0a0a; --fg: #fafafa; --muted: #1c1c1c; --muted-fg: #a1a1a1;
+        --border: rgba(255,255,255,0.12); --card: #0f0f0f; --destructive: #ff6b63;
+        --destructive-bg: rgba(255,107,99,0.1); --blend: lighten;
+        --accent: #222;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--fg);
+        font: 12px/1.5 Inter, system-ui, -apple-system, sans-serif;
+        padding-bottom: 88px;
+      }
+      h1 { font-size: 13px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+      h2 { font-size: 12px; margin: 0; font-weight: 600; }
+      p { margin: 0; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+      kbd { font-family: inherit; border: 1px solid var(--border); padding: 0 3px; }
+      .wrap { display: flex; justify-content: center; padding: 40px 16px; }
+      .col { width: 100%; max-width: 384px; }
+      .col.wide { max-width: 768px; }
+      .head { text-align: center; margin-bottom: 24px; display: flex; flex-direction: column; gap: 4px; }
+      .head .sub { color: var(--muted-fg); }
+      .card { border: 1px solid var(--border); background: var(--card); }
+      .card > .sec { padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+      .card > .sec + .sec { border-top: 1px solid var(--border); }
+      .desc { color: var(--muted-fg); }
+      .fields { display: flex; flex-direction: column; gap: 14px; }
+      label { display: block; font-weight: 500; margin-bottom: 5px; }
+      input[type='text'], input[type='email'], input[type='password'] {
+        width: 100%; height: 32px; padding: 0 10px; font: inherit;
+        border: 1px solid var(--border); background: transparent; color: inherit;
+        border-radius: 0; outline: none;
+      }
+      input:focus-visible { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+      input[aria-invalid='true'] { border-color: var(--destructive); box-shadow: 0 0 0 1px var(--destructive); }
+      .pw { position: relative; }
+      .pw button { position: absolute; right: 3px; top: 3px; height: 26px; width: 26px; padding: 0; }
+      .hint { color: var(--muted-fg); font-size: 11px; }
+      button {
+        font: inherit; font-size: 11px; height: 32px; padding: 0 12px; border-radius: 0;
+        border: 1px solid transparent; background: var(--fg); color: var(--bg); cursor: pointer;
+      }
+      button.outline { background: transparent; color: var(--fg); border-color: var(--border); }
+      button.outline:hover { background: var(--muted); }
+      button.ghost { background: transparent; color: var(--muted-fg); border-color: transparent; }
+      button.ghost:hover { background: var(--muted); color: var(--fg); }
+      button.linkish {
+        background: none; border: 0; color: inherit; padding: 0; height: auto;
+        text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 11px;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .alert {
+        border: 1px solid color-mix(in oklab, var(--destructive) 40%, transparent);
+        background: var(--destructive-bg); padding: 10px; display: flex; flex-direction: column; gap: 3px;
+      }
+      .alert .msg { color: var(--destructive); font-weight: 500; }
+      .note {
+        margin-top: 16px; border: 1px dashed var(--border); background: color-mix(in oklab, var(--muted) 55%, transparent);
+        padding: 12px; font-size: 11px; line-height: 1.65; display: flex; flex-direction: column; gap: 8px;
+      }
+      .note ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+      .row { display: flex; gap: 24px; align-items: flex-start; }
+      .row > .side { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 168px; }
+      .row > .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+      @media (max-width: 620px) { .row { flex-direction: column; } .row > .side { width: 100%; } }
+
+      /* The ring. Lifted verbatim in spirit from base-lyra's Avatar root, which
+         already implements ticket 11's requirement:
+         after:border after:border-border after:mix-blend-darken dark:after:mix-blend-lighten */
+      .blob { position: relative; display: inline-block; border-radius: 50%; flex-shrink: 0; line-height: 0; }
+      .blob::after {
+        content: ''; position: absolute; inset: 0; border-radius: 50%;
+        border: 1px solid var(--border); mix-blend-mode: var(--blend); pointer-events: none;
+      }
+      .blob svg, .blob img { display: block; width: 100%; height: 100%; border-radius: 50%; }
+      .blob.xs { width: 24px; height: 24px; }
+      .blob.sm { width: 32px; height: 32px; }
+      .blob.md { width: 40px; height: 40px; }
+      .blob.xl { width: 128px; height: 128px; }
+
+      .hueband { position: relative; height: 12px; border: 1px solid var(--border); border-radius: 999px; }
+      .hueband .tick { position: absolute; top: -4px; width: 2px; height: 20px; border-radius: 2px; background: color-mix(in oklab, var(--fg) 70%, transparent); }
+      input[type='range'] { width: 100%; accent-color: var(--fg); }
+      .swatches { display: flex; border: 1px solid var(--border); }
+      .swatches button {
+        flex: 1; height: auto; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+        background: transparent; color: var(--fg); border: 0; border-right: 1px solid var(--border);
+      }
+      .swatches button:last-child { border-right: 0; }
+      .swatches button[aria-pressed='true'] { background: var(--accent); }
+      .swatches .chip { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); }
+      .swatches .lbl { font-size: 10px; }
+      .exprs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+      .exprs button {
+        height: auto; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+        background: transparent; color: var(--muted-fg); border: 1px solid transparent;
+      }
+      .exprs button:hover { background: var(--muted); }
+      .exprs button[aria-pressed='true'] { border-color: var(--border); background: var(--muted); color: var(--fg); }
+      .exprs .lbl { font-size: 10px; }
+      .stored { border: 1px dashed var(--border); padding: 12px; font-size: 11px; display: flex; flex-direction: column; gap: 8px; }
+      .stored dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 12px; margin: 0; font-family: ui-monospace, Menlo, monospace; }
+      .stored dt { color: var(--muted-fg); }
+      .stored dd { margin: 0; }
+      .badge { display: inline-flex; align-items: center; padding: 1px 7px; font-size: 10px; font-weight: 500; background: var(--muted); border: 1px solid var(--border); }
+      .badge.bad { background: var(--destructive-bg); border-color: var(--destructive); color: var(--destructive); }
+      .swatchline { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; color: var(--muted-fg); font-family: ui-monospace, Menlo, monospace; }
+      .swatchline .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); display: inline-block; vertical-align: -2px; margin-right: 5px; }
+      .takenbox { border: 1px solid var(--border); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .takenbox .friends { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+      .takenbox .friend { display: flex; align-items: center; gap: 6px; }
+      .appbar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 8px 16px; }
+      .cluster { display: flex; align-items: center; gap: 8px; }
+      .stack { display: flex; }
+      .stack .blob { margin-left: -8px; }
+      .stack .blob:first-child { margin-left: 0; }
+      .menu {
+        position: absolute; right: 0; top: calc(100% + 6px); width: 256px; z-index: 20;
+        background: var(--card); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+        padding: 4px; display: flex; flex-direction: column;
+      }
+      .menu .mi { display: flex; align-items: center; gap: 8px; padding: 7px 8px; cursor: pointer; background: none; border: 0; color: inherit; width: 100%; text-align: left; height: auto; font-size: 11px; }
+      .menu .mi:hover { background: var(--muted); }
+      .menu .mi.danger { color: var(--destructive); }
+      .menu .sep { height: 1px; background: var(--border); margin: 4px 0; }
+      .menu .who { display: flex; gap: 8px; align-items: center; padding: 8px; }
+      .menu .who .nm { font-weight: 500; }
+      .menu .who .em { color: var(--muted-fg); font-size: 11px; }
+      .anchor { position: relative; }
+      .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; }
+      .modal { background: var(--card); border: 1px solid var(--border); width: 100%; max-width: 720px; }
+      .whereshows { display: flex; flex-direction: column; gap: 8px; width: 100%; font-size: 11px; }
+      .whereshows .rowline { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); padding: 5px 8px; }
+      .whereshows .ramp { display: flex; flex-direction: column; gap: 1px; }
+      .whereshows .ramp i { height: 12px; border: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
+      .switcher {
+        position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+        display: flex; align-items: center; gap: 4px; background: #111; color: #fff;
+        border-radius: 999px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+        font-size: 12px; z-index: 60;
+      }
+      .switcher button { background: rgba(255,255,255,0.12); color: #fff; border: 0; border-radius: 999px; height: 26px; width: 26px; padding: 0; font-size: 12px; }
+      .switcher button.w { width: auto; padding: 0 10px; }
+      .switcher .name { padding: 0 8px; font-weight: 600; white-space: nowrap; }
+      .switcher .div { width: 1px; height: 18px; background: rgba(255,255,255,0.2); margin: 0 2px; }
+      .switcher .off { padding: 0 8px; opacity: 0.45; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div class="switcher" id="switcher"></div>
+
+    <script>
+      /*INJECT_BLOBATAR*/
+    </script>
+    <script>
+      /*INJECT_EXPRESSION*/
+    </script>
+
+    <script>
+      /*
+        Wrapped in an IIFE, and that is not style. The two bundles above are
+        classic scripts declaring top-level `var`s with one-letter names — the
+        first collision found was `var q` in blobatar's own bundle against a
+        `const q` here, which is a hard SyntaxError that blanks the page. A
+        function scope makes every name below unreachable from, and safe
+        against, whatever the bundles happen to be minified into.
+      */
+      ;(function () {
+      const { blobatar, palette, traits } = globalThis.BL
+      const BX = globalThis.BX
+
+      /* ---------------- the identity model (twin of identity.ts) ------------- */
+
+      /**
+       * VERIFIED: blobatar resolves a tone with
+       *   TONES.find(([edge]) => v < edge) ?? TONES[0]
+       * so the table's numbers are BAND UPPER EDGES, not swatch values. These
+       * six sit inside the bands. `tone: 1.0` would wrap to pastel.
+       */
+      const TONES = [
+        { key: 'pastel', value: 0.1, label: 'Pastel' },
+        { key: 'pale', value: 0.28, label: 'Pale' },
+        { key: 'mid', value: 0.49, label: 'Mid' },
+        { key: 'deep', value: 0.71, label: 'Deep' },
+        { key: 'bright', value: 0.86, label: 'Bright' },
+        { key: 'ink', value: 0.96, label: 'Ink' },
+      ]
+      const EDGES = [0.2, 0.36, 0.62, 0.8, 0.93, 1.0]
+      const snapTone = (v) => {
+        const i = EDGES.findIndex((e) => v < e)
+        return TONES[i === -1 ? 0 : i].value
+      }
+
+      /* Ten. `mad`, `love`, `shy`, `sick` are the four that tint the palette. */
+      const EXPRS = ['idle','happy','sad','surprised','wink','sleepy','smug','unsure','scared','thinking']
+        .map((k) => ({ key: k, label: k[0].toUpperCase() + k.slice(1), value: BX[k] }))
+      const exprFor = (k) => EXPRS.find((e) => e.key === k).value
+
+      const UI_CONST = { light: { l: 0.58, c: 0.15 }, dark: { l: 0.74, c: 0.14 } }
+      const uiColour = (hue, theme) => `oklch(${UI_CONST[theme].l} ${UI_CONST[theme].c} ${hue})`
+      const avatarColours = (id) => palette(id.hue, true, id.tone)
+
+      const newSeed = () => 'blob-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3)
+
+      const biasedHue = (taken) => {
+        if (!taken.length) return Math.round(Math.random() * 360)
+        const s = [...taken].map((h) => ((h % 360) + 360) % 360).sort((a, b) => a - b)
+        let bestStart = s[0], bestWidth = -1
+        for (let i = 0; i < s.length; i++) {
+          const start = s[i], next = s[(i + 1) % s.length]
+          const width = i === s.length - 1 ? next + 360 - start : next - start
+          if (width > bestWidth) { bestWidth = width; bestStart = start }
+        }
+        const jitter = (Math.random() - 0.5) * (bestWidth / 3)
+        return Math.round(((((bestStart + bestWidth / 2 + jitter) % 360) + 360) % 360))
+      }
+
+      /** Step 1's randomise MATERIALISES hue and tone. Never leaves them null. */
+      const materialise = (taken) => {
+        const seed = newSeed()
+        const t = traits(seed)
+        return {
+          blobatar_seed: seed,
+          hue: taken.length ? biasedHue(taken) : Math.round(t.num('hue', 0, 360)),
+          tone: snapTone(t('tone')),
+          expression: 'idle',
+        }
+      }
+
+      const FRIENDS = [
+        { id: 'f1', display_name: 'Nadia', blobatar_seed: 'nadia-8fk2', hue: 18, tone: 0.49, expression: 'happy' },
+        { id: 'f2', display_name: 'Tom', blobatar_seed: 'tom-x41q', hue: 96, tone: 0.71, expression: 'smug' },
+        { id: 'f3', display_name: 'Priya', blobatar_seed: 'priya-2wbn', hue: 148, tone: 0.28, expression: 'idle' },
+        { id: 'f4', display_name: 'Marek', blobatar_seed: 'marek-p07d', hue: 262, tone: 0.96, expression: 'sleepy' },
+      ]
+      const TAKEN = FRIENDS.map((f) => f.hue)
+      const nearestTaken = (hue) =>
+        Math.min(...TAKEN.map((t) => Math.min(Math.abs(hue - t), 360 - Math.abs(hue - t))))
+
+      /* ---------------- copy drafts (twin of copy.ts) ------------------------ */
+
+      const FORGOT = {
+        A: { name: 'Say it up front', placement: 'inline',
+             body: 'Forgotten it? There is no reset email — ask in the group chat and someone will reset it for you.',
+             note: 'Loudest. Nobody hunts for a link that is not there, but every sign-in also reads a sentence about failure.' },
+        B: { name: 'Link-shaped, honest inside', placement: 'disclosure', heading: 'Forgotten your password?',
+             body: 'There is no reset link. Say so in the group chat — whoever set this up resets it from the Supabase dashboard, and you sign in with the new one.',
+             note: 'Keeps the familiar shape and position. Costs one click to learn the bad news, and the click looks like it might send an email.' },
+        C: { name: 'Only when it matters', placement: 'on-failure',
+             body: 'That did not work. If you have forgotten your password, ask in the group chat — there is no reset email, so someone resets it for you.',
+             note: 'Cleanest screen. But a Friend who gave up before typing never sees it, and "no reset email" is what they needed before the third attempt.' },
+      }
+
+      const REJECT = {
+        A: { name: 'One message for every failure',
+             message: 'We could not create an account with those details.',
+             secondary: 'Everyone here was added by hand. If you think you should be in, ask in the group chat.',
+             note: 'Leaks nothing, because it is the same sentence for a bad password, a taken address and an address nobody added. Cost: a Friend who typo-ed their own email gets no hint that they typo-ed it.' },
+        B: { name: 'Name the gate, not the address',
+             message: 'Signing up here is invite-only.',
+             secondary: 'Accounts are created for addresses that were added by hand. If yours should be one of them, say so in the group chat.',
+             note: 'Explains the rule without evaluating the address. Still tells a stranger only that a list exists, which the empty signup page already implies.' },
+        C: { name: 'Point at the chat and stop',
+             message: 'That did not work.',
+             secondary: 'Ask in the group chat and someone will sort it out.',
+             note: 'Shortest and least revealing. Also least useful — a fat-fingered password gets nothing to act on, and every failure becomes a message to a human.' },
+      }
+
+      const ENUM_CAVEAT =
+        'With Confirm Email off, an already-registered address returns Supabase’s own "User already registered" instead of the hook message. Only draft A’s catch-all closes that.'
+
+      /* ---------------- tiny render helpers ---------------------------------- */
+
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+      const SIZE_PX = { xs: 24, sm: 32, md: 40, xl: 128 }
+      const blob = (id, size, opts = {}) =>
+        `<span class="blob ${size}"${opts.title ? ` title="${esc(opts.title)}"` : ''}>` +
+        blobatar(id.blobatar_seed, {
+          hue: id.hue, tone: id.tone, expression: exprFor(id.expression),
+          size: SIZE_PX[size], ...(opts.animate ? { animate: 'always' } : {}),
+        }) + '</span>'
+
+      /* ---------------- state ------------------------------------------------ */
+
+      const SCREENS = ['signin', 'signup', 'step1', 'step2', 'profile']
+      const NAMES = {
+        signin: 'Sign in', signup: 'Sign up + rejection', step1: 'Step 1 — name & blob',
+        step2: 'Step 2 — customise', profile: 'Profile dropdown',
+      }
+      const HAS_COPY = { signin: true, signup: true, step1: false, step2: false, profile: false }
+      const COPY_KEYS = ['A', 'B', 'C']
+
+      const q = new URLSearchParams(location.search)
+      const S = {
+        screen: SCREENS.includes(q.get('screen')) ? q.get('screen') : 'signin',
+        copy: COPY_KEYS.includes(q.get('copy')) ? q.get('copy') : 'A',
+        theme: q.get('theme') === 'dark' ? 'dark' : 'light',
+        identity: materialise(TAKEN),
+        displayName: '',
+        signinFailed: false,
+        disclosed: false,
+        signupState: 'idle',
+        signupEmail: 'stranger@example.com',
+        menuOpen: false,
+        modalOpen: false,
+        prevHead: null,
+      }
+
+      const setParam = (k, v) => {
+        const p = new URLSearchParams(location.search)
+        p.set(k, v)
+        history.replaceState(null, '', location.pathname + '?' + p)
+      }
+
+      /* ---------------- shared control blocks -------------------------------- */
+
+      const storedRow = () => {
+        const c = avatarColours(S.identity)
+        const ui = uiColour(S.identity.hue, S.theme)
+        const badge = S.prevHead == null ? '' :
+          `<span class="badge ${S.prevHead === c.head ? '' : 'bad'}">${
+            S.prevHead === c.head ? 'head unchanged by reroll' : 'HEAD MOVED — bug'}</span>`
+        return `<div class="stored">
+          <div style="display:flex;gap:8px;align-items:center"><span class="badge">stored on the Friend row</span>${badge}</div>
+          <dl>
+            <dt>blobatar_seed</dt><dd>${esc(S.identity.blobatar_seed)}</dd>
+            <dt>hue</dt><dd>${S.identity.hue}</dd>
+            <dt>tone</dt><dd>${S.identity.tone}</dd>
+            <dt>expression</dt><dd>${esc(S.identity.expression)}</dd>
+          </dl>
+          <div class="swatchline">
+            <span><i class="dot" style="background:${c.head}"></i>avatar head ${c.head}</span>
+            <span><i class="dot" style="background:${ui}"></i>UI colour ${esc(ui)}</span>
+          </div>
+          <p class="hint">Derived, never stored. The avatar comes from <code>palette(hue, true, tone)</code>; everything else is <code>oklch(L_theme C_theme hue)</code>.</p>
+        </div>`
+      }
+
+      const whereShows = () => {
+        const ui = uiColour(S.identity.hue, S.theme)
+        return `<div class="whereshows">
+          <p style="font-weight:500">Where this colour shows up</p>
+          <div class="rowline">
+            <span style="width:8px;height:8px;border-radius:50%;background:${ui};flex-shrink:0"></span>
+            ${blob(S.identity, 'xs')}
+            <span>${esc(S.displayName || 'You')}</span>
+            <span style="margin-left:auto;color:var(--muted-fg)">sidebar row</span>
+          </div>
+          <div style="border:1px solid ${ui};padding:5px 8px;box-shadow:0 0 0 2px color-mix(in oklab, ${ui} 25%, transparent)">
+            <span style="color:var(--muted-fg)">Candidate glow</span>
+          </div>
+          <div class="ramp">
+            ${[0.2, 0.45, 0.7, 1].map((o) => `<i style="background:color-mix(in oklab, ${ui} ${o * 100}%, transparent)"></i>`).join('')}
+            <span style="color:var(--muted-fg);padding-top:2px">grid heatmap, in your colour</span>
+          </div>
+        </div>`
+      }
+
+      const customiseControls = (compact) => {
+        const stops = Array.from({ length: 13 }, (_, i) => `${uiColour(i * 30, S.theme)} ${(i / 12) * 100}%`).join(', ')
+        return `<div class="row">
+          <div class="side">
+            ${blob(S.identity, 'xl', { animate: true, title: S.displayName || 'your blobatar' })}
+            <button class="outline" data-act="reroll">⚄ Reroll shape</button>
+            <p class="hint" style="text-align:center">Reroll changes the shape. It can never change your colour — the seed stopped governing that the moment step 1 wrote hue and tone down.</p>
+            ${compact ? '' : whereShows()}
+          </div>
+          <div class="main">
+            <div class="fields">
+              <div>
+                <label for="hue">Hue</label>
+                <div class="hueband" style="background:linear-gradient(to right, ${stops})">
+                  ${FRIENDS.map((f) => `<span class="tick" title="${esc(f.display_name)} is at ${f.hue}°" style="left:calc(${(f.hue / 360) * 100}% - 1px)"></span>`).join('')}
+                </div>
+                <input id="hue" type="range" min="0" max="359" step="1" value="${S.identity.hue}" data-act="hue" />
+                <p class="hint">${S.identity.hue}° — continuous and free. Landing on someone else’s hue is allowed; the shape is what tells you apart.</p>
+              </div>
+
+              <div>
+                <label>Tone</label>
+                <div class="swatches">
+                  ${TONES.map((t) => `<button data-act="tone" data-value="${t.value}" aria-pressed="${S.identity.tone === t.value}">
+                      <span class="chip" style="background:${palette(S.identity.hue, true, t.value).head}"></span>
+                      <span class="lbl">${t.label}</span>
+                    </button>`).join('')}
+                </div>
+                <p class="hint">All six stay choosable. Ticket 15 took per-Friend colour off the grid, so no tone has to be forbidden for legibility any more.</p>
+              </div>
+
+              <div>
+                <label>Expression</label>
+                <div class="exprs">
+                  ${EXPRS.map((e) => `<button data-act="expr" data-value="${e.key}" aria-pressed="${S.identity.expression === e.key}">
+                      ${blob({ ...S.identity, expression: e.key }, 'md')}
+                      <span class="lbl">${e.label}</span>
+                    </button>`).join('')}
+                </div>
+                <p class="hint">Ten, not fourteen. <code>mad</code>, <code>love</code>, <code>shy</code> and <code>sick</code> tint the palette — picking a face would silently recolour your whole grid.</p>
+              </div>
+            </div>
+            ${storedRow()}
+          </div>
+        </div>`
+      }
+
+      const pw = (id, label, autocomplete, hint, invalid) => `
+        <div>
+          <label for="${id}">${label}</label>
+          <div class="pw">
+            <input id="${id}" type="password" autocomplete="${autocomplete}" ${invalid ? 'aria-invalid="true"' : ''} />
+            <button class="ghost" type="button" data-act="peek" data-target="${id}" aria-label="Show password">◎</button>
+          </div>
+          ${hint ? `<p class="hint" style="margin-top:5px">${hint}</p>` : ''}
+        </div>`
+
+      /* ---------------- screens ---------------------------------------------- */
+
+      const SCREEN = {
+        signin() {
+          const c = FORGOT[S.copy]
+          const under =
+            c.placement === 'inline' ? c.body
+            : c.placement === 'disclosure' ? `<button class="linkish" data-act="disclose">${c.heading}</button>`
+            : ''
+          return `<div class="wrap"><div class="col">
+            <div class="head"><h1>friens-cal</h1><p class="sub">Sign in to the calendar.</p></div>
+            <div class="card">
+              <div class="sec"><h2>Welcome back</h2><p class="desc">Email and password. That is the whole of it.</p></div>
+              <div class="sec">
+                <div class="fields">
+                  <div><label for="si-email">Email</label><input id="si-email" type="email" autocomplete="email" /></div>
+                  ${pw('si-pw', 'Password', 'current-password', under, false)}
+                  ${c.placement === 'disclosure' && S.disclosed
+                    ? `<div style="border:1px solid var(--border);background:color-mix(in oklab, var(--muted) 60%, transparent);padding:10px" class="hint">${c.body}</div>` : ''}
+                  ${S.signinFailed
+                    ? `<div class="alert"><span class="msg">⚠ ${c.placement === 'on-failure' ? c.body : 'That email and password do not match.'}</span></div>` : ''}
+                  <button data-act="signin">Sign in</button>
+                </div>
+              </div>
+              <div class="sec"><p class="hint">No account? Signing up is invite-only.</p></div>
+            </div>
+            <div class="note">
+              <p><b>The hole this fills.</b> Ticket 13 deleted the reset flow: no email, no <code>PASSWORD_RECOVERY</code> handling, no two reset screens. A dead “forgot password?” link would be a lie, so the space it would occupy carries the truth instead.</p>
+              <p><b>Draft ${S.copy} — ${c.name}.</b> ${c.note}</p>
+              <p class="hint">Press <kbd>c</kbd> to cycle the drafts, <kbd>t</kbd> for the other theme.</p>
+            </div>
+          </div></div>`
+        },
+
+        signup() {
+          const c = REJECT[S.copy]
+          const rejected = S.signupState === 'rejected'
+          return `<div class="wrap"><div class="col">
+            <div class="head"><h1>friens-cal</h1><p class="sub">Create your account.</p></div>
+            <div class="card">
+              <div class="sec"><h2>Join the calendar</h2><p class="desc">No confirmation email — you are signed in the moment the account exists.</p></div>
+              <div class="sec">
+                <div class="fields">
+                  <div><label for="su-email">Email</label><input id="su-email" type="email" autocomplete="email" data-act="signup-email" value="${esc(S.signupEmail)}" ${rejected ? 'aria-invalid="true"' : ''} /></div>
+                  ${pw('su-pw', 'Password', 'new-password', 'At least six characters. It cannot be reset by email, so pick one you will keep.', rejected)}
+                  ${rejected ? `<div class="alert"><span class="msg">⚠ ${esc(c.message)}</span><span class="hint">${esc(c.secondary)}</span></div>` : ''}
+                  <button data-act="signup" ${S.signupState === 'pending' ? 'disabled' : ''}>${S.signupState === 'pending' ? 'Creating account…' : 'Create account'}</button>
+                </div>
+              </div>
+            </div>
+            <div class="note">
+              <p><b>Where this message actually comes from.</b> The <code>before-user-created</code> hook returns <code>{ error: { http_code, message } }</code> and Supabase hands that <code>message</code> to the client verbatim. So this copy is a SQL string in <code>public.hook_restrict_signup_to_allowlist</code>, not a React constant — the screen only renders what came back.</p>
+              <p><b>Draft ${S.copy} — ${c.name}.</b> ${c.note}</p>
+              <p style="color:var(--destructive)"><b>Leak that copy cannot close.</b> ${ENUM_CAVEAT}</p>
+              <p class="hint">Press <kbd>c</kbd> to cycle the drafts.</p>
+            </div>
+          </div></div>`
+        },
+
+        step1() {
+          const d = Math.round(nearestTaken(S.identity.hue))
+          return `<div class="wrap"><div class="col wide">
+            <div class="head"><h1>Step 1 of 2</h1><p class="sub">What everyone calls you, and the blob they will learn to spot.</p></div>
+            <div class="card">
+              <div class="sec"><h2>Your name and your blob</h2><p class="desc">Both are yours to change later. Nothing here is permanent.</p></div>
+              <div class="sec">
+                <div class="row">
+                  <div class="side">
+                    ${blob(S.identity, 'xl', { animate: true, title: S.displayName || 'your blobatar' })}
+                    <button class="outline" data-act="randomise">Try another</button>
+                  </div>
+                  <div class="main">
+                    <div>
+                      <label for="dn">Display name</label>
+                      <input id="dn" type="text" placeholder="Sam" autocomplete="nickname" value="${esc(S.displayName)}" data-act="name" />
+                      <p class="hint" style="margin-top:5px">This is the name on your sidebar row and on every Hangout you Join.</p>
+                    </div>
+                    <div class="takenbox">
+                      <p style="font-weight:500">Hues already taken</p>
+                      <div class="friends">
+                        ${FRIENDS.map((f) => `<span class="friend">${blob(f, 'sm')}<span>${f.display_name}</span><code style="color:var(--muted-fg)">${f.hue}°</code></span>`).join('')}
+                      </div>
+                      <p class="hint">You were started at <b><code>${S.identity.hue}°</code></b> — ${d}° from the nearest of them. That is a <b>default, not a rule</b>: step 2’s slider goes anywhere, including straight onto ${FRIENDS[0].display_name}’s hue.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="sec" style="align-items:flex-end"><button data-act="next">Continue →</button></div>
+            </div>
+            <div style="margin-top:16px">${storedRow()}</div>
+            <div class="note">
+              <p><b>Materialised, not null.</b> “Try another” writes a new <code>blobatar_seed</code> <i>and</i> writes <code>hue</code> and <code>tone</code> as numbers. Ticket 11 is explicit that leaving them null would let the first reroll in step 2 move the colour. Watch the two values above change together here — and <i>not</i> change on step 2’s reroll.</p>
+            </div>
+          </div></div>`
+        },
+
+        step2() {
+          return `<div class="wrap"><div class="col wide">
+            <div class="head"><h1>Step 2 of 2</h1><p class="sub">Make the blob yours.</p></div>
+            <div class="card">
+              <div class="sec"><h2>How you look</h2><p class="desc">Changing your hue recolours your whole grid — the heatmap renders in your colour. That is the fun of it.</p></div>
+              <div class="sec">${customiseControls(false)}</div>
+              <div class="sec" style="align-items:flex-end"><button data-act="next">✓ Done</button></div>
+            </div>
+            <div class="note">
+              <p><b>Direct controls, not a swatch grid.</b> Ticket 11: whatever N avatars were pre-rendered would become the hues the Group actually has, which is quantisation by the back door and contradicts the settled continuous hue.</p>
+              <p><b>Reroll proof.</b> Hit reroll and watch the <code>head</code> hex in the stored row. It is checked live — the badge turns red if it ever moves.</p>
+            </div>
+          </div></div>`
+        },
+
+        profile() {
+          return `<div>
+            <div class="appbar">
+              <span style="font-weight:600">friens-cal</span>
+              <div class="cluster">
+                <div class="stack">${FRIENDS.map((f) => blob(f, 'sm', { title: f.display_name })).join('')}</div>
+                <span style="width:1px;height:20px;background:var(--border)"></span>
+                <span class="anchor">
+                  <button class="ghost" style="padding:0;height:auto;border:0" data-act="menu" aria-label="Your profile">${blob(S.identity, 'md')}</button>
+                  ${S.menuOpen ? `<span class="menu">
+                    <span class="who">${blob(S.identity, 'md')}<span><span class="nm" style="display:block">${esc(S.displayName || 'You')}</span><span class="em">you@example.com</span></span></span>
+                    <span class="sep"></span>
+                    <button class="mi" data-act="open-modal">🎨 How you look…</button>
+                    <span class="sep"></span>
+                    <button class="mi danger">⇥ Sign out</button>
+                  </span>` : ''}
+                </span>
+              </div>
+            </div>
+            <div style="padding:64px 16px;text-align:center"><p class="hint">The calendar lives here. Click your blob, top right.</p></div>
+            <div style="padding:0 16px 24px"><div class="col wide" style="margin:0 auto"><div class="note">
+              <p><b>Three items, and the two that are missing.</b> Identity (who you are signed in as), “How you look…”, and sign out.</p>
+              <ul>
+                <li><b>No “change password”.</b> Ticket 13 removed the whole reset apparatus. <code>updateUser({ password })</code> would still work for a signed-in Friend, so this is a real choice — see Needs the human.</li>
+                <li><b>No theme switch here.</b> Ticket 01 keeps view state ephemeral; light/dark is not a Friend column and does not belong beside things that are.</li>
+                <li><b>No “delete account”.</b> Membership is a hand-curated allowlist. Leaving is a conversation, not a button.</li>
+              </ul>
+              <p>Customisation reopens as a dialog, not a route: the same control set as step 2 with the walkthrough furniture stripped. <span class="badge">no separate settings page</span></p>
+            </div></div></div>
+            ${S.modalOpen ? `<div class="overlay" data-act="close-modal-bg"><div class="modal">
+              <div class="sec" style="padding:16px;border-bottom:1px solid var(--border)">
+                <h2>How you look</h2>
+                <p class="desc">Changing your hue recolours your grid, and everyone else’s view of you, straight away. There is no notification and no confirm.</p>
+              </div>
+              <div style="padding:16px">${customiseControls(true)}</div>
+              <div style="padding:16px;border-top:1px solid var(--border);text-align:right"><button data-act="close-modal">Done</button></div>
+            </div></div>` : ''}
+          </div>`
+        },
+      }
+
+      /* ---------------- wiring ----------------------------------------------- */
+
+      const root = document.getElementById('root')
+
+      function render() {
+        document.documentElement.classList.toggle('dark', S.theme === 'dark')
+        root.innerHTML = SCREEN[S.screen]()
+
+        const i = SCREENS.indexOf(S.screen)
+        const copyName = HAS_COPY[S.screen] ? (S.screen === 'signin' ? FORGOT[S.copy].name : REJECT[S.copy].name) : null
+        document.getElementById('switcher').innerHTML =
+          `<button data-nav="-1" aria-label="previous screen">←</button>` +
+          `<span class="name">${i + 1}/5 · ${NAMES[S.screen]}</span>` +
+          `<button data-nav="1" aria-label="next screen">→</button>` +
+          `<span class="div"></span>` +
+          (copyName ? `<button class="w" data-nav="copy">copy ${S.copy} · ${copyName}</button>`
+                    : `<span class="off">no copy decision here</span>`) +
+          `<span class="div"></span>` +
+          `<button class="w" data-nav="theme">${S.theme}</button>`
+      }
+
+      const go = (d) => { S.screen = SCREENS[(SCREENS.indexOf(S.screen) + d + 5) % 5]; setParam('screen', S.screen); render() }
+      const cycleCopy = () => { S.copy = COPY_KEYS[(COPY_KEYS.indexOf(S.copy) + 1) % 3]; setParam('copy', S.copy); render() }
+      const toggleTheme = () => { S.theme = S.theme === 'dark' ? 'light' : 'dark'; setParam('theme', S.theme); render() }
+
+      document.addEventListener('click', (e) => {
+        const nav = e.target.closest('[data-nav]')
+        if (nav) {
+          const v = nav.dataset.nav
+          if (v === 'copy') return cycleCopy()
+          if (v === 'theme') return toggleTheme()
+          return go(Number(v))
+        }
+        const el = e.target.closest('[data-act]')
+        if (!el) {
+          if (S.menuOpen) { S.menuOpen = false; render() }
+          return
+        }
+        const act = el.dataset.act
+        switch (act) {
+          case 'peek': {
+            const input = document.getElementById(el.dataset.target)
+            input.type = input.type === 'password' ? 'text' : 'password'
+            return
+          }
+          case 'signin': S.signinFailed = true; break
+          case 'disclose': S.disclosed = !S.disclosed; break
+          case 'signup':
+            S.signupState = 'pending'
+            render()
+            setTimeout(() => { S.signupState = 'rejected'; render() }, 550)
+            return
+          case 'randomise': S.identity = materialise(TAKEN); S.prevHead = null; break
+          case 'reroll':
+            S.prevHead = avatarColours(S.identity).head
+            S.identity = { ...S.identity, blobatar_seed: newSeed() }
+            break
+          case 'tone': S.identity = { ...S.identity, tone: Number(el.dataset.value) }; break
+          case 'expr': S.identity = { ...S.identity, expression: el.dataset.value }; break
+          case 'menu': S.menuOpen = !S.menuOpen; break
+          case 'open-modal': S.menuOpen = false; S.modalOpen = true; break
+          case 'close-modal': S.modalOpen = false; break
+          case 'close-modal-bg': if (e.target === el) S.modalOpen = false; else return; break
+          case 'next': return go(1)
+          default: return
+        }
+        render()
+      })
+
+      document.addEventListener('input', (e) => {
+        const el = e.target.closest('[data-act]')
+        if (!el) return
+        if (el.dataset.act === 'hue') {
+          S.identity = { ...S.identity, hue: Number(el.value) }
+          const at = el.selectionStart
+          render()
+          const next = document.getElementById('hue')
+          if (next) { next.focus(); if (at != null) next.selectionStart = at }
+        } else if (el.dataset.act === 'name') {
+          S.displayName = el.value
+        } else if (el.dataset.act === 'signup-email') {
+          S.signupEmail = el.value
+          if (S.signupState !== 'idle') { S.signupState = 'idle'; render(); document.getElementById('su-email')?.focus() }
+        }
+      })
+
+      document.addEventListener('keydown', (e) => {
+        const t = e.target
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        if (e.key === 'ArrowLeft') go(-1)
+        if (e.key === 'ArrowRight') go(1)
+        if (e.key === 'c' && HAS_COPY[S.screen]) cycleCopy()
+        if (e.key === 't') toggleTheme()
+      })
+
+      render()
+      })()
+    </script>
+  </body>
+</html>

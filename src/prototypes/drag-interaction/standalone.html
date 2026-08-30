@@ -1,0 +1,490 @@
+<!doctype html>
+<!--
+  PROTOTYPE — ticket 06. THROWAWAY.
+  Dependency-free twin of index.tsx / week-grid.tsx. Same time model, same
+  gesture rules, same three variants. Exists because the repo has no
+  node_modules: double-click this file and it runs.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Prototype 06 — drawing Availability</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 12px/1.4 Inter, system-ui, -apple-system, sans-serif; color: #111; background: #fff; padding: 16px 16px 80px; }
+      h1 { font-size: 13px; margin: 0 0 2px; }
+      .sub { font-size: 12px; color: #666; margin-bottom: 10px; }
+      .bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+      .bar span.lbl { font-size: 11px; color: #666; }
+      button { font: inherit; font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #d4d4d8; background: #fff; color: #333; cursor: pointer; }
+      button.on { background: #4f6bed; border-color: #4f6bed; color: #fff; }
+      button:disabled { opacity: 0.4; cursor: default; }
+      .blurb { font-size: 11px; color: #888; margin-bottom: 8px; }
+      .wrap { display: flex; gap: 16px; align-items: flex-start; }
+      .cal { flex: 1; min-width: 0; }
+      .scroll { border: 1px solid #e4e4e7; border-radius: 8px; overflow: auto; max-height: 560px; background: #fff; }
+      .row { display: flex; min-width: 640px; }
+      .gutter { width: 52px; flex-shrink: 0; padding-top: 28px; position: relative; }
+      .gutter .cap { position: sticky; top: 0; height: 28px; margin-top: -28px; background: #fafafa; border-bottom: 1px solid #e4e4e7; z-index: 3; }
+      .gutter .hours { position: relative; }
+      .gutter .h { position: absolute; right: 6px; font-size: 10px; color: #a1a1aa; font-variant-numeric: tabular-nums; }
+      .body { flex: 1; position: relative; }
+      .head { display: grid; grid-template-columns: repeat(7, 1fr); position: sticky; top: 0; z-index: 3; background: #fafafa; border-bottom: 1px solid #e4e4e7; }
+      .head div { font-size: 11px; font-weight: 600; color: #52525b; text-align: center; padding: 7px 0; border-left: 1px solid #f4f4f5; }
+      #surface { position: relative; cursor: crosshair; touch-action: none; user-select: none; }
+      .hline, .vline { position: absolute; pointer-events: none; }
+      .hline { left: 0; right: 0; height: 1px; }
+      .vline { top: 0; bottom: 0; width: 1px; background: #ececed; }
+      .blk { position: absolute; pointer-events: none; overflow: hidden; color: #fff; font-size: 10px; padding: 2px 4px; line-height: 1.25; }
+      .blk b { font-weight: 600; }
+      .blk .cont { position: absolute; bottom: 1px; right: 4px; opacity: 0.85; }
+      .seam { position: absolute; pointer-events: none; border: 1px dashed rgba(255,255,255,0.9); border-radius: 4px; }
+      .draft { position: absolute; pointer-events: none; border-radius: 5px; box-shadow: 0 0 0 1px rgba(0,0,0,0.25); }
+      .tag { position: absolute; font-size: 10px; font-weight: 600; background: #111; color: #fff; padding: 2px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; z-index: 4; }
+      .tag.era { background: #dc2626; }
+      .handle { position: absolute; height: 4px; background: #fff; opacity: 0.9; border-radius: 2px; z-index: 5; pointer-events: none; }
+      .hint { position: absolute; font-size: 9px; background: rgba(17,17,17,0.85); color: #fff; padding: 1px 5px; border-radius: 3px; white-space: nowrap; pointer-events: none; z-index: 6; }
+      .hint.alt { background: #4f6bed; }
+      aside { width: 270px; flex-shrink: 0; font-size: 11px; border: 1px solid #e4e4e7; border-radius: 8px; padding: 12px; background: #fafafa; max-height: 720px; overflow: auto; }
+      aside ol, aside ul { padding-left: 16px; margin: 0; line-height: 1.8; }
+      aside ol { font-variant-numeric: tabular-nums; }
+      aside li.sel { font-weight: 700; color: #111; }
+      aside li { color: #555; }
+      .notes { font-size: 11px; color: #555; margin-top: 10px; padding-left: 16px; line-height: 1.7; }
+      .switcher { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; background: #111; color: #fff; border-radius: 999px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.28); font-size: 12px; z-index: 50; }
+      .switcher button { background: rgba(255,255,255,0.12); color: #fff; border: 0; border-radius: 999px; width: 26px; height: 26px; padding: 0; }
+      .switcher .name { padding: 0 10px; font-weight: 600; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Prototype 06 · drawing Availability · <span id="vname"></span></h1>
+    <div class="sub">One Friend, one week. Plain rectangles — composite rendering is ticket 05.</div>
+
+    <div class="bar">
+      <span class="lbl">create drag:</span>
+      <button data-mode="column">Column-locked</button>
+      <button data-mode="rect">Rectangle</button>
+      <button data-mode="free">Linear time</button>
+      <span style="flex:1"></span>
+      <button id="undo">↶ undo</button>
+      <button id="redo">↷ redo</button>
+      <button id="reset">reset</button>
+    </div>
+    <div class="blurb" id="blurb"></div>
+
+    <div class="wrap">
+      <div class="cal">
+        <div class="scroll" id="scroll">
+          <div class="row">
+            <div class="gutter"><div class="cap"></div><div class="hours" id="hours"></div></div>
+            <div class="body">
+              <div class="head" id="head"></div>
+              <div id="surface"></div>
+            </div>
+          </div>
+        </div>
+        <ul class="notes" id="notes"></ul>
+      </div>
+      <aside>
+        <div style="font-weight:700;margin-bottom:6px">Availability records: <span id="count"></span></div>
+        <div style="color:#666;margin-bottom:8px" id="total"></div>
+        <ol id="list"></ol>
+        <div style="font-weight:700;margin-top:14px;margin-bottom:4px">Log</div>
+        <ul id="log"></ul>
+      </aside>
+    </div>
+
+    <div class="switcher">
+      <button id="prev">←</button><span class="name" id="sw"></span><button id="next">→</button>
+    </div>
+
+    <script>
+      // ---- time model: absolute minutes from Mon 00:00. Midnight is not special.
+      const SNAP = 30, SPD = 48, DAY = 1440, WEEK = 7 * DAY, SLOT_PX = 22, PPM = SLOT_PX / SNAP, TOTAL_SLOTS = 7 * SPD
+      const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+      let seq = 0
+      const rid = () => 'av' + ++seq
+      const dayOf = m => Math.floor(m / DAY)
+      const minOf = m => ((m % DAY) + DAY) % DAY
+      const clampWeek = m => Math.max(0, Math.min(WEEK, m))
+      const clampSlot = s => Math.max(0, Math.min(TOTAL_SLOTS - 1, s))
+      const slotOf = m => Math.floor(m / SNAP)
+      const pad = n => String(n).padStart(2, '0')
+      const hhmm = m => pad(Math.floor(minOf(m) / 60)) + ':' + pad(minOf(m) % 60)
+      const endLbl = m => (minOf(m) === 0 ? '24:00' : hhmm(m))
+      const fmt = r => {
+        const sd = dayOf(r.start), ed = dayOf(r.end - 1)
+        return sd === ed ? `${DAYS[sd]} ${hhmm(r.start)}–${endLbl(r.end)}` : `${DAYS[sd]} ${hhmm(r.start)} → ${DAYS[ed]} ${endLbl(r.end)}`
+      }
+      const dur = m => { const h = Math.floor(m / 60), x = m % 60; return h === 0 ? x + 'm' : x === 0 ? h + 'h' : h + 'h' + x }
+      const merge = rs => {
+        const out = []
+        for (const r of [...rs].sort((a, b) => a.start - b.start || a.end - b.end)) {
+          const l = out[out.length - 1]
+          if (l && r.start <= l.end) l.end = Math.max(l.end, r.end)
+          else out.push({ ...r })
+        }
+        return out
+      }
+      const subtract = (rs, a, b) => {
+        const out = []
+        for (const r of rs) {
+          if (b <= r.start || a >= r.end) { out.push(r); continue }
+          if (a > r.start) out.push({ id: r.id, start: r.start, end: a })
+          if (b < r.end) out.push({ id: rid(), start: b, end: r.end })
+        }
+        return out
+      }
+      const pieces = r => {
+        const out = []
+        let c = r.start
+        while (c < r.end) {
+          const d = dayOf(c), to = Math.min(r.end, (d + 1) * DAY)
+          out.push({ day: d, from: c - d * DAY, to: to - d * DAY, first: c === r.start, last: to === r.end })
+          c = to
+        }
+        return out
+      }
+      const span = (a, b) => ({ start: Math.min(a, b) * SNAP, end: (Math.max(a, b) + 1) * SNAP })
+      const at = (rs, abs) => rs.find(r => abs >= r.start && abs < r.end)
+      const allAt = (rs, abs) => rs.filter(r => abs >= r.start && abs < r.end)
+
+      const seedMerged = () => merge([
+        { id: rid(), start: 0 * DAY + 540, end: 0 * DAY + 660 },
+        { id: rid(), start: 0 * DAY + 840, end: 0 * DAY + 930 },
+        { id: rid(), start: 1 * DAY + 1380, end: 2 * DAY + 60 },
+        { id: rid(), start: 2 * DAY + 480, end: 2 * DAY + 1320 },
+        { id: rid(), start: 3 * DAY + 1080, end: 3 * DAY + 1200 },
+        { id: rid(), start: 4 * DAY + 1080, end: 4 * DAY + 1380 },
+      ])
+      const seedSegments = () => [
+        { id: rid(), start: 0 * DAY + 540, end: 0 * DAY + 660 },
+        { id: rid(), start: 0 * DAY + 840, end: 0 * DAY + 930 },
+        { id: rid(), start: 1 * DAY + 1380, end: 2 * DAY + 60 },
+        { id: rid(), start: 2 * DAY + 480, end: 2 * DAY + 720 },
+        { id: rid(), start: 2 * DAY + 720, end: 2 * DAY + 840 },
+        { id: rid(), start: 2 * DAY + 780, end: 2 * DAY + 1080 },
+        { id: rid(), start: 2 * DAY + 1080, end: 2 * DAY + 1320 },
+        { id: rid(), start: 3 * DAY + 1080, end: 3 * DAY + 1200 },
+        { id: rid(), start: 4 * DAY + 1080, end: 4 * DAY + 1380 },
+      ]
+
+      // ---- variants: they disagree on exactly one axis — removing the middle.
+      const VARIANTS = [
+        { key: 'A', name: 'Erase drag', merging: true, inside: 'erase', punch: false, seams: false,
+          notes: ['Drag EMPTY grid → create. Drag INSIDE a block → erase that span (red hatch preview).',
+                  'Try it on Wed 08:00–22:00: drag 12:00→14:00 inside it to cut the middle out.',
+                  'Drag a block’s top/bottom edge → resize. ⌥/Alt + drag inside a block → duplicate.'] },
+        { key: 'B', name: 'Punch & resize', merging: true, inside: 'select', punch: true, seams: false,
+          notes: ['Double-click inside a block → punches out the 30-min slot under the pointer.',
+                  'On Wed 08:00–22:00: double-click at 12:00, then drag the two new inner edges apart.',
+                  'A plain drag inside a block does nothing — blocks are atomic. Click selects.'] },
+        { key: 'C', name: 'No merging', merging: false, inside: 'select', punch: false, seams: true,
+          notes: ['Nothing merges. Every drag is its own record; dashed seams show the boundaries.',
+                  'Wed has an OVERLAPPING pair (12:00–14:00 and 13:00–18:00). Delete one, watch the leftover.',
+                  'Deleting the middle is trivial here — the cost is everything else in the record list.'] },
+      ]
+      const MODES = {
+        column: 'Horizontal movement ignored. Drag below midnight to run into the next day.',
+        rect: 'Drag across columns paints the same hours on every day touched. No cross-midnight.',
+        free: 'Anchor → pointer is one continuous range through the week. Tue 23:00 → Thu 09:00 is legal.',
+      }
+
+      // ---- state
+      let V = VARIANTS[0], mode = 'column'
+      let ranges = [], past = [], future = [], selected = [], gesture = null, hover = null, altDown = false, log = ['ready']
+      let origin = null
+      const surface = document.getElementById('surface')
+
+      const note = s => { log = [s, ...log].slice(0, 8) }
+      const setRanges = rs => { ranges = V.merging ? merge(rs) : [...rs].sort((a, b) => a.start - b.start) }
+      const commit = (next, what) => { past = [...past, ranges].slice(-50); future = []; setRanges(next); note(what); render() }
+      const undo = () => { if (!past.length) return; future = [ranges, ...future].slice(0, 50); ranges = past[past.length - 1]; past = past.slice(0, -1); note('undo'); render() }
+      const redo = () => { if (!future.length) return; past = [...past, ranges].slice(-50); ranges = future[0]; future = future.slice(1); note('redo'); render() }
+
+      const loadVariant = v => {
+        V = v; ranges = v.merging ? seedMerged() : seedSegments()
+        past = []; future = []; selected = []; gesture = null; hover = null; log = ['ready']
+        document.getElementById('vname').textContent = v.key + ' — ' + v.name
+        document.getElementById('sw').textContent = v.key + ' (' + v.name + ')'
+        document.getElementById('notes').innerHTML =
+          v.notes.map(n => '<li>' + n + '</li>').join('') +
+          '<li>Escape cancels a drag mid-flight · ⌘Z / Ctrl+Z undo, add ⇧ to redo (50 deep)</li>' +
+          '<li>Click selects · ⇧click adds to selection · Delete / Backspace removes</li>'
+        render()
+      }
+
+      // ---- pointer → time
+      const pt = (cx, cy) => {
+        const r = surface.getBoundingClientRect(), col = r.width / 7
+        const day = Math.max(0, Math.min(6, Math.floor((cx - r.left) / col)))
+        const minRaw = (cy - r.top) / PPM // NOT clamped: overflow past the bottom crosses midnight
+        return { day, minRaw, abs: clampWeek(day * DAY + Math.max(0, Math.min(DAY - 1, minRaw))) }
+      }
+
+      const draftOf = g => {
+        if (!g) return null
+        if (g.kind === 'create') {
+          const aSlot = g.anchorDay * SPD + Math.floor(g.anchorMin / SNAP)
+          if (mode === 'rect') {
+            const d0 = Math.min(g.anchorDay, g.curDay), d1 = Math.max(g.anchorDay, g.curDay)
+            const s0 = Math.max(0, Math.min(SPD - 1, Math.floor(g.anchorMin / SNAP)))
+            const s1 = Math.max(0, Math.min(SPD - 1, Math.floor(g.curMin / SNAP)))
+            const lo = Math.min(s0, s1), hi = Math.max(s0, s1), out = []
+            for (let d = d0; d <= d1; d++) out.push({ id: rid(), start: d * DAY + lo * SNAP, end: d * DAY + (hi + 1) * SNAP })
+            return out
+          }
+          const cSlot = mode === 'column'
+            ? g.anchorDay * SPD + Math.floor(g.curMin / SNAP)
+            : g.curDay * SPD + Math.floor(Math.max(0, Math.min(DAY - 1, g.curMin)) / SNAP)
+          const s = span(clampSlot(aSlot), clampSlot(cSlot))
+          return [{ id: 'draft', ...s }]
+        }
+        if (g.kind === 'resize') {
+          // dragged edge CLAMPS at the opposite edge; it does not flip past it
+          const mv = clampWeek(g.curSlot * SNAP)
+          const start = g.edge === 'start' ? Math.min(mv, g.fixed - SNAP) : g.fixed
+          const end = g.edge === 'end' ? Math.max(mv, g.fixed + SNAP) : g.fixed
+          return [{ id: g.id, start, end }]
+        }
+        if (g.kind === 'duplicate') {
+          const len = g.src.end - g.src.start, st = clampWeek(g.startSlot * SNAP)
+          return [{ id: 'ghost', start: st, end: Math.min(WEEK, st + len) }]
+        }
+        return [{ id: 'hole', ...span(g.anchorSlot, g.curSlot) }]
+      }
+
+      const previewOf = () => {
+        const d = draftOf(gesture)
+        if (!gesture || !d) return ranges
+        if (gesture.kind === 'erase') return subtract(ranges, d[0].start, d[0].end)
+        if (gesture.kind === 'resize') {
+          const n = [...ranges.filter(r => r.id !== gesture.id), ...d]
+          return V.merging ? merge(n) : n.sort((a, b) => a.start - b.start)
+        }
+        const n = [...ranges, ...d]
+        return V.merging ? merge(n) : n.sort((a, b) => a.start - b.start)
+      }
+
+      // ---- gestures
+      surface.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return
+        surface.setPointerCapture(e.pointerId)
+        origin = { x: e.clientX, y: e.clientY }
+        const { day, minRaw, abs } = pt(e.clientX, e.clientY)
+        const prev = previewOf()
+        const hit = at(prev, abs)
+        const raw = V.merging ? hit : allAt(ranges, abs).slice(-1)[0]
+        if (hit) {
+          const p = pieces(hit).find(p => p.day === dayOf(abs))
+          const yIn = (minRaw - (p ? p.from : 0)) * PPM
+          const h = p ? (p.to - p.from) * PPM : 0
+          const nearTop = p && p.first && yIn < 7
+          const nearBot = p && p.last && h - yIn < 7
+          if (e.altKey) {
+            const src = raw || hit
+            gesture = { kind: 'duplicate', src, grab: slotOf(abs) - slotOf(src.start), startSlot: slotOf(src.start), moved: false }
+            selected = [src.id]; render(); return
+          }
+          if (nearTop || nearBot) {
+            const t = raw || hit, edge = nearTop ? 'start' : 'end'
+            gesture = { kind: 'resize', id: t.id, edge, fixed: edge === 'start' ? t.end : t.start, curSlot: slotOf(edge === 'start' ? t.start : t.end), moved: false }
+            selected = [t.id]; render(); return
+          }
+          if (V.inside === 'erase') {
+            gesture = { kind: 'erase', day, anchorSlot: slotOf(abs), curSlot: slotOf(abs), moved: false, shift: e.shiftKey }
+            render(); return
+          }
+          const t = raw || hit
+          selected = e.shiftKey ? (selected.includes(t.id) ? selected.filter(x => x !== t.id) : [...selected, t.id]) : [t.id]
+          note('selected ' + fmt(t)); render(); return
+        }
+        selected = []
+        gesture = { kind: 'create', anchorDay: day, anchorMin: minRaw, curDay: day, curMin: minRaw, moved: false }
+        render()
+      })
+
+      surface.addEventListener('pointermove', e => {
+        const { day, minRaw, abs } = pt(e.clientX, e.clientY)
+        if (!gesture) {
+          const hit = at(ranges, abs)
+          if (!hit) { if (hover) { hover = null; render() } return }
+          const p = pieces(hit).find(p => p.day === dayOf(abs))
+          const yIn = (minRaw - (p ? p.from : 0)) * PPM, h = p ? (p.to - p.from) * PPM : 0
+          const edge = p && p.first && yIn < 7 ? 'start' : p && p.last && h - yIn < 7 ? 'end' : null
+          const nh = { id: hit.id, edge }
+          if (!hover || hover.id !== nh.id || hover.edge !== nh.edge) { hover = nh; render() }
+          return
+        }
+        const moved = gesture.moved || (origin && Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > 4)
+        if (gesture.kind === 'create') Object.assign(gesture, { curDay: day, curMin: minRaw, moved })
+        else if (gesture.kind === 'resize') Object.assign(gesture, { curSlot: clampSlot(Math.round((day * DAY + minRaw) / SNAP)), moved })
+        else if (gesture.kind === 'duplicate') {
+          const len = gesture.src.end - gesture.src.start
+          const maxSlot = Math.floor((WEEK - len) / SNAP)
+          const want = slotOf(day * DAY + Math.max(0, Math.min(DAY - 1, minRaw))) - gesture.grab
+          Object.assign(gesture, { startSlot: Math.max(0, Math.min(maxSlot, want)), moved })
+        } else Object.assign(gesture, { curSlot: clampSlot(slotOf(gesture.day * DAY + Math.max(0, Math.min(DAY - 1, minRaw)))), moved })
+        render()
+      })
+
+      const finish = () => {
+        if (!gesture) return
+        const g = gesture, d = draftOf(g)
+        gesture = null; origin = null
+        if (g.kind === 'create') {
+          const total = d.reduce((n, r) => n + (r.end - r.start), 0)
+          commit([...ranges, ...d.map(r => ({ ...r, id: rid() }))],
+            g.moved ? `drew ${d.length > 1 ? d.length + ' blocks, ' : ''}${dur(total)} — ${fmt(d[0])}`
+                    : `click → one 30-min block, ${fmt(d[0])}`)
+          selected = []; render(); return
+        }
+        if (g.kind === 'resize') { if (!g.moved) { render(); return } commit([...ranges.filter(r => r.id !== g.id), ...d], `resized ${g.edge} → ${fmt(d[0])}`); return }
+        if (g.kind === 'duplicate') {
+          if (!g.moved) { note('alt+click with no movement → nothing copied'); render(); return }
+          const ghost = { ...d[0], id: rid() }
+          const collides = ranges.some(r => r.start < ghost.end && ghost.start < r.end)
+          commit([...ranges, ghost], `⌥ copied → ${fmt(ghost)}${collides ? ' (merged into existing)' : ''}`); return
+        }
+        if (!g.moved) {
+          const hit = at(ranges, g.anchorSlot * SNAP)
+          if (hit) {
+            selected = g.shift ? (selected.includes(hit.id) ? selected.filter(x => x !== hit.id) : [...selected, hit.id]) : [hit.id]
+            note('selected ' + fmt(hit))
+          }
+          render(); return
+        }
+        commit(subtract(ranges, d[0].start, d[0].end), 'erased ' + fmt(d[0]))
+      }
+      surface.addEventListener('pointerup', finish)
+      surface.addEventListener('pointercancel', finish)
+
+      surface.addEventListener('dblclick', e => {
+        if (!V.punch) return
+        const { abs } = pt(e.clientX, e.clientY)
+        if (!at(ranges, abs)) return
+        const s = slotOf(abs) * SNAP
+        commit(subtract(ranges, s, s + SNAP), `punched 30-min hole at ${hhmm(s)}`)
+      })
+
+      window.addEventListener('keydown', e => {
+        if (e.key === 'Alt') { altDown = true; render() }
+        if (e.key === 'Escape') {
+          if (gesture) { gesture = null; origin = null; note('escape → drag cancelled, nothing committed'); render() }
+          else if (selected.length) { selected = []; note('escape → selection cleared'); render() }
+        }
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
+          e.preventDefault()
+          commit(ranges.filter(r => !selected.includes(r.id)), `deleted ${selected.length} block(s)`)
+          selected = []; render()
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+        if (e.key === 'ArrowLeft') cycle(-1)
+        if (e.key === 'ArrowRight') cycle(1)
+      })
+      window.addEventListener('keyup', e => { if (e.key === 'Alt') { altDown = false; render() } })
+
+      const cycle = d => {
+        const i = VARIANTS.indexOf(V)
+        const n = VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length]
+        // replaceState throws on file:// and data: URLs — the switcher must still work
+        try { history.replaceState(null, '', '?variant=' + n.key) } catch (_) {}
+        loadVariant(n)
+      }
+      document.getElementById('prev').onclick = () => cycle(-1)
+      document.getElementById('next').onclick = () => cycle(1)
+      document.getElementById('undo').onclick = undo
+      document.getElementById('redo').onclick = redo
+      document.getElementById('reset').onclick = () => commit(V.merging ? seedMerged() : seedSegments(), 'reset')
+      document.querySelectorAll('[data-mode]').forEach(b => (b.onclick = () => { mode = b.dataset.mode; render() }))
+
+      // ---- render
+      const head = document.getElementById('head')
+      head.innerHTML = DAYS.map(d => '<div>' + d + '</div>').join('')
+      const hours = document.getElementById('hours')
+      hours.style.height = SPD * SLOT_PX + 'px'
+      hours.innerHTML = Array.from({ length: 24 }, (_, h) => h === 0 ? '' : `<div class="h" style="top:${h * 2 * SLOT_PX - 6}px">${pad(h)}:00</div>`).join('')
+
+      const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+
+      function render() {
+        const prev = previewOf(), d = draftOf(gesture)
+        surface.style.height = SPD * SLOT_PX + 'px'
+        surface.style.cursor =
+          (gesture && gesture.kind === 'duplicate') || (altDown && hover) ? 'copy'
+          : hover && hover.edge ? 'ns-resize'
+          : hover && V.inside === 'erase' ? 'cell' : 'crosshair'
+
+        let h = ''
+        for (let s = 0; s < SPD; s++) h += `<div class="hline" style="top:${s * SLOT_PX}px;background:${s % 2 ? '#f5f5f7' : '#e8e8ec'}"></div>`
+        for (let i = 0; i < 7; i++) h += `<div class="vline" style="left:${(i / 7) * 100}%"></div>`
+
+        const box = p => `left:calc(${(p.day / 7) * 100}% + 3px);width:calc(${100 / 7}% - 6px);top:${p.from * PPM}px;`
+        for (const r of prev) {
+          for (const p of pieces(r)) {
+            const sel = selected.includes(r.id)
+            const isSrc = gesture && gesture.kind === 'duplicate' && r.id === gesture.src.id
+            h += `<div class="blk" style="${box(p)}height:${Math.max(6, (p.to - p.from) * PPM - 1)}px;
+              background:${V.merging ? '#4f6bed' : 'rgba(79,107,237,0.45)'};
+              border:${sel ? '2px solid #111' : '1px solid rgba(255,255,255,0.5)'};
+              border-top-left-radius:${p.first ? 5 : 0}px;border-top-right-radius:${p.first ? 5 : 0}px;
+              border-bottom-left-radius:${p.last ? 5 : 0}px;border-bottom-right-radius:${p.last ? 5 : 0}px;
+              ${sel ? 'box-shadow:0 0 0 3px rgba(17,17,17,0.15);' : ''}
+              ${isSrc ? 'opacity:.55;outline:2px dashed #fff;outline-offset:-3px;' : ''}">
+              ${p.first && p.to - p.from >= 45 ? `<b>${hhmm(r.start)}–${endLbl(r.end)}</b>` : ''}
+              ${!p.first ? `<span style="opacity:.85">↑ from ${DAYS[dayOf(r.start)]}</span>` : ''}
+              ${p.first && !p.last ? '<span class="cont">↓</span>' : ''}
+            </div>`
+          }
+        }
+        if (V.seams) for (const r of ranges) for (const p of pieces(r))
+          h += `<div class="seam" style="${box(p)}height:${Math.max(6, (p.to - p.from) * PPM - 1)}px"></div>`
+
+        if (d && gesture) {
+          for (const r of d) for (const p of pieces(r)) {
+            const era = gesture.kind === 'erase'
+            h += `<div class="draft" style="${box(p)}height:${Math.max(4, (p.to - p.from) * PPM - 1)}px;
+              border:2px dashed ${era ? '#dc2626' : 'rgba(255,255,255,.95)'};
+              background:${era ? 'repeating-linear-gradient(45deg,rgba(220,38,38,.18) 0 5px,transparent 5px 10px)'
+                : gesture.kind === 'duplicate' ? 'rgba(79,107,237,.55)' : 'transparent'}"></div>`
+          }
+          const f = d[0]
+          h += `<div class="tag ${gesture.kind === 'erase' ? 'era' : ''}" style="left:calc(${(dayOf(f.start) / 7) * 100}% + 3px);top:${Math.max(0, (f.start % DAY) * PPM - 20)}px">
+            ${gesture.kind === 'erase' ? 'erase ' : gesture.kind === 'duplicate' ? '⌥ copy ' : ''}${fmt(f)}${d.length > 1 ? ' ×' + d.length : ''} · ${dur(f.end - f.start)}${gesture.moved ? '' : ' (no movement yet)'}
+          </div>`
+        }
+
+        if (hover && !gesture) {
+          const r = prev.find(x => x.id === hover.id)
+          if (r) {
+            const ps = pieces(r)
+            for (const p of ps) {
+              if (p.first) h += `<div class="handle" style="${box(p)}"></div>`
+              if (p.last) h += `<div class="handle" style="left:calc(${(p.day / 7) * 100}% + 3px);width:calc(${100 / 7}% - 6px);top:${p.to * PPM - 5}px"></div>`
+            }
+            const hint = altDown ? '⌥ drag → copy'
+              : V.inside === 'erase' ? 'drag inside → erase · ⌥ copy'
+              : V.punch ? 'double-click → punch hole · ⌥ copy' : 'click → select · ⌥ copy'
+            h += `<div class="hint ${altDown ? 'alt' : ''}" style="left:calc(${(ps[0].day / 7) * 100}% + 3px);top:${Math.max(0, ps[0].from * PPM - 18)}px">${hint}</div>`
+          }
+        }
+        surface.innerHTML = h
+
+        document.getElementById('count').textContent = ranges.length
+        document.getElementById('total').textContent = dur(ranges.reduce((n, r) => n + (r.end - r.start), 0)) + ' total · ' + (V.merging ? 'merging ON' : 'merging OFF')
+        document.getElementById('list').innerHTML = ranges.map(r => `<li class="${selected.includes(r.id) ? 'sel' : ''}">${fmt(r)}</li>`).join('')
+        document.getElementById('log').innerHTML = log.map(l => `<li>${esc(l)}</li>`).join('')
+        document.getElementById('blurb').textContent = MODES[mode]
+        document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode))
+        document.getElementById('undo').disabled = !past.length
+        document.getElementById('redo').disabled = !future.length
+        document.getElementById('undo').textContent = '↶ undo (' + past.length + ')'
+        document.getElementById('redo').textContent = '↷ redo (' + future.length + ')'
+      }
+
+      const want = (new URLSearchParams(location.search).get('variant') || 'A').toUpperCase()
+      loadVariant(VARIANTS.find(v => v.key === want) || VARIANTS[0])
+      document.getElementById('scroll').scrollTop = 7 * 2 * SLOT_PX
+    </script>
+  </body>
+</html>

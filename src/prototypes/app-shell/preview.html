@@ -1,0 +1,569 @@
+<!doctype html>
+<!--
+  PROTOTYPE — ticket 12: the app shell, two independently-toggled sidebars.
+  THROWAWAY.
+
+  Dependency-free twin of index.tsx / shell.tsx / variants.tsx. Same state
+  model, same keyboard handler (character-for-character), same three layouts,
+  same one-sheet-at-a-time invariant. Exists so the question can be answered by
+  double-clicking a file.
+
+  Avatars are plain SVG blobs here — the real shell uses <Blobatar>. The colour
+  rule is the real one: oklch(L_theme, C_theme, hue), two constants per theme.
+
+  TRY:  ⌘B / ctrl+B      toggle the left pane
+        ⇧⌘B / ctrl+⇧+B   toggle the right pane   (independently — that is the ticket)
+        ← →              switch layout variant
+        narrow the window below 768px for the sheet breakpoint
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype 12 — the app shell</title>
+    <style>
+      :root {
+        --bg: oklch(1 0 0);
+        --fg: oklch(0.145 0 0);
+        --muted: oklch(0.556 0 0);
+        --border: oklch(0.922 0 0);
+        --sidebar: oklch(0.985 0 0);
+        --accent: oklch(0.97 0 0);
+        --card: oklch(1 0 0);
+        /* ticket 11 — two constants per theme, only hue varies between Friends */
+        --friend-l: 0.62;
+        --friend-c: 0.15;
+        --pane: 17rem;
+        --bar: 48px;
+      }
+      .dark {
+        --bg: oklch(0.145 0 0);
+        --fg: oklch(0.985 0 0);
+        --muted: oklch(0.708 0 0);
+        --border: oklch(1 0 0 / 12%);
+        --sidebar: oklch(0.205 0 0);
+        --accent: oklch(0.269 0 0);
+        --card: oklch(0.205 0 0);
+        --friend-l: 0.78;
+        --friend-c: 0.145;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font: 13px/1.45 Inter, system-ui, -apple-system, sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+        overflow: hidden;
+      }
+      #root { height: 100svh; display: flex; flex-direction: column; overflow: hidden; }
+
+      /* ---- panes ---------------------------------------------------- */
+      .row { display: flex; flex: 1; min-height: 0; }
+      .col { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+      .pane {
+        width: var(--pane);
+        flex-shrink: 0;
+        overflow: hidden;
+        transition: width 200ms ease;
+        background: var(--sidebar);
+      }
+      .pane[data-state='collapsed'] { width: 0; }
+      .pane > .inner {
+        width: var(--pane);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .pane[data-side='left'] > .inner { border-right: 1px solid var(--border); }
+      .pane[data-side='right'] > .inner { border-left: 1px solid var(--border); }
+      .scroll { flex: 1; min-height: 0; overflow: auto; }
+
+      /* ---- bar ------------------------------------------------------- */
+      header.bar {
+        height: var(--bar);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      header.bar.banner { background: var(--sidebar); }
+      .title { font-weight: 600; font-variant-numeric: tabular-nums; flex: 1; min-width: 0;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+      .cluster { display: flex; align-items: center; gap: 2px; }
+      button.icon, button.txt {
+        font: inherit; border: 0; background: transparent; color: var(--fg);
+        border-radius: 6px; cursor: pointer; padding: 0 8px; height: 28px;
+      }
+      button.icon { width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+      button.icon:hover, button.txt:hover { background: var(--accent); }
+      button.icon[aria-expanded='true'] { background: var(--accent); }
+      .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+      .seg button { height: 26px; padding: 0 10px; border: 0; background: transparent; color: var(--muted);
+                    font: inherit; font-size: 12px; cursor: pointer; }
+      .seg button[aria-pressed='true'] { background: var(--accent); color: var(--fg); font-weight: 600; }
+      .avatar { border-radius: 999px; display: block; }
+
+      /* ---- left pane ------------------------------------------------- */
+      .grouplabel { font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+                    color: var(--muted); padding: 8px 10px 4px; display: flex; justify-content: space-between; }
+      .minical { padding: 8px; border-bottom: 1px solid var(--border); }
+      .minical .mhead { display: flex; align-items: center; justify-content: space-between;
+                        font-size: 11px; font-weight: 600; padding: 0 2px 6px; }
+      .minical .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+      .minical .grid div { text-align: center; font-size: 10px; padding: 3px 0; border-radius: 4px;
+                           font-variant-numeric: tabular-nums; }
+      .minical .grid div.dow { color: var(--muted); font-size: 9px; }
+      .minical .grid div.day:hover { background: var(--accent); cursor: pointer; }
+      .minical .grid div.sel { background: var(--fg); color: var(--bg); font-weight: 700; }
+      .friend { display: flex; align-items: center; gap: 8px; padding: 5px 8px; cursor: pointer; }
+      .friend:hover { background: var(--accent); }
+      .friend .swatch { width: 2px; height: 20px; border-radius: 2px; flex-shrink: 0; }
+      .friend .nm { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .friend .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--muted); opacity: .5; }
+      .friend .eye { opacity: 0; width: 22px; height: 22px; display: inline-flex; align-items: center;
+                     justify-content: center; border-radius: 5px; border: 0; background: transparent;
+                     color: var(--fg); cursor: pointer; }
+      .friend:hover .eye { opacity: 1; }
+      .friend.hidden { opacity: .45; }
+      body.sheetmode .friend .eye { opacity: 1; }
+
+      /* ---- right pane ------------------------------------------------ */
+      .cardgroup { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+      .cardgroup.pinned { border-bottom: 1px solid var(--border); }
+      .card { border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 8px 10px;
+              display: flex; flex-direction: column; gap: 4px; }
+      .card.hangout { border-color: color-mix(in oklch, var(--fg) 25%, transparent); }
+      .card.everyone { box-shadow: 0 0 0 1px color-mix(in oklch, var(--fg) 20%, transparent); }
+      .card .when { font-size: 11px; color: var(--muted); }
+      .card .rng { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+      .card .row2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .stack { display: flex; }
+      .stack .avatar { margin-left: -5px; box-shadow: 0 0 0 1.5px var(--card); }
+      .stack .avatar:first-child { margin-left: 0; }
+      .tag { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700;
+             background: var(--fg); color: var(--bg); border-radius: 3px; padding: 1px 4px; }
+
+      /* ---- grid stub -------------------------------------------------- */
+      .gridwrap { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+      .gridhead { display: flex; padding-left: 40px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+      .gridhead div { flex: 1; text-align: center; font-size: 11px; font-weight: 500; color: var(--muted);
+                      padding: 6px 0; border-left: 1px solid var(--border); }
+      .gridbody { display: flex; flex: 1; min-height: 0; overflow: auto; }
+      .gutter { width: 40px; flex-shrink: 0; }
+      .gutter div { height: 40px; text-align: right; padding-right: 4px; font-size: 9px; color: var(--muted);
+                    font-variant-numeric: tabular-nums; }
+      .cols { display: flex; flex: 1; }
+      .cols > div { flex: 1; border-left: 1px solid var(--border); }
+      .cols > div > div { height: 40px; border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+      .monthgrid { display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(5, 1fr);
+                   flex: 1; min-height: 0; border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+      .monthgrid div { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+                       font-size: 10px; color: var(--muted); padding: 3px; }
+
+      /* ---- sheets ------------------------------------------------------ */
+      .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; }
+      .sheet { position: fixed; top: 0; bottom: 0; width: min(18rem, 82vw); z-index: 41;
+               background: var(--sidebar); display: flex; flex-direction: column; overflow: hidden;
+               box-shadow: 0 0 40px rgba(0,0,0,.3); }
+      .sheet[data-side='left'] { left: 0; border-right: 1px solid var(--border); }
+      .sheet[data-side='right'] { right: 0; border-left: 1px solid var(--border); }
+
+      /* ---- switcher + readout ------------------------------------------ */
+      .switcher { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex;
+                  align-items: center; gap: 4px; background: #111; color: #fff; border-radius: 999px;
+                  padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.28); font-size: 12px; z-index: 60; }
+      .switcher button { background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 999px;
+                         width: 26px; height: 26px; padding: 0; cursor: pointer; }
+      .switcher .name { padding: 0 10px; font-weight: 600; white-space: nowrap; }
+      .switcher .hint { padding: 0 10px 0 2px; opacity: .55; white-space: nowrap; }
+      .readout { position: fixed; bottom: 52px; right: 14px; z-index: 60; background: #111; color: #fff;
+                 border-radius: 8px; padding: 6px 9px; font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+                 box-shadow: 0 8px 24px rgba(0,0,0,.28); white-space: pre; }
+      @media (max-width: 900px) { .switcher .hint { display: none; } }
+      @media (max-width: 767px) { .readout { display: none; } }
+      /* Item 6 at narrow widths: "Today" and the view select leave the bar.
+         Today becomes tapping the date label; the view select moves into the
+         blobatar menu. prev/next, the two pane triggers and the blobatar stay,
+         because below the breakpoint there is no keyboard to toggle a pane. */
+      @media (max-width: 767px) {
+        button.txt.today { display: none; }
+        .seg { display: none; }
+        .title { cursor: pointer; text-decoration-line: underline; text-decoration-style: dotted; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div class="readout" id="readout"></div>
+    <div class="switcher">
+      <button id="prev" aria-label="previous variant">←</button>
+      <span class="name" id="vname"></span>
+      <button id="next" aria-label="next variant">→</button>
+      <span class="hint">⌘B left · ⇧⌘B right · ← → variant</span>
+    </div>
+
+    <script>
+      /* ================= state ================= */
+      const SHEET_BREAKPOINT = 768
+
+      const FRIENDS = [
+        { id: 'gz', name: 'Gianluca', hue: 262 },
+        { id: 'ml', name: 'Marta', hue: 24 },
+        { id: 'st', name: 'Stefano', hue: 148 },
+        { id: 'ch', name: 'Chiara', hue: 328 },
+        { id: 'da', name: 'Davide', hue: 88 },
+        { id: 'el', name: 'Elena', hue: 205 },
+        { id: 'fr', name: 'Francesco', hue: 44, silent: true },
+      ]
+      const ME = FRIENDS[0]
+      const PINNED = [
+        { when: 'Sat 6 Sep', rng: '20:00 – 23:30', ids: ['gz', 'ml', 'st', 'ch'], title: 'Pizza' },
+        { when: 'Wed 10 Sep', rng: '19:00 – 21:00', ids: ['gz', 'da'] },
+      ]
+      const CANDIDATES = [
+        { when: 'Tue 2 Sep', rng: '18:30 – 22:00', ids: ['gz','ml','st','ch','da','el'], everyone: true },
+        { when: 'Thu 4 Sep', rng: '21:00 – 23:00', ids: ['ml','st','ch','da'] },
+        { when: 'Fri 5 Sep', rng: '19:30 – 22:30', ids: ['gz','ch','el'] },
+        { when: 'Sun 7 Sep', rng: '11:00 – 14:00', ids: ['gz','st','da'] },
+        { when: 'Mon 8 Sep', rng: '20:00 – 21:30', ids: ['ml','el'] },
+        { when: 'Tue 9 Sep', rng: '18:00 – 19:30', ids: ['st','ch'] },
+        { when: 'Fri 12 Sep', rng: '22:00 – 23:59', ids: ['gz','ml'] },
+      ]
+      const LABEL = '31 Aug – 6 Sep 2026'
+      const VARIANTS = [
+        ['A', 'Inset bar — over the calendar only'],
+        ['B', 'Banner — full window width'],
+        ['C', 'Reference — centre + right'],
+      ]
+
+      const S = {
+        variant: new URLSearchParams(location.search).get('variant')?.toUpperCase() || 'C',
+        open: { left: true, right: true },   // no cookie, no localStorage — ephemeral by decision
+        sheet: null,                          // 'left' | 'right' | null — AT MOST ONE
+        isSheet: window.innerWidth < SHEET_BREAKPOINT,
+        view: 'week',
+        dark: false,
+        hidden: new Set(),
+      }
+      if (!VARIANTS.some(([k]) => k === S.variant)) S.variant = 'C'
+
+      function toggle(pane) {
+        if (S.isSheet) S.sheet = S.sheet === pane ? null : pane
+        else S.open[pane] = !S.open[pane]
+        render()
+      }
+
+      /* ---- THE KEYBOARD HANDLER. One listener, both panes, explicit shift. ----
+         The shadcn original is `event.key === "b" && (metaKey || ctrlKey)`:
+           · it fires on cmd+alt+b, which is somebody else's shortcut
+           · it misses cmd+shift+b only because a real browser reports key "B"
+             — and it FIRES on any programmatically dispatched cmd+shift+b,
+             where key stays "b". Verified in a browser; see the findings note. */
+      function isShortcutKey(e) {
+        return e.key.toLowerCase() === 'b' || e.code === 'KeyB'
+      }
+      window.addEventListener('keydown', (e) => {
+        if (e.metaKey || e.ctrlKey) {
+          if (e.altKey) return
+          if (!isShortcutKey(e)) return
+          e.preventDefault()
+          toggle(e.shiftKey ? 'right' : 'left')
+          return
+        }
+        const t = e.target
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+        if (e.key === 'ArrowLeft') step(-1)
+        if (e.key === 'ArrowRight') step(1)
+      })
+
+      function step(d) {
+        const i = VARIANTS.findIndex(([k]) => k === S.variant)
+        S.variant = VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length][0]
+        const p = new URLSearchParams(location.search)
+        p.set('variant', S.variant)
+        history.replaceState(null, '', '?' + p)
+        render()
+      }
+      document.getElementById('prev').onclick = () => step(-1)
+      document.getElementById('next').onclick = () => step(1)
+
+      const mql = window.matchMedia(`(max-width: ${SHEET_BREAKPOINT - 1}px)`)
+      const syncBreakpoint = () => {
+        const next = window.innerWidth < SHEET_BREAKPOINT
+        S.isSheet = next
+        if (!next) S.sheet = null   // crossing up must drop the sheet
+        document.body.classList.toggle('sheetmode', next)
+        render()
+      }
+      mql.addEventListener('change', syncBreakpoint)
+
+      /* ================= tiny view helpers ================= */
+      const h = (tag, attrs = {}, ...kids) => {
+        const el = document.createElement(tag)
+        for (const [k, v] of Object.entries(attrs)) {
+          if (v == null || v === false) continue
+          if (k === 'class') el.className = v
+          else if (k === 'style') el.setAttribute('style', v)
+          else if (k.startsWith('on')) el[k.toLowerCase()] = v
+          else el.setAttribute(k, v === true ? '' : v)
+        }
+        for (const kid of kids.flat()) {
+          if (kid == null || kid === false) continue
+          el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)))
+        }
+        return el
+      }
+      const friendColor = (hue) => `oklch(var(--friend-l) var(--friend-c) ${hue})`
+      const byId = (id) => FRIENDS.find((f) => f.id === id)
+
+      /** A stand-in blobatar. Shape from the hue, colour from ticket 11's rule. */
+      function avatar(f, size) {
+        const ns = 'http://www.w3.org/2000/svg'
+        const svg = document.createElementNS(ns, 'svg')
+        svg.setAttribute('viewBox', '0 0 40 40')
+        svg.setAttribute('width', size)
+        svg.setAttribute('height', size)
+        svg.setAttribute('class', 'avatar')
+        const bg = document.createElementNS(ns, 'circle')
+        bg.setAttribute('cx', 20); bg.setAttribute('cy', 20); bg.setAttribute('r', 20)
+        bg.setAttribute('fill', `oklch(0.92 0.05 ${f.hue})`)
+        const head = document.createElementNS(ns, 'ellipse')
+        head.setAttribute('cx', 20); head.setAttribute('cy', 23)
+        head.setAttribute('rx', 12 + (f.hue % 3)); head.setAttribute('ry', 12)
+        head.setAttribute('fill', friendColor(f.hue))
+        const e1 = document.createElementNS(ns, 'circle')
+        e1.setAttribute('cx', 16); e1.setAttribute('cy', 21); e1.setAttribute('r', 1.9)
+        e1.setAttribute('fill', 'oklch(0.99 0 0)')
+        const e2 = e1.cloneNode(); e2.setAttribute('cx', 24)
+        svg.append(bg, head, e1, e2)
+        return svg
+      }
+
+      const icon = (d) => {
+        const ns = 'http://www.w3.org/2000/svg'
+        const svg = document.createElementNS(ns, 'svg')
+        svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('width', 15); svg.setAttribute('height', 15)
+        svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor')
+        svg.setAttribute('stroke-width', '1.8'); svg.setAttribute('stroke-linecap', 'round')
+        svg.setAttribute('stroke-linejoin', 'round')
+        const p = document.createElementNS(ns, 'path'); p.setAttribute('d', d); svg.append(p)
+        return svg
+      }
+      const I = {
+        panelLeft: 'M3 3h18v18H3zM9 3v18',
+        panelRight: 'M3 3h18v18H3zM15 3v18',
+        chevL: 'M15 18l-6-6 6-6',
+        chevR: 'M9 18l6-6-6-6',
+        eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zM12 15a3 3 0 100-6 3 3 0 000 6z',
+        eyeOff: 'M3 3l18 18M10.6 10.6a3 3 0 004.2 4.2M6.5 6.7C4 8.3 2 12 2 12s3.5 7 10 7c1.8 0 3.3-.5 4.6-1.2',
+        sun: 'M12 4V2M12 22v-2M4 12H2M22 12h-2M6 6L4.5 4.5M19.5 19.5L18 18M18 6l1.5-1.5M4.5 19.5L6 18M12 17a5 5 0 100-10 5 5 0 000 10z',
+        moon: 'M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z',
+      }
+
+      /* ================= pieces ================= */
+      function trigger(side) {
+        const expanded = S.isSheet ? S.sheet === side : S.open[side]
+        return h('button', {
+          class: 'icon',
+          'aria-expanded': String(expanded),
+          title: side === 'left' ? 'Friends (⌘B)' : 'Candidates (⇧⌘B)',
+          onclick: () => toggle(side),
+        }, icon(side === 'left' ? I.panelLeft : I.panelRight))
+      }
+
+      function cluster(withTriggers) {
+        const seg = h('div', { class: 'seg' },
+          ...['week', 'month'].map((v) =>
+            h('button', {
+              'aria-pressed': String(S.view === v),
+              onclick: () => { S.view = v; render() },
+            }, v === 'week' ? 'Week' : 'Month')
+          )
+        )
+        return h('div', { class: 'cluster' },
+          h('button', { class: 'icon', 'aria-label': 'Previous' }, icon(I.chevL)),
+          h('button', { class: 'txt today' }, 'Today'),
+          h('button', { class: 'icon', 'aria-label': 'Next' }, icon(I.chevR)),
+          h('div', { class: 'sep' }),
+          seg,
+          withTriggers ? h('div', { class: 'sep' }) : null,
+          withTriggers ? trigger('left') : null,
+          withTriggers ? trigger('right') : null,
+          h('div', { class: 'sep' }),
+          h('button', {
+            class: 'icon', title: 'Theme (prototype only)',
+            onclick: () => { S.dark = !S.dark; render() },
+          }, icon(S.dark ? I.sun : I.moon)),
+          h('button', {
+            class: 'icon', title: `${ME.name} — account`,
+            onclick: () => alert('Blobatar menu: Profile · Customise blobatar · Sign out'),
+          }, avatar(ME, 24))
+        )
+      }
+
+      function leftPaneBody(header) {
+        const dows = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+        const cal = h('div', { class: 'minical' },
+          h('div', { class: 'mhead' }, 'September 2026',
+            h('span', {},
+              h('button', { class: 'icon', style: 'width:20px;height:20px' }, icon(I.chevL)),
+              h('button', { class: 'icon', style: 'width:20px;height:20px' }, icon(I.chevR))
+            )
+          ),
+          h('div', { class: 'grid' },
+            ...dows.map((d) => h('div', { class: 'dow' }, d)),
+            ...Array.from({ length: 30 }, (_, i) =>
+              h('div', { class: 'day' + (i === 1 ? ' sel' : '') }, i + 1)
+            )
+          )
+        )
+        const roster = h('div', {},
+          h('div', { class: 'grouplabel' }, 'Friends',
+            h('span', {}, `${FRIENDS.length - S.hidden.size}/${FRIENDS.length}`)),
+          ...FRIENDS.map((f) => {
+            const isHidden = S.hidden.has(f.id)
+            const flip = () => {
+              isHidden ? S.hidden.delete(f.id) : S.hidden.add(f.id)
+              render()
+            }
+            return h('div', { class: 'friend' + (isHidden ? ' hidden' : ''), onclick: flip },
+              h('span', { class: 'swatch', style: `background:${friendColor(f.hue)}` }),
+              avatar(f, 22),
+              h('span', { class: 'nm' }, f.name),
+              f.silent ? h('span', { class: 'dot', title: 'No Availability in view' }) : null,
+              h('button', {
+                class: 'eye',
+                'aria-label': (isHidden ? 'Show ' : 'Hide ') + f.name,
+                onclick: (e) => { e.stopPropagation(); flip() },
+              }, icon(isHidden ? I.eyeOff : I.eye))
+            )
+          })
+        )
+        return [header, cal, h('div', { class: 'scroll' }, roster)].filter(Boolean)
+      }
+
+      function card(c, kind) {
+        return h('div', { class: 'card ' + kind + (c.everyone ? ' everyone' : '') },
+          h('div', { class: 'row2' },
+            h('span', { class: 'when' }, c.when),
+            c.everyone ? h('span', { class: 'tag' }, 'everyone') : null
+          ),
+          h('div', { class: 'row2' },
+            h('span', { class: 'rng' }, c.rng),
+            h('div', { class: 'stack' }, ...c.ids.slice(0, 5).map((id) => avatar(byId(id), 18)))
+          ),
+          c.title ? h('span', { class: 'when' }, c.title) : null
+        )
+      }
+
+      function rightPaneBody(header) {
+        return [
+          header,
+          h('div', { class: 'scroll' },
+            h('div', { class: 'cardgroup pinned' },
+              h('div', { class: 'grouplabel', style: 'padding:0 2px 2px' }, 'Pinned Hangouts'),
+              ...PINNED.map((c) => card(c, 'hangout'))
+            ),
+            h('div', { class: 'cardgroup' },
+              h('div', { class: 'grouplabel', style: 'padding:0 2px 2px' }, 'Candidates'),
+              ...CANDIDATES.map((c) => card(c, 'candidate'))
+            )
+          ),
+        ].filter(Boolean)
+      }
+
+      function pane(side, body) {
+        // Below the breakpoint a pane is NOT a column. It leaves the flow
+        // entirely and comes back as the one sheet, if it is the one.
+        if (S.isSheet) return null
+        return h('div', {
+          class: 'pane', 'data-side': side,
+          'data-state': S.open[side] ? 'expanded' : 'collapsed',
+        }, h('div', { class: 'inner' }, ...body))
+      }
+
+      function gridStub() {
+        if (S.view === 'month') {
+          return h('div', { class: 'monthgrid' },
+            ...Array.from({ length: 35 }, (_, i) => h('div', {}, i < 30 ? i + 1 : '')))
+        }
+        const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+        return h('div', { class: 'gridwrap' },
+          h('div', { class: 'gridhead' }, ...days.map((d) => h('div', {}, S.isSheet ? d[0] : d))),
+          h('div', { class: 'gridbody' },
+            h('div', { class: 'gutter' },
+              ...Array.from({ length: 24 }, (_, i) => h('div', {}, String(i).padStart(2, '0')))),
+            h('div', { class: 'cols' },
+              ...days.map(() => h('div', {}, ...Array.from({ length: 24 }, () => h('div', {})))))
+          )
+        )
+      }
+
+      function bar(kind) {
+        const cls = 'bar' + (kind === 'banner' ? ' banner' : '')
+        if (kind === 'inset') {
+          return h('header', { class: cls }, trigger('left'),
+            h('button', { class: 'title', style: 'border:0;background:transparent;color:inherit;font:inherit;text-align:left;padding:0', title: 'Go to today' }, LABEL), cluster(false), trigger('right'))
+        }
+        if (kind === 'banner') {
+          return h('header', { class: cls }, trigger('left'),
+            h('span', { style: 'font-weight:700;margin:0 4px' }, 'friens'),
+            h('button', { class: 'title', style: 'border:0;background:transparent;color:inherit;font:inherit;text-align:left;padding:0', title: 'Go to today' }, LABEL), cluster(false), trigger('right'))
+        }
+        return h('header', { class: cls }, h('button', { class: 'title', style: 'border:0;background:transparent;color:inherit;font:inherit;text-align:left;padding:0', title: 'Go to today' }, LABEL), cluster(true))
+      }
+
+      /* ================= render ================= */
+      function render() {
+        document.documentElement.classList.toggle('dark', S.dark)
+        document.body.classList.toggle('sheetmode', S.isSheet)
+        const root = document.getElementById('root')
+        root.replaceChildren()
+
+        const L = () => pane('left', leftPaneBody(null))
+        const R = () => pane('right', rightPaneBody(null))
+
+        if (S.variant === 'A') {
+          root.append(h('div', { class: 'row' }, L(),
+            h('div', { class: 'col' }, bar('inset'), gridStub()), R()))
+        } else if (S.variant === 'B') {
+          root.append(bar('banner'),
+            h('div', { class: 'row' }, L(), h('div', { class: 'col' }, gridStub()), R()))
+        } else {
+          const leftHeader = h('header', { class: 'bar', style: 'gap:8px' },
+            trigger('left'), h('span', { style: 'font-weight:700' }, 'friens'))
+          root.append(h('div', { class: 'row' },
+            pane('left', leftPaneBody(leftHeader)),
+            h('div', { class: 'col' }, bar('reference'),
+              h('div', { class: 'row' }, h('div', { class: 'col' }, gridStub()), R()))))
+        }
+
+        // sheets — at most one, ever. One slot in the state, so a second one is
+        // not merely discouraged, it is unrepresentable.
+        document.querySelectorAll('.backdrop, .sheet').forEach((el) => el.remove())
+        if (S.isSheet && S.sheet) {
+          const body = S.sheet === 'left' ? leftPaneBody(null) : rightPaneBody(null)
+          document.body.append(
+            h('div', { class: 'backdrop', onclick: () => { S.sheet = null; render() } }),
+            h('div', { class: 'sheet', 'data-side': S.sheet }, ...body)
+          )
+        }
+
+        document.getElementById('vname').textContent =
+          S.variant + ' · ' + VARIANTS.find(([k]) => k === S.variant)[1]
+        document.getElementById('readout').textContent =
+          `left  ${S.open.left ? 'open ' : 'closed'}   right ${S.open.right ? 'open ' : 'closed'}\n` +
+          `isSheet ${S.isSheet}   sheet ${S.sheet ?? 'null'}\n` +
+          `view ${S.view}   hidden ${S.hidden.size}   persisted: nothing`
+      }
+
+      syncBreakpoint()
+      render()
+    </script>
+  </body>
+</html>

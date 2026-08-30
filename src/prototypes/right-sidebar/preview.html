@@ -1,0 +1,855 @@
+<!doctype html>
+<!--
+  PROTOTYPE — ticket 16, the right sidebar. THROWAWAY.
+
+  Dependency-free twin of index.tsx. Same Candidate pipeline (ticket 09), same
+  colour model (ticket 11), same three card anatomies, same border techniques,
+  same dialogs. Double-click it — no build, no server, no node_modules.
+
+  The blobatars are stand-ins: a seeded blob shape in the Friend's *avatar*
+  tone, deliberately a different lightness from the UI colour, which is what
+  ticket 11's model actually produces.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Prototype 16 — right sidebar cards</title>
+    <style>
+      :root {
+        --background: oklch(1 0 0);
+        --foreground: oklch(0.145 0 0);
+        --card: oklch(1 0 0);
+        --muted: oklch(0.97 0 0);
+        --muted-fg: oklch(0.556 0 0);
+        --border: oklch(0.922 0 0);
+        --sidebar: oklch(0.985 0 0);
+        --destructive: oklch(0.58 0.22 27);
+        --popover: oklch(1 0 0);
+        --ui-l: 0.62;
+        --ui-c: 0.15;
+      }
+      body.dark {
+        --background: oklch(0.145 0 0);
+        --foreground: oklch(0.985 0 0);
+        --card: oklch(0.205 0 0);
+        --muted: oklch(0.269 0 0);
+        --muted-fg: oklch(0.708 0 0);
+        --border: oklch(1 0 0 / 12%);
+        --sidebar: oklch(0.205 0 0);
+        --destructive: oklch(0.704 0.191 22.216);
+        --popover: oklch(0.205 0 0);
+        --ui-l: 0.75;
+        --ui-c: 0.145;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 12px/1.45 Inter, system-ui, -apple-system, sans-serif;
+        background: var(--background);
+        color: var(--foreground);
+        padding-bottom: 96px;
+      }
+      button { font: inherit; cursor: pointer; }
+      .app { display: flex; min-height: 100vh; }
+      .grid-stub { flex: 1; padding: 24px; color: var(--muted-fg); background: color-mix(in oklch, var(--muted) 45%, transparent); }
+      .grid-stub h1 { font-size: 13px; margin: 0 0 6px; color: var(--foreground); }
+      .grid-stub p { max-width: 460px; font-size: 12px; line-height: 1.7; margin: 0 0 10px; }
+
+      aside {
+        flex-shrink: 0;
+        border-left: 1px solid var(--border);
+        background: var(--sidebar);
+        display: flex;
+        flex-direction: column;
+        max-height: 100vh;
+        position: sticky;
+        top: 0;
+      }
+      .sb-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font-size: 12px; font-weight: 500; }
+      .sb-head span { color: var(--muted-fg); font-variant-numeric: tabular-nums; font-weight: 400; }
+      .rule { height: 1px; background: var(--border); flex-shrink: 0; }
+      .scroll { overflow-y: auto; flex: 1; min-height: 0; }
+      .region { display: flex; flex-direction: column; }
+      .region.pad { padding: 8px; gap: 8px; }
+
+      /* ---- card shell + border techniques ---- */
+      .card { position: relative; background: var(--card); }
+      .card.plain { border: 1px solid var(--border); }
+      .card.glowbg { background: color-mix(in oklch, var(--muted) 40%, var(--card)); }
+      .card svg.ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+      .edge { position: absolute; pointer-events: none; }
+      .edge.edge-top { left: 0; right: 0; top: 0; }
+      .edge.edge-left { top: 0; bottom: 0; left: 0; }
+
+      .hangout { background: color-mix(in oklch, var(--muted) 60%, var(--card)); border: 1px solid color-mix(in oklch, var(--foreground) 22%, transparent); }
+
+      /* ---- variant A ---- */
+      .a-row { display: flex; align-items: stretch; }
+      .a-rail { width: 56px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 1px solid var(--border); padding: 8px 2px; }
+      .a-count { font-size: 20px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+      .a-lbl { font-size: 10px; color: var(--muted-fg); }
+      .a-every { font-weight: 600; color: var(--foreground); font-size: 9.5px; letter-spacing: -0.01em; }
+      .a-body { flex: 1; min-width: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+      .a-title { font-size: 13px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .a-sub { font-size: 11px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+
+      /* ---- variant B ---- */
+      .b-body { padding: 12px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+      .b-line1 { font-size: 13px; font-weight: 500; line-height: 1.2; }
+      .b-line2 { font-size: 12px; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .b-line3 { font-size: 11px; color: color-mix(in oklch, var(--muted-fg) 80%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      /* ---- variant C ---- */
+      .c-row { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; }
+      .c-main { flex: 1; min-width: 0; }
+      .c-t1 { font-size: 12px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .c-t2 { font-size: 11px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+      .c-count { width: 18px; text-align: right; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-fg); flex-shrink: 0; }
+      .c-count.glow { color: var(--foreground); font-weight: 600; }
+
+      .blobs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+      .stack { display: flex; align-items: center; }
+      .stack .blob + .blob { margin-left: -7px; }
+      .blob { border-radius: 999px; box-shadow: 0 0 0 1px var(--border); display: block; background: transparent; }
+      .plus { font-size: 11px; color: var(--muted-fg); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+      .head-line { display: flex; align-items: flex-start; gap: 4px; }
+      .head-line .grow { flex: 1; min-width: 0; }
+      .aff { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 0.1s; flex-shrink: 0; }
+      .card:hover .aff, .hangout:hover .aff, .c-row:hover .aff, .aff:focus-within { opacity: 1; }
+      body.touch .aff { opacity: 1; }
+      .iconbtn { width: 26px; height: 26px; border: 0; background: transparent; color: var(--muted-fg); display: inline-flex; align-items: center; justify-content: center; }
+      .iconbtn:hover { background: var(--muted); color: var(--foreground); }
+      .minibtn { height: 22px; padding: 0 7px; font-size: 11px; border: 1px solid var(--border); background: var(--card); color: var(--foreground); }
+      .minibtn:hover { background: var(--muted); }
+      .tag-now { font-size: 10px; font-weight: 500; color: var(--destructive); flex-shrink: 0; }
+      .tag-edit { font-size: 10px; color: var(--muted-fg); flex-shrink: 0; }
+      .h-title { font-size: 13px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      .empty { padding: 40px 24px; text-align: center; color: var(--muted-fg); font-size: 12px; line-height: 1.7; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .empty button { border: 1px solid var(--border); background: var(--card); color: var(--foreground); padding: 5px 10px; font-size: 12px; }
+
+      /* ---- overlays ---- */
+      .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.12); backdrop-filter: blur(2px); z-index: 80; }
+      .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 360px; max-width: calc(100vw - 32px); background: var(--popover); color: var(--foreground); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent), 0 12px 40px rgba(0,0,0,0.25); padding: 16px; z-index: 81; display: flex; flex-direction: column; gap: 14px; }
+      .pop { position: fixed; width: 320px; background: var(--popover); color: var(--foreground); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent), 0 10px 30px rgba(0,0,0,0.22); padding: 10px; z-index: 81; display: flex; flex-direction: column; gap: 10px; }
+      .modal h2, .pop h2 { font-size: 14px; font-weight: 500; margin: 0; }
+      .modal p.desc, .pop p.desc { font-size: 12px; line-height: 1.6; color: var(--muted-fg); margin: 0; }
+      .note { border: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: 8px; font-size: 12px; line-height: 1.6; }
+      .warn { border: 1px solid color-mix(in oklch, var(--destructive) 40%, transparent); background: color-mix(in oklch, var(--destructive) 12%, transparent); color: var(--destructive); padding: 8px; font-size: 12px; line-height: 1.6; }
+      .actions { display: flex; justify-content: flex-end; gap: 8px; }
+      .actions button { height: 30px; padding: 0 10px; font-size: 12px; border: 1px solid transparent; background: transparent; color: var(--foreground); }
+      .actions button.primary { background: var(--foreground); color: var(--background); }
+      .actions button.danger { background: color-mix(in oklch, var(--destructive) 14%, transparent); color: var(--destructive); }
+      .actions button.ghost:hover { background: var(--muted); }
+
+      .menu { position: fixed; min-width: 208px; background: var(--popover); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent), 0 10px 30px rgba(0,0,0,0.22); z-index: 82; padding: 2px 0; }
+      .menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--foreground); padding: 8px 10px; font-size: 12px; }
+      .menu button:hover { background: var(--muted); }
+      .menu button.danger { color: var(--destructive); }
+      .menu .sep { height: 1px; background: var(--border); margin: 2px 0; }
+
+      .daygrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+      .daygrid div { text-align: center; font-size: 11px; padding: 4px 0; }
+      .daygrid button { border: 0; background: transparent; color: var(--foreground); padding: 5px 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+      .daygrid button:hover { background: var(--muted); }
+      .daygrid button.sel { background: var(--foreground); color: var(--background); }
+      .daygrid button.out { color: color-mix(in oklch, var(--muted-fg) 55%, transparent); }
+      .steppers { display: flex; align-items: flex-end; gap: 10px; }
+      .stepper { display: flex; flex-direction: column; gap: 3px; }
+      .stepper span { font-size: 11px; color: var(--muted-fg); }
+      .stepper .box { display: flex; align-items: center; border: 1px solid var(--border); }
+      .stepper .box button { width: 22px; height: 24px; border: 0; background: transparent; color: var(--foreground); }
+      .stepper .box b { width: 46px; text-align: center; font-weight: 400; font-variant-numeric: tabular-nums; }
+
+      /* ---- control bar ---- */
+      .bar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; max-width: 96vw; background: #111; color: #fff; border-radius: 14px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 90; font-size: 11px; }
+      .bar button { background: rgba(255,255,255,0.13); color: #fff; border: 0; border-radius: 999px; padding: 3px 8px; font-size: 11px; }
+      .bar button.on { background: #fff; color: #111; }
+      .bar .nm { font-weight: 600; font-size: 12px; padding: 0 6px; white-space: nowrap; }
+      .bar .sep { width: 1px; height: 15px; background: rgba(255,255,255,0.25); margin: 0 3px; }
+      .bar label { display: inline-flex; align-items: center; gap: 4px; opacity: 0.85; }
+      .bar input[type='range'] { width: 76px; }
+
+      .diag { position: fixed; left: 10px; bottom: 10px; z-index: 90; background: #111; color: #fff; border-radius: 10px; padding: 8px 10px; font-size: 10px; line-height: 1.6; max-width: 260px; }
+      .diag b { font-size: 11px; }
+      .diag .row { display: flex; align-items: center; gap: 6px; }
+      .diag i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+      .diag .bad { color: #ffb4a2; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="grid-stub">
+        <h1>Prototype 16 — right sidebar: Candidate and Hangout cards</h1>
+        <p>
+          The calendar grid belongs to tickets 05/15 and is not drawn here. Everything on the
+          right is this ticket. The list is not hardcoded — it is ticket 09's pipeline run over
+          synthetic Availability, so the order, the glow rule, the Hangout blanking, the
+          clip-to-now and the empty states are the real ones.
+        </p>
+        <p id="probe"></p>
+      </div>
+      <aside id="sidebar" style="width: 320px">
+        <div class="sb-head"><span style="color: var(--foreground); font-weight: 500">When we can meet</span><span id="count"></span></div>
+        <div class="rule"></div>
+        <div class="scroll" id="list"></div>
+      </aside>
+    </div>
+
+    <div class="diag" id="diag"></div>
+    <div class="bar" id="bar"></div>
+
+    <script>
+      /* ============================================================
+       * Colour model — ticket 11. oklch(L_theme, C_theme, hue).
+       * ============================================================ */
+      const UI = { light: { l: 0.62, c: 0.15 }, dark: { l: 0.75, c: 0.145 } }
+      /* Every control is also a URL param, so any configuration is a link. */
+      const q = new URLSearchParams(location.search)
+      const state = {
+        variant: (q.get('variant') || 'A').toUpperCase(),
+        theme: q.get('theme') || 'light',
+        technique: q.get('technique') || 'default',
+        colourEveryCard: q.get('colourEveryCard') === '1',
+        touch: q.get('touch') === '1',
+        retime: q.get('retime') || 'dialog',
+        dataset: q.get('dataset') || 'normal',
+        width: +(q.get('width') || 320),
+      }
+      function syncUrl() {
+        const u = new URL(location.href)
+        u.searchParams.set('variant', state.variant)
+        u.searchParams.set('theme', state.theme)
+        u.searchParams.set('technique', state.technique)
+        u.searchParams.set('colourEveryCard', state.colourEveryCard ? '1' : '0')
+        u.searchParams.set('touch', state.touch ? '1' : '0')
+        u.searchParams.set('retime', state.retime)
+        u.searchParams.set('dataset', state.dataset)
+        u.searchParams.set('width', state.width)
+        history.replaceState(null, '', u)
+      }
+      const tone = () => UI[state.theme]
+      const uiColor = (hue, alpha) =>
+        `oklch(${tone().l} ${tone().c} ${hue}${alpha != null ? ` / ${alpha}` : ''})`
+
+      /* oklab -> linear sRGB, only to detect gamut clipping. */
+      const M1 = [[1, 0.3963377774, 0.2158037573], [1, -0.1055613458, -0.0638541728], [1, -0.0894841775, -1.291485548]]
+      const M2 = [[4.0767416621, -3.3077115913, 0.2309699292], [-1.2684380046, 2.6097574011, -0.3413193965], [-0.0041960863, -0.7034186147, 1.707614701]]
+      function oklchToLinear(l, c, h) {
+        const r = (h * Math.PI) / 180
+        const lab = [l, c * Math.cos(r), c * Math.sin(r)]
+        const lms = M1.map((m) => m[0] * lab[0] + m[1] * lab[1] + m[2] * lab[2]).map((v) => v ** 3)
+        return M2.map((m) => m[0] * lms[0] + m[1] * lms[1] + m[2] * lms[2])
+      }
+      const gamutError = (l, c, h) => Math.max(0, ...oklchToLinear(l, c, h).map((v) => Math.max(-v, v - 1)))
+      function maxChroma(l, h) {
+        let lo = 0, hi = 0.45
+        for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; gamutError(l, m, h) > 0 ? (hi = m) : (lo = m) }
+        return lo
+      }
+
+      /* ============================================================
+       * Data + ticket 09's pipeline.
+       * ============================================================ */
+      const FRIENDS = [
+        { id: 'marco', name: 'Marco', hue: 25, seed: 3 },
+        { id: 'sara', name: 'Sara', hue: 145, seed: 7 },
+        { id: 'luca', name: 'Luca', hue: 265, seed: 11 },
+        { id: 'nadia', name: 'Nadia', hue: 330, seed: 2 },
+        { id: 'teo', name: 'Teo', hue: 85, seed: 5 },
+        { id: 'bea', name: 'Bea', hue: 200, seed: 13 },
+      ]
+      const GROUP_SIZE = FRIENDS.length
+      const VIEWER = 'marco'
+      const F = (id) => FRIENDS.find((f) => f.id === id)
+      const SLOT = 30 * 60 * 1000
+      const NOW = new Date(2026, 8, 3, 18, 10).getTime()
+      const DAY0 = new Date(2026, 8, 3).getTime()
+      const at = (d, h) => DAY0 + d * 86400000 + h * 3600000
+
+      const BASE = [
+        ['marco', 0, 16, 23], ['sara', 0, 17.5, 23], ['bea', 0, 20, 22],
+        ['marco', 1, 21, 26], ['nadia', 1, 22, 25], ['teo', 1, 22.5, 24.5],
+        ['marco', 2, 19, 24], ['sara', 2, 19, 24], ['luca', 2, 20, 23],
+        ['nadia', 2, 20, 23], ['teo', 2, 20, 23], ['bea', 2, 20, 23],
+        ['marco', 3, 10, 14], ['sara', 3, 10, 13], ['luca', 3, 11, 14],
+        ['nadia', 3, 10, 12], ['teo', 3, 12, 14],
+        ['sara', 4, 18.5, 21], ['luca', 4, 18.5, 21], ['nadia', 4, 18, 20.5],
+        ['teo', 4, 18.5, 22], ['bea', 4, 18.5, 21],
+        ['marco', 5, 19, 21.5], ['sara', 5, 19, 21.5], ['luca', 5, 19, 21.5],
+        ['nadia', 5, 19, 21.5], ['bea', 5, 19, 21.5], ['teo', 5, 20, 20.5],
+        ['marco', 7, 20, 23], ['luca', 7, 21, 23],
+        ['sara', 9, 12, 15], ['bea', 9, 13, 16],
+        ['teo', 11, 19, 22], ['nadia', 11, 19.5, 21],
+        ['marco', 12, 9, 12], ['sara', 12, 9.5, 11], ['luca', 12, 10, 12],
+      ]
+      const LONG = []
+      for (let day = 14; day < 28; day++) {
+        const a = FRIENDS[day % 6], b = FRIENDS[(day * 3 + 1) % 6], c = FRIENDS[(day * 5 + 2) % 6]
+        const s = 9 + (day % 5) * 2.5
+        LONG.push([a.id, day, s, s + 3], [b.id, day, s + 0.5, s + 4])
+        if (day % 3 === 0) LONG.push([c.id, day, s + 1, s + 2.5])
+      }
+      const HANGOUTS = [
+        { id: 'h1', title: 'Coffee', start: at(0, 17.5), end: at(0, 19), participantIds: ['marco', 'sara'], edited: false },
+        { id: 'h2', title: 'Pizza at Marco’s', start: at(0, 21), end: at(0, 23), participantIds: ['marco', 'sara', 'bea', 'nadia'], edited: false },
+        { id: 'h3', title: 'Climbing', start: at(4, 18.5), end: at(4, 20.5), participantIds: ['sara', 'luca', 'nadia', 'teo', 'bea'], edited: true },
+      ]
+      const DATASETS = {
+        normal: { ranges: BASE, hangouts: HANGOUTS, hidden: [] },
+        long: { ranges: BASE.concat(LONG), hangouts: HANGOUTS, hidden: [] },
+        noOverlap: { ranges: [['marco', 1, 19, 22], ['sara', 2, 10, 13], ['luca', 4, 20, 22]], hangouts: [], hidden: [] },
+        noAvailability: { ranges: [['marco', -3, 19, 22]], hangouts: [], hidden: [] },
+        oneVisible: { ranges: BASE, hangouts: HANGOUTS, hidden: ['sara', 'luca', 'nadia', 'teo', 'bea'] },
+      }
+
+      const expand = (ranges) => {
+        const out = []
+        for (const [friendId, day, from, to] of ranges)
+          for (let t = at(day, from); t < at(day, to); t += SLOT) out.push({ friendId, slot: t })
+        return out
+      }
+
+      function computeCandidates(ds, hidden, now) {
+        const floor = Math.floor(now / SLOT) * SLOT
+        const visible = new Set(FRIENDS.filter((f) => !hidden.includes(f.id)).map((f) => f.id))
+        const live = ds.hangouts.filter((h) => h.end > now)
+        const bySlot = new Map()
+        for (const { friendId, slot } of expand(ds.ranges)) {
+          if (slot < floor || !visible.has(friendId)) continue
+          if (live.some((h) => slot >= h.start && slot < h.end)) continue
+          if (!bySlot.has(slot)) bySlot.set(slot, [])
+          bySlot.get(slot).push(friendId)
+        }
+        const slots = [...bySlot.keys()].sort((a, b) => a - b)
+        const runs = []
+        for (const slot of slots) {
+          const friends = bySlot.get(slot).slice().sort()
+          const prev = runs[runs.length - 1]
+          if (prev && prev.end === slot && prev.friends.join() === friends.join()) prev.end = slot + SLOT
+          else runs.push({ start: slot, end: slot + SLOT, friends })
+        }
+        const seen = new Map()
+        runs.forEach((run, i) => {
+          if (run.friends.length < 2) return
+          const has = (r) => run.friends.every((f) => r.friends.includes(f))
+          let start = run.start, end = run.end
+          for (let j = i - 1; j >= 0; j--) { const r = runs[j]; if (r.end !== start || !has(r)) break; start = r.start }
+          for (let j = i + 1; j < runs.length; j++) { const r = runs[j]; if (r.start !== end || !has(r)) break; end = r.end }
+          const key = start + '|' + end + '|' + run.friends.join(',')
+          if (!seen.has(key)) seen.set(key, { key, start, end, friendIds: run.friends })
+        })
+        const all = [...seen.values()]
+        const kept = all.filter((c) => !all.some((d) => d.key !== c.key && c.friendIds.every((f) => d.friendIds.includes(f)) && c.start >= d.start && c.end <= d.end))
+        return kept.sort((a, b) =>
+          b.friendIds.length - a.friendIds.length || a.start - b.start ||
+          (b.end - b.start) - (a.end - a.start) || a.friendIds.join().localeCompare(b.friendIds.join()))
+      }
+
+      const glows = (n) => 2 * n > GROUP_SIZE
+      const isEveryone = (n) => n === GROUP_SIZE
+
+      function emptyState(ds, hidden, now, cands) {
+        if (cands.length) return null
+        if (GROUP_SIZE - hidden.length < 2) return 'tooFewVisible'
+        const floor = Math.floor(now / SLOT) * SLOT
+        const any = expand(ds.ranges).some((s) => s.slot >= floor && !hidden.includes(s.friendId))
+        return any ? 'noOverlap' : 'noAvailability'
+      }
+      const EMPTY_COPY = {
+        tooFewVisible: { title: 'Show more friends to see when you can meet', action: 'Show everyone' },
+        noAvailability: { title: 'Nobody’s free yet — draw your availability' },
+        noOverlap: { title: 'No overlaps yet — nobody’s free at the same time' },
+      }
+
+      /* ---- formatting ---- */
+      const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+      const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString()
+      function dayLabel(t, now) {
+        const d = new Date(t)
+        if (sameDay(t, now)) return 'Today'
+        if (sameDay(t, now + 86400000)) return 'Tomorrow'
+        return t - now < 6 * 86400000 ? DAYS[d.getDay()] : `${DAYS[d.getDay()]} ${d.getDate()} ${MONS[d.getMonth()]}`
+      }
+      const hhmm = (t) => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') }
+      function timeRange(s, e, now) {
+        const crosses = !sameDay(s, e - 1)
+        return crosses ? `${hhmm(s)} – ${hhmm(e)} ${dayLabel(e, now).toLowerCase()}` : `${hhmm(s)} – ${hhmm(e)}`
+      }
+      function duration(s, e) {
+        const m = Math.round((e - s) / 60000), h = Math.floor(m / 60), r = m % 60
+        return h === 0 ? r + 'm' : r === 0 ? h + 'h' : `${h}h ${r}m`
+      }
+      function nameList(ids) {
+        const n = ids.map((i) => F(i).name)
+        return n.length <= 1 ? n[0] || '' : n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1]
+      }
+
+      /* ============================================================
+       * Rendering helpers
+       * ============================================================ */
+      const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e }
+
+      /* Blobatar stand-in. Avatar tone is blobatar's "mid" ramp (l .73 c .135),
+         deliberately NOT the UI colour — ticket 11 accepts that divergence. */
+      function blob(id, size) {
+        const f = F(id)
+        const s = f.seed
+        const r1 = 40 + (s % 5) * 6, r2 = 46 + ((s * 3) % 5) * 5, r3 = 38 + ((s * 7) % 6) * 6
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        svg.setAttribute('viewBox', '0 0 100 100')
+        svg.setAttribute('width', size); svg.setAttribute('height', size)
+        svg.setAttribute('class', 'blob')
+        svg.setAttribute('aria-label', f.name)
+        const fill = `oklch(0.73 0.135 ${f.hue})`
+        svg.innerHTML =
+          `<path d="M50 4 C ${50 + r1} 4 96 ${50 - r3 / 2} 96 50 C 96 ${50 + r2} ${50 + r3} 96 50 96 C ${50 - r1} 96 4 ${50 + r2 / 2} 4 50 C 4 ${50 - r2} ${50 - r3} 4 50 4 Z" fill="${fill}"/>` +
+          `<circle cx="${38 + (s % 3)}" cy="46" r="6" fill="rgba(0,0,0,0.75)"/>` +
+          `<circle cx="${64 - (s % 3)}" cy="46" r="6" fill="rgba(0,0,0,0.75)"/>` +
+          `<path d="M38 66 Q 50 ${72 + (s % 4) * 2} 63 66" stroke="rgba(0,0,0,0.65)" stroke-width="4" fill="none" stroke-linecap="round"/>`
+        return svg
+      }
+      function blobRow(ids, size) {
+        const w = el('div', 'blobs')
+        ids.forEach((id) => w.appendChild(blob(id, size)))
+        return w
+      }
+      function blobStack(ids, size, cap) {
+        const w = el('div', 'stack')
+        ids.slice(0, cap).forEach((id) => w.appendChild(blob(id, size)))
+        if (ids.length > cap) w.appendChild(el('span', 'plus', '+' + (ids.length - cap)))
+        return w
+      }
+
+      const technique = () => (state.technique === 'default' ? { A: 'ring', B: 'bar', C: 'stripe' }[state.variant] : state.technique)
+
+      /** The colour border, in whichever technique. Even segments by construction. */
+      function paintBorder(card, hues, glow) {
+        const on = glow || state.colourEveryCard
+        if (!on) { card.classList.add('plain'); return }
+        const colors = hues.map((h) => uiColor(h, glow ? undefined : 0.5))
+        const t = technique()
+        if (t === 'bar' || t === 'stripe') {
+          card.classList.add('plain')
+          const e = el('div', 'edge ' + (t === 'bar' ? 'edge-top' : 'edge-left'))
+          const dir = t === 'bar' ? 'to right' : 'to bottom'
+          const stops = colors.map((c, i) => `${c} ${(i / colors.length) * 100}% ${((i + 1) / colors.length) * 100}%`).join(', ')
+          e.style.backgroundImage = `linear-gradient(${dir}, ${stops})`
+          if (t === 'bar') e.style.height = (glow ? 4 : 3) + 'px'
+          else e.style.width = (glow ? 5 : 3) + 'px'
+          if (glow) e.style.boxShadow = `0 0 10px -1px ${colors[0]}`
+          card.appendChild(e)
+          return
+        }
+        /* ring: one SVG rect per colour, pathLength=100 so dasharray is a
+           percentage of the perimeter — even segments at any card size. */
+        const w = glow ? 2 : 1.25
+        const seg = 100 / colors.length
+        const rects = colors.map((c, i) =>
+          `<rect x="${w / 2}" y="${w / 2}" width="calc(100% - ${w}px)" height="calc(100% - ${w}px)" pathLength="100" fill="none" stroke="${c}" stroke-width="${w}" stroke-dasharray="${seg + 0.35} ${100 - seg - 0.35}" stroke-dashoffset="${-i * seg}"/>`).join('')
+        const glowRects = glow
+          ? `<g style="filter:blur(5px);opacity:.55">` + colors.map((c, i) =>
+              `<rect x="${w}" y="${w}" width="calc(100% - ${w * 2}px)" height="calc(100% - ${w * 2}px)" pathLength="100" fill="none" stroke="${c}" stroke-width="${w * 2}" stroke-dasharray="${seg + 0.35} ${100 - seg - 0.35}" stroke-dashoffset="${-i * seg}"/>`).join('') + `</g>`
+          : ''
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        svg.setAttribute('class', 'ring')
+        svg.setAttribute('preserveAspectRatio', 'none')
+        svg.innerHTML = glowRects + rects
+        card.appendChild(svg)
+      }
+
+      const TICK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+      const DOTS = '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>'
+      const PIN = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg>'
+
+      function affordances(children) {
+        const w = el('div', 'aff')
+        children.forEach((c) => w.appendChild(c))
+        return w
+      }
+      function tickButton() {
+        if (state.touch) { const b = el('button', 'minibtn', 'Confirm'); return b }
+        const b = el('button', 'iconbtn', TICK); b.title = 'Confirm as a hangout'; b.setAttribute('aria-label', 'Confirm'); return b
+      }
+      function dotsButton(items) {
+        const b = el('button', 'iconbtn', DOTS)
+        b.setAttribute('aria-label', 'More')
+        b.onclick = (e) => { e.stopPropagation(); openMenu(b, items) }
+        return b
+      }
+
+      /* ============================================================
+       * Card anatomies
+       * ============================================================ */
+      function candidateMenuItems(c) {
+        return [
+          { label: 'Confirm as a hangout' },
+          { label: 'Confirm at another time…', onClick: () => openRetime({ title: 'Confirm at another time', friendIds: c.friendIds, start: c.start, end: c.end }) },
+        ]
+      }
+      function hangoutMenuItems(h) {
+        const mine = h.participantIds.includes(VIEWER)
+        return [
+          { label: 'Change the time…', onClick: () => openRetime({ title: 'Move ' + h.title, friendIds: h.participantIds, start: h.start, end: h.end }) },
+          mine ? { label: 'Leave' } : { label: 'Join' },
+          { sep: true },
+          { label: 'Cancel this hangout…', danger: true, onClick: () => openCancel(h) },
+        ]
+      }
+
+      function cardA(c) {
+        const n = c.friendIds.length, glow = glows(n)
+        const card = el('div', 'card' + (glow ? ' glowbg' : ''))
+        paintBorder(card, c.friendIds.map((i) => F(i).hue), glow)
+        const row = el('div', 'a-row')
+        const rail = el('div', 'a-rail')
+        rail.appendChild(el('div', 'a-count', n))
+        rail.appendChild(el('div', 'a-lbl' + (isEveryone(n) ? ' a-every' : ''), isEveryone(n) ? 'everyone' : 'free'))
+        const body = el('div', 'a-body')
+        const head = el('div', 'head-line')
+        const grow = el('div', 'grow')
+        grow.appendChild(el('div', 'a-title', `${dayLabel(c.start, NOW)} · ${timeRange(c.start, c.end, NOW)}`))
+        grow.appendChild(el('div', 'a-sub', duration(c.start, c.end)))
+        head.appendChild(grow)
+        head.appendChild(affordances([tickButton(), dotsButton(candidateMenuItems(c))]))
+        body.appendChild(head)
+        body.appendChild(blobRow(c.friendIds, 22))
+        row.appendChild(rail); row.appendChild(body); card.appendChild(row)
+        return card
+      }
+      function hangoutA(h) {
+        const card = el('div', 'card hangout')
+        const row = el('div', 'a-row')
+        const rail = el('div', 'a-rail', PIN)
+        rail.style.color = 'var(--muted-fg)'
+        const body = el('div', 'a-body')
+        const head = el('div', 'head-line'), grow = el('div', 'grow')
+        const t = el('div', 'head-line')
+        t.appendChild(el('span', 'h-title', h.title))
+        if (h.edited) t.appendChild(el('span', 'tag-edit', 'edited'))
+        if (h.start <= NOW && h.end > NOW) t.appendChild(el('span', 'tag-now', 'now'))
+        grow.appendChild(t)
+        grow.appendChild(el('div', 'a-sub', `${dayLabel(h.start, NOW)} · ${timeRange(h.start, h.end, NOW)}`))
+        head.appendChild(grow)
+        const acts = [dotsButton(hangoutMenuItems(h))]
+        if (!h.participantIds.includes(VIEWER)) acts.unshift(el('button', 'minibtn', 'Join'))
+        head.appendChild(affordances(acts))
+        body.appendChild(head); body.appendChild(blobRow(h.participantIds, 22))
+        row.appendChild(rail); row.appendChild(body); card.appendChild(row)
+        return card
+      }
+
+      function cardB(c) {
+        const n = c.friendIds.length, glow = glows(n)
+        const card = el('div', 'card' + (glow ? ' glowbg' : ''))
+        paintBorder(card, c.friendIds.map((i) => F(i).hue), glow)
+        const body = el('div', 'b-body')
+        const head = el('div', 'head-line')
+        const grow = el('div', 'grow')
+        grow.appendChild(blobRow(c.friendIds, 28))
+        head.appendChild(grow)
+        head.appendChild(affordances([tickButton(), dotsButton(candidateMenuItems(c))]))
+        body.appendChild(head)
+        const txt = el('div')
+        txt.appendChild(el('div', 'b-line1', isEveryone(n) ? 'Everyone’s free' : `${n} of ${GROUP_SIZE} free`))
+        txt.appendChild(el('div', 'b-line2', `${dayLabel(c.start, NOW)} · ${timeRange(c.start, c.end, NOW)} · ${duration(c.start, c.end)}`))
+        body.appendChild(txt)
+        card.appendChild(body)
+        return card
+      }
+      function hangoutB(h) {
+        const card = el('div', 'card hangout')
+        const body = el('div', 'b-body')
+        const head = el('div', 'head-line'), grow = el('div', 'grow')
+        grow.appendChild(blobRow(h.participantIds, 28))
+        head.appendChild(grow)
+        const acts = [dotsButton(hangoutMenuItems(h))]
+        if (!h.participantIds.includes(VIEWER)) acts.unshift(el('button', 'minibtn', 'Join'))
+        head.appendChild(affordances(acts))
+        body.appendChild(head)
+        const txt = el('div')
+        const t = el('div', 'head-line')
+        t.appendChild(el('span', 'h-title', h.title))
+        if (h.edited) t.appendChild(el('span', 'tag-edit', 'edited'))
+        if (h.start <= NOW && h.end > NOW) t.appendChild(el('span', 'tag-now', 'now'))
+        txt.appendChild(t)
+        txt.appendChild(el('div', 'b-line2', `${dayLabel(h.start, NOW)} · ${timeRange(h.start, h.end, NOW)}`))
+        txt.appendChild(el('div', 'b-line3', nameList(h.participantIds)))
+        body.appendChild(txt); card.appendChild(body)
+        return card
+      }
+
+      function cardC(c) {
+        const n = c.friendIds.length, glow = glows(n)
+        const card = el('div', 'card' + (glow ? ' glowbg' : ''))
+        paintBorder(card, c.friendIds.map((i) => F(i).hue), glow)
+        card.style.borderLeft = 'none'; card.style.borderRight = 'none'; card.style.borderTop = 'none'
+        const row = el('div', 'c-row')
+        const main = el('div', 'c-main')
+        main.appendChild(el('div', 'c-t1', `${dayLabel(c.start, NOW)} ${timeRange(c.start, c.end, NOW)}`))
+        main.appendChild(el('div', 'c-t2', duration(c.start, c.end) + (isEveryone(n) ? ' · everyone' : '')))
+        row.appendChild(main)
+        row.appendChild(blobStack(c.friendIds, 22, 4))
+        row.appendChild(el('div', 'c-count' + (glow ? ' glow' : ''), n))
+        row.appendChild(affordances([tickButton(), dotsButton(candidateMenuItems(c))]))
+        card.appendChild(row)
+        return card
+      }
+      function hangoutC(h) {
+        const card = el('div', 'card hangout')
+        card.style.borderLeft = 'none'; card.style.borderRight = 'none'; card.style.borderTop = 'none'
+        const row = el('div', 'c-row')
+        row.style.paddingLeft = '6px'
+        const pin = el('span', null, PIN); pin.style.color = 'var(--muted-fg)'
+        row.appendChild(pin)
+        const main = el('div', 'c-main')
+        const t = el('div', 'head-line')
+        t.appendChild(el('span', 'c-t1', h.title))
+        if (h.edited) t.appendChild(el('span', 'tag-edit', 'edited'))
+        if (h.start <= NOW && h.end > NOW) t.appendChild(el('span', 'tag-now', 'now'))
+        main.appendChild(t)
+        main.appendChild(el('div', 'c-t2', `${dayLabel(h.start, NOW)} ${timeRange(h.start, h.end, NOW)}`))
+        row.appendChild(main)
+        row.appendChild(blobStack(h.participantIds, 22, 4))
+        const acts = [dotsButton(hangoutMenuItems(h))]
+        if (!h.participantIds.includes(VIEWER)) acts.unshift(el('button', 'minibtn', 'Join'))
+        row.appendChild(affordances(acts))
+        card.appendChild(row)
+        return card
+      }
+
+      const RENDER = {
+        A: { candidate: cardA, hangout: hangoutA, pad: true },
+        B: { candidate: cardB, hangout: hangoutB, pad: true },
+        C: { candidate: cardC, hangout: hangoutC, pad: false },
+      }
+
+      /* ============================================================
+       * Overlays
+       * ============================================================ */
+      let overlay = null
+      function closeOverlay() { if (overlay) { overlay.forEach((n) => n.remove()); overlay = null } }
+      document.addEventListener('click', (e) => { if (overlay && !overlay.some((n) => n.contains(e.target))) closeOverlay() })
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay() })
+
+      function openMenu(anchor, items) {
+        closeOverlay()
+        const m = el('div', 'menu')
+        items.forEach((it) => {
+          if (it.sep) { m.appendChild(el('div', 'sep')); return }
+          const b = el('button', it.danger ? 'danger' : null, it.label)
+          b.onclick = (e) => { e.stopPropagation(); closeOverlay(); it.onClick && it.onClick() }
+          m.appendChild(b)
+        })
+        document.body.appendChild(m)
+        const r = anchor.getBoundingClientRect()
+        m.style.top = Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8) + 'px'
+        m.style.left = Math.max(8, r.right - m.offsetWidth) + 'px'
+        overlay = [m]
+      }
+
+      /* The force-write editor. Same body in both surfaces — that is the test. */
+      function retimeBody(model, rerender) {
+        const wrap = el('div')
+        wrap.style.display = 'flex'; wrap.style.flexDirection = 'column'; wrap.style.gap = '10px'
+
+        const d = new Date(model.start)
+        const first = new Date(d.getFullYear(), d.getMonth(), 1)
+        const offset = (first.getDay() + 6) % 7
+        const grid = el('div', 'daygrid')
+        grid.appendChild(el('div', null, `<b style="font-weight:500">${MONS[d.getMonth()]} ${d.getFullYear()}</b>`)).style.gridColumn = '1 / -1'
+        ;['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach((x) => { const c = el('div', null, x); c.style.color = 'var(--muted-fg)'; grid.appendChild(c) })
+        for (let i = 0; i < offset; i++) grid.appendChild(el('div'))
+        const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+        for (let day = 1; day <= dim; day++) {
+          const b = el('button', day === d.getDate() ? 'sel' : null, day)
+          b.onclick = (e) => {
+            e.stopPropagation()
+            const next = new Date(d.getFullYear(), d.getMonth(), day, d.getHours(), d.getMinutes())
+            const len = model.end - model.start
+            model.start = next.getTime(); model.end = model.start + len
+            rerender()
+          }
+          grid.appendChild(b)
+        }
+        wrap.appendChild(grid)
+
+        const steppers = el('div', 'steppers')
+        steppers.appendChild(stepper('Start', hhmm(model.start), (k) => { model.start += k * SLOT; if (model.end <= model.start) model.end = model.start + SLOT; rerender() }))
+        steppers.appendChild(stepper('End', hhmm(model.end), (k) => { model.end = Math.max(model.start + SLOT, model.end + k * SLOT); rerender() }))
+        const dur = el('span', null, duration(model.start, model.end))
+        dur.style.cssText = 'margin-left:auto;color:var(--muted-fg);font-variant-numeric:tabular-nums'
+        steppers.appendChild(dur)
+        wrap.appendChild(steppers)
+
+        /* ticket 08 #11 — name the Friends whose calendars this writes to. */
+        wrap.appendChild(el('div', 'note',
+          `<b style="font-weight:500">${nameList(model.friendIds)}</b> will be marked free ` +
+          `${dayLabel(model.start, NOW)} ${new Date(model.start).getDate()} ${MONS[new Date(model.start).getMonth()]}, ` +
+          `${hhmm(model.start)}–${hhmm(model.end)}.`))
+
+        const clash = HANGOUTS.find((h) => model.start < h.end && model.end > h.start && h.title !== model.title.replace('Move ', ''))
+        if (clash) wrap.appendChild(el('div', 'warn', `${clash.title} is already at this time. Two hangouts cannot overlap — pick another slot.`))
+        return wrap
+      }
+      function stepper(label, value, onStep) {
+        const s = el('div', 'stepper')
+        s.appendChild(el('span', null, label))
+        const box = el('div', 'box')
+        const minus = el('button', null, '−'); minus.onclick = (e) => { e.stopPropagation(); onStep(-1) }
+        const plus = el('button', null, '+'); plus.onclick = (e) => { e.stopPropagation(); onStep(1) }
+        box.appendChild(minus); box.appendChild(el('b', null, value)); box.appendChild(plus)
+        s.appendChild(box)
+        return s
+      }
+
+      function openRetime(model) {
+        closeOverlay()
+        const render = () => {
+          closeOverlay()
+          const nodes = []
+          const body = retimeBody(model, render)
+          if (state.retime === 'popover') {
+            const p = el('div', 'pop')
+            p.appendChild(el('h2', null, model.title))
+            p.appendChild(body)
+            p.appendChild(actions([['Cancel', 'ghost'], ['Write it in', 'primary']]))
+            document.body.appendChild(p)
+            const sb = document.getElementById('sidebar').getBoundingClientRect()
+            p.style.left = Math.max(8, sb.left - p.offsetWidth - 8) + 'px'
+            p.style.top = Math.max(8, Math.min(160, innerHeight - p.offsetHeight - 8)) + 'px'
+            nodes.push(p)
+          } else {
+            const back = el('div', 'backdrop')
+            const m = el('div', 'modal')
+            m.appendChild(el('h2', null, model.title))
+            m.appendChild(el('p', 'desc', 'This writes availability for everyone below, whether or not they said they were free.'))
+            m.appendChild(body)
+            m.appendChild(actions([['Cancel', 'ghost'], ['Write it in', 'primary']]))
+            document.body.appendChild(back); document.body.appendChild(m)
+            nodes.push(back, m)
+          }
+          overlay = nodes
+        }
+        render()
+      }
+      function actions(list) {
+        const a = el('div', 'actions')
+        list.forEach(([label, cls]) => { const b = el('button', cls, label); b.onclick = (e) => { e.stopPropagation(); closeOverlay() }; a.appendChild(b) })
+        return a
+      }
+
+      function openCancel(h) {
+        closeOverlay()
+        const back = el('div', 'backdrop')
+        const m = el('div', 'modal')
+        m.appendChild(el('h2', null, `Cancel ${h.title}?`))
+        m.appendChild(el('p', 'desc', 'This deletes it for everyone, right away. There is no undo, and nobody is notified — they will find out by noticing it is gone.'))
+        m.appendChild(el('div', 'note', `<b style="font-weight:500">${h.title}</b><br><span style="color:var(--muted-fg)">${dayLabel(h.start, NOW)} ${timeRange(h.start, h.end, NOW)} · ${nameList(h.participantIds)}</span>`))
+        m.appendChild(actions([['Keep it', 'ghost'], ['Cancel the hangout', 'danger']]))
+        document.body.appendChild(back); document.body.appendChild(m)
+        overlay = [back, m]
+      }
+
+      /* ============================================================
+       * Render
+       * ============================================================ */
+      function render() {
+        document.body.classList.toggle('dark', state.theme === 'dark')
+        document.body.classList.toggle('touch', state.touch)
+        const ds = DATASETS[state.dataset]
+        const cands = computeCandidates(ds, ds.hidden, NOW)
+        const pinned = ds.hangouts.filter((h) => h.end > NOW).sort((a, b) => a.start - b.start)
+        const empty = emptyState(ds, ds.hidden, NOW, cands)
+        const R = RENDER[state.variant]
+
+        document.getElementById('sidebar').style.width = state.width + 'px'
+        document.getElementById('count').textContent = cands.length
+        const list = document.getElementById('list')
+        list.innerHTML = ''
+
+        if (pinned.length) {
+          const region = el('div', 'region' + (R.pad ? ' pad' : ''))
+          pinned.forEach((h) => region.appendChild(R.hangout(h)))
+          list.appendChild(region)
+          if (cands.length || empty) list.appendChild(el('div', 'rule'))
+        }
+        if (empty) {
+          const e = el('div', 'empty')
+          e.appendChild(el('p', null, EMPTY_COPY[empty].title)).style.margin = '0'
+          if (EMPTY_COPY[empty].action) e.appendChild(el('button', null, EMPTY_COPY[empty].action))
+          list.appendChild(e)
+        } else {
+          const region = el('div', 'region' + (R.pad ? ' pad' : ''))
+          cands.forEach((c) => region.appendChild(R.candidate(c)))
+          list.appendChild(region)
+        }
+
+        renderBar()
+        renderDiag()
+        document.getElementById('probe').innerHTML =
+          `<b style="color:var(--foreground)">${cands.length}</b> candidates · ` +
+          `<b style="color:var(--foreground)">${pinned.length}</b> pinned hangouts · group of ${GROUP_SIZE}, ` +
+          `so a card glows at <b style="color:var(--foreground)">${Math.floor(GROUP_SIZE / 2) + 1}</b> friends ` +
+          `(2 × n &gt; ${GROUP_SIZE}) and says “everyone” at ${GROUP_SIZE}.`
+      }
+
+      function renderBar() {
+        const bar = document.getElementById('bar')
+        bar.innerHTML = ''
+        const btn = (label, on, fn) => { const b = el('button', on ? 'on' : null, label); b.onclick = fn; bar.appendChild(b); return b }
+        const keys = ['A', 'B', 'C']
+        const names = { A: 'Count rail', B: 'Avatar-led', C: 'Dense rows' }
+        btn('←', false, () => setVariant(keys[(keys.indexOf(state.variant) + 2) % 3]))
+        bar.appendChild(el('span', 'nm', `${state.variant} (${names[state.variant]})`))
+        btn('→', false, () => setVariant(keys[(keys.indexOf(state.variant) + 1) % 3]))
+        bar.appendChild(el('span', 'sep'))
+        btn('dark', state.theme === 'dark', () => set('theme', state.theme === 'dark' ? 'light' : 'dark'))
+        ;['default', 'ring', 'bar', 'stripe'].forEach((t) => btn(t, state.technique === t, () => set('technique', t)))
+        bar.appendChild(el('span', 'sep'))
+        btn('colour every card', state.colourEveryCard, () => set('colourEveryCard', !state.colourEveryCard))
+        btn('touch', state.touch, () => set('touch', !state.touch))
+        btn('retime: ' + state.retime, state.retime === 'popover', () => set('retime', state.retime === 'popover' ? 'dialog' : 'popover'))
+        bar.appendChild(el('span', 'sep'))
+        Object.keys(DATASETS).forEach((k) => btn(k, state.dataset === k, () => set('dataset', k)))
+        bar.appendChild(el('span', 'sep'))
+        ;[280, 320, 360].forEach((w) => btn(String(w), state.width === w, () => set('width', w)))
+      }
+
+      /* The measurement ticket 11 asked for: is iso-chroma actually renderable? */
+      function renderDiag() {
+        const t = tone()
+        const rows = FRIENDS.map((f) => {
+          const max = maxChroma(t.l, f.hue)
+          const clipped = max < t.c - 0.0005
+          return `<div class="row"><i style="background:${uiColor(f.hue)}"></i>${f.name} h${f.hue}` +
+            `<span class="${clipped ? 'bad' : ''}" style="margin-left:auto">${clipped ? 'clipped to ' + max.toFixed(3) : 'ok'}</span></div>`
+        }).join('')
+        document.getElementById('diag').innerHTML =
+          `<b>UI colour — oklch(${t.l} ${t.c} h)</b><br>` +
+          `<span style="opacity:.7">sRGB gamut check at this L/C</span>` + rows +
+          `<label style="display:flex;gap:6px;align-items:center;margin-top:6px">L<input type="range" min="0.35" max="0.9" step="0.01" value="${t.l}" oninput="setTone('l', +this.value)" style="width:90px"></label>` +
+          `<label style="display:flex;gap:6px;align-items:center">C<input type="range" min="0.04" max="0.25" step="0.005" value="${t.c}" oninput="setTone('c', +this.value)" style="width:90px"></label>`
+      }
+      window.setTone = (k, v) => { UI[state.theme][k] = v; render() }
+
+      function set(k, v) { state[k] = v; syncUrl(); render() }
+      function setVariant(v) { state.variant = v; syncUrl(); render() }
+      addEventListener('keydown', (e) => {
+        if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return
+        const keys = ['A', 'B', 'C']
+        if (e.key === 'ArrowLeft') setVariant(keys[(keys.indexOf(state.variant) + 2) % 3])
+        if (e.key === 'ArrowRight') setVariant(keys[(keys.indexOf(state.variant) + 1) % 3])
+      })
+
+      render()
+
+      /* ?open=retime|cancel — so a screenshot of an overlay is a plain URL. */
+      if (q.get('open') === 'retime')
+        openRetime({ title: 'Move Pizza at Marco\u2019s', friendIds: ['marco', 'sara', 'bea', 'nadia'], start: at(0, 21), end: at(0, 23) })
+      if (q.get('open') === 'cancel') openCancel(HANGOUTS[2])
+    </script>
+  </body>
+</html>

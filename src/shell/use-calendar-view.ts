@@ -12,7 +12,7 @@ import {
 export type CalendarView = 'week' | 'month'
 
 /** Monday. The grid the whole product is drawn on starts the week here. */
-const WEEK_STARTS_ON = 1
+export const WEEK_STARTS_ON = 1
 
 /**
  * The date range the calendar is showing, and the label for it.

@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { cn } from '@/lib/utils'
 import { ShellTrigger } from '@/shell/shell'
+import { useAppShell } from '@/shell/shell-context'
 import type { CalendarView, CalendarViewState } from '@/shell/use-calendar-view'
 import { ChevronLeftIcon, ChevronRightIcon, LogOutIcon } from 'lucide-react'
 
@@ -34,21 +36,33 @@ export const TopBar = ({ calendar }: { calendar: CalendarViewState }) => (
   </header>
 )
 
+const RANGE_LABEL_CLASS = 'mx-1 flex-1 truncate text-left text-sm font-medium tabular-nums'
+
 /**
- * The date label. Below the sheet breakpoint it is also the Today button: the
- * cluster does not fit at 375px, and the first thing it would eat is this
- * label, which is the one thing on the bar you cannot do without.
+ * The date label. Below the sheet breakpoint it is *also* the Today button:
+ * the cluster does not fit at 375px, and the first thing it would eat is this
+ * label, which is the one thing on the bar you cannot do without — so Today
+ * gives up its own control and moves here instead.
+ *
+ * Two elements rather than one with `pointer-events-none`: a button that is
+ * mouse-inert but still focusable is a control keyboard users can reach and
+ * mouse users cannot see, and above the breakpoint there is already a Today
+ * button two inches to the right.
  */
-const RangeLabel = ({ label, onToday }: { label: string; onToday: () => void }) => (
-  <button
-    type="button"
-    onClick={onToday}
-    title="Go to today"
-    className="mx-1 flex-1 truncate text-left text-sm font-medium tabular-nums outline-hidden hover:underline md:pointer-events-none md:no-underline"
-  >
-    {label}
-  </button>
-)
+const RangeLabel = ({ label, onToday }: { label: string; onToday: () => void }) => {
+  const { isSheet } = useAppShell()
+  if (!isSheet) return <span className={RANGE_LABEL_CLASS}>{label}</span>
+  return (
+    <button
+      type="button"
+      onClick={onToday}
+      title="Go to today"
+      className={cn(RANGE_LABEL_CLASS, 'underline decoration-dotted underline-offset-4')}
+    >
+      {label}
+    </button>
+  )
+}
 
 /**
  * `‹ · Today · ›` │ `Week / Month` │ pane triggers │ blobatar.
@@ -157,8 +171,8 @@ const FriendMenu = ({
           blobatar={{
             // Null until issue 03 writes them; blobatar derives both from the
             // seed in the meantime rather than rendering nothing.
-            ...(friend?.hue === null || friend?.hue === undefined ? {} : { hue: friend.hue }),
-            ...(friend?.tone === null || friend?.tone === undefined ? {} : { tone: friend.tone }),
+            hue: friend?.hue ?? undefined,
+            tone: friend?.tone ?? undefined,
             title: name,
             // Always, for this one avatar (ticket 18). The roster's animate on
             // sidebar hover instead, and that is issue 04's.

@@ -21,9 +21,12 @@
  *      outside a component. It is only expressible if ONE object owns both
  *      panes — which is what `sheet: Pane | null` below is.
  *
- * The fork is surgical: only 5 of the sidebar's 23 exports touch the context.
- * We fork those and re-export the other 18 unchanged, so upstream fixes to
- * headers, groups, menus and the rest still land.
+ * The fork is surgical. Of the sidebar's 23 exports, only 5 touch the context —
+ * `SidebarProvider`, `Sidebar`, `SidebarTrigger`, `SidebarRail` and
+ * `SidebarMenuButton`. Four of those are forked here; `SidebarRail` is dropped
+ * outright, because a drag rail is not a control this shell has. `SidebarInset`
+ * touches no context but is layout, so `ShellInset` replaces it. That leaves
+ * **17 re-exported unchanged**, and upstream fixes to them still land.
  */
 import { Button } from '@/components/ui/button'
 import {
@@ -68,28 +71,45 @@ export {
 
 const PANE_WIDTH = '17rem'
 
-/** What each pane is called, in a sheet's accessible name. */
-const PANE_TITLE: Record<Pane, string> = { left: 'Friends', right: 'Candidates' }
+/** The one media query. The same 768px the `md:` utilities below resolve to. */
+const SHEET_QUERY = `(max-width: ${SHEET_BREAKPOINT - 1}px)`
+
+/**
+ * Everything that differs between the two panes, in one place.
+ *
+ * `title` is deliberately not "Candidates": the right pane holds pinned
+ * Hangouts as well, and a Candidate and a Hangout are entirely different things
+ * (CONTEXT.md) — a live derivation and a fact that was written down. Naming the
+ * pane after one of them would fold the other into it.
+ */
+const PANE: Record<Pane, { title: string; shortcut: string; icon: typeof PanelLeftIcon }> = {
+  left: { title: 'Friends', shortcut: '⌘B', icon: PanelLeftIcon },
+  right: { title: 'Candidates and Hangouts', shortcut: '⇧⌘B', icon: PanelRightIcon },
+}
+
+/** Ticket 12 decision 3, and not a knob: both panes open, every load. */
+const BOTH_OPEN: Record<Pane, boolean> = { left: true, right: true }
 
 export const AppShellProvider = ({
-  defaultOpen = { left: true, right: true },
   className,
   style,
   children,
   ...props
-}: React.ComponentProps<'div'> & { defaultOpen?: Record<Pane, boolean> }) => {
-  const [open, setOpen] = React.useState<Record<Pane, boolean>>(defaultOpen)
+}: React.ComponentProps<'div'>) => {
+  const [open, setOpen] = React.useState(BOTH_OPEN)
   const [sheet, setSheet] = React.useState<Pane | null>(null)
-  const [isSheet, setIsSheet] = React.useState(() => window.innerWidth < SHEET_BREAKPOINT)
+  // Read synchronously rather than through `useIsMobile`, which returns `false`
+  // until its first effect runs — that would render three columns for a frame
+  // on a phone.
+  const [isSheet, setIsSheet] = React.useState(() => window.matchMedia(SHEET_QUERY).matches)
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${SHEET_BREAKPOINT - 1}px)`)
+    const mql = window.matchMedia(SHEET_QUERY)
     const sync = () => {
-      const next = window.innerWidth < SHEET_BREAKPOINT
-      setIsSheet(next)
+      setIsSheet(mql.matches)
       // Crossing the breakpoint upward force-closes the sheet. Otherwise a
       // dialog sits over a layout that has already grown its columns back.
-      if (!next) setSheet(null)
+      if (!mql.matches) setSheet(null)
     }
     mql.addEventListener('change', sync)
     sync()
@@ -163,8 +183,8 @@ export const ShellSidebar = ({
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground sm:max-w-(--sidebar-width)"
         >
           <SheetHeader className="sr-only">
-            <SheetTitle>{PANE_TITLE[side]}</SheetTitle>
-            <SheetDescription>The {side} panel.</SheetDescription>
+            <SheetTitle>{PANE[side].title}</SheetTitle>
+            <SheetDescription>The {side} pane.</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col overflow-hidden">{children}</div>
         </SheetContent>
@@ -184,7 +204,11 @@ export const ShellSidebar = ({
       )}
       {...props}
     >
-      {/* Fixed width, so the contents do not reflow while the outer width animates. */}
+      {/*
+        Fixed width, so the contents do not reflow while the outer width
+        animates. Which edge carries the border is the one thing still read off
+        `side` directly — it is a fact about the layout, not about the pane.
+      */}
       <div
         data-sidebar="sidebar"
         className={cn(
@@ -220,8 +244,8 @@ export const ShellTrigger = ({
   ...props
 }: React.ComponentProps<typeof Button> & { side: Pane }) => {
   const { toggle, open, isSheet, sheet } = useAppShell()
+  const { title, shortcut, icon: Icon } = PANE[side]
   const expanded = isSheet ? sheet === side : open[side]
-  const Icon = side === 'left' ? PanelLeftIcon : PanelRightIcon
   return (
     <Button
       data-slot="shell-trigger"
@@ -229,22 +253,28 @@ export const ShellTrigger = ({
       variant="ghost"
       size="icon-sm"
       aria-expanded={expanded}
-      title={side === 'left' ? 'Friends (⌘B)' : 'Candidates (⇧⌘B)'}
+      title={`${title} (${shortcut})`}
       className={className}
       onClick={() => toggle(side)}
       {...props}
     >
       <Icon />
-      <span className="sr-only">Toggle {side} panel</span>
+      {/* The same name the sighted user reads off the tooltip, not "left panel". */}
+      <span className="sr-only">Toggle {title}</span>
     </Button>
   )
 }
 
 /**
- * The 5th forked export. The shared `SidebarMenuButton` calls the shared
- * `useSidebar()` unconditionally — for a tooltip it shows when the sidebar is
- * collapsed to icons — and would throw under this provider. We never collapse
- * to icons, so the tooltip has nothing to do: same classes, that branch gone.
+ * The last forked export, and the only one with no call site yet — the roster
+ * rows that will use it are issue 04's.
+ *
+ * It is here rather than deferred because the shared `SidebarMenuButton` calls
+ * the shared `useSidebar()` unconditionally, for a tooltip it shows when the
+ * sidebar is collapsed to icons, and so **throws under this provider**. Left
+ * out, it is neither forked nor re-exported, and the next Friend to build a
+ * roster row imports the one that throws. We never collapse to icons, so the
+ * tooltip has nothing to do: same classes, that branch gone.
  */
 export const ShellMenuButton = ({
   className,

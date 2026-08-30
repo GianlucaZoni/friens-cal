@@ -1,6 +1,6 @@
 # 02 — The two-sidebar app shell
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 ## Parent
@@ -31,21 +31,100 @@ toggles the *left* pane in any automated test.
 
 ## Acceptance criteria
 
-- [ ] Three columns; both sidebars open by default
-- [ ] `⌘B` toggles left only; `⇧⌘B` toggles right only
-- [ ] The handler reads `shiftKey` explicitly, rejects other modifiers, and
+- [x] Three columns; both sidebars open by default
+- [x] `⌘B` toggles left only; `⇧⌘B` toggles right only
+- [x] The handler reads `shiftKey` explicitly, rejects other modifiers, and
       matches `key` then `code` (so a Cyrillic layout still works)
-- [ ] `⇧⌘B` calls `preventDefault` so Chrome's bookmarks bar does not toggle
-- [ ] Below 768px both panes leave the flow; at most one sheet can be open;
+- [x] `⇧⌘B` calls `preventDefault` so Chrome's bookmarks bar does not toggle
+- [x] Below 768px both panes leave the flow; at most one sheet can be open;
       crossing back up force-closes it
-- [ ] Top bar is **variant C** — spanning the centre and right columns
-- [ ] Top bar shows **month and year only**, never a day range
-- [ ] Week view column headers show weekday + date number (`Mon 30`)
-- [ ] Top-right cluster: blobatar menu, month/week select, Today, prev/next
-- [ ] There is **no** close button inside the left sidebar
-- [ ] `src/components/ui/sidebar.tsx` is left untouched; the fork lives in app code
-- [ ] `npx tsc -p tsconfig.app.json --noEmit` is clean
+- [x] Top bar is **variant C** — spanning the centre and right columns
+- [x] Top bar shows **month and year only**, never a day range
+- [x] Week view column headers show weekday + date number (`Mon 30`)
+- [x] Top-right cluster: blobatar menu, month/week select, Today, prev/next
+- [x] There is **no** close button inside the left sidebar
+- [x] `src/components/ui/sidebar.tsx` is left untouched; the fork lives in app code
+- [x] `npx tsc -p tsconfig.app.json --noEmit` is clean
 
 ## Blocked by
 
 - [01 — Sign in, and your Friend row exists](./01-sign-in-and-friend-row.md)
+
+## Comments
+
+### Built
+
+`src/shell/`. The fork is `shell.tsx` + `shell-context.ts`; `src/components/ui/sidebar.tsx`
+is untouched. Of the sidebar's 23 exports, 5 touch the context — four of those
+are forked, `SidebarRail` is dropped (this shell has no rail), `SidebarInset` is
+replaced by `ShellInset`, and the remaining **17** are re-exported unchanged.
+
+`shortcutPane` is a pure function, deliberately: every one of the three bugs in
+the shipped handler is a missing line in a function that size.
+
+Verified in a real browser rather than reasoned about, because the whole point
+of this handler is that synthetic events lie:
+
+| | result |
+| --- | --- |
+| real `⌘B` / `⇧⌘B` | left only / right only |
+| synthetic `{key:'b', shiftKey:true}` and `{key:'B', …}` | right, `defaultPrevented` |
+| `⌥⌘B`, `⌃⌘B`, bare `b` | ignored, `defaultPrevented === false` |
+| `⌃и` with `code:'KeyB'` | left |
+| below 768px | zero in-flow panes; opening one sheet closes the other |
+
+**Two things this environment could not exercise**, stated rather than claimed:
+the browser pane runs hidden, so `document.visibilityState` is `hidden`, rAF is
+throttled, and Base UI's transition state machine freezes mid-flight — the sheet
+*state* was verified, the sheet *animation* was not. And under its viewport
+emulation neither `resize` nor a matchMedia `change` ever fires, so
+**force-closing the sheet when the width crosses back up is unverified** (the
+logic is a four-line sync). Both want thirty seconds in a visible window.
+
+### After review
+
+`/code-review` against `main`, both axes. Applied:
+
+- **The export count was wrong** — "re-export the other 18" when 17 are
+  re-exported. Both axes found it independently. The comment now names which
+  five touch the context and what happened to each.
+- **The right pane is no longer called "Candidates".** It holds pinned Hangouts
+  too, and CONTEXT.md is explicit that a Candidate and a Hangout are entirely
+  different things; the sheet title and the trigger tooltip said otherwise. It
+  is "Candidates and Hangouts" until someone names it properly.
+- **The out-of-month wash in the month stub is gone.** Ticket 14 spends the wash
+  on peak concurrency; a stub that spends it first on "not this month" pre-empts
+  issue 11.
+- **Week headers are `EEE d` at every width.** They briefly dropped to a single
+  letter below 768 — an undecided call made in code, against decision 6, which
+  says "the three-letter weekday" and names no exception. Issue 12 owns the
+  phone.
+- **The date label is a `span` above the breakpoint and a `button` below**, not
+  one button with `pointer-events-none`. That shape was reachable by keyboard
+  and inert to the mouse, so keyboard users had two Today controls and mouse
+  users had none.
+- Repeated `side === 'left' ? …` switches collapsed into one `PANE` record,
+  which also stopped the sr-only text saying "left panel" while the tooltip said
+  "Friends"; `WEEK_STARTS_ON` is exported rather than restated as a bare `1`;
+  `defaultOpen` dropped, because decision 3 is a decision and not a knob.
+- **A real bug, found in the browser, not by either axis**: `DropdownMenuLabel`
+  is Base UI's `Menu.GroupLabel` and throws `MenuGroupRootContext is missing`
+  outside a `Menu.Group`. The prototype has the same latent fault.
+
+Kept, against the reviews, with reasons:
+
+- **`ShellMenuButton` has no call site.** It is the guard rail: left out, the
+  shared `SidebarMenuButton` is neither forked nor re-exported, and issue 04
+  imports the one that calls `useSidebar()` and throws under this provider.
+- **The breakpoint effect duplicates `useIsMobile`.** That hook returns `false`
+  until its first effect runs, which would render three columns for a frame on a
+  phone; this one reads the query synchronously and also clears the sheet.
+
+### For the human
+
+- **"Pinned" is load-bearing vocabulary that CONTEXT.md does not define.**
+  Tickets 09 and 16 both use it. Worth a glossary entry.
+- **The right pane has no name.** "Candidates and Hangouts" is accurate and
+  clumsy. Nothing in the map names it.
+- **`⇧⌘B` is still Chrome's bookmarks-bar chord**, as decision 2 knowingly
+  accepted. `preventDefault` wins here too.

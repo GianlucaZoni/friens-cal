@@ -1,10 +1,14 @@
+import { useSession } from '@/auth/use-session'
+import { useAvailability } from '@/availability/use-availability'
+import { identityOf } from '@/identity/friend-row'
 import { useRoster } from '@/roster/use-roster'
-import { CalendarStub } from '@/shell/calendar-stub'
+import { Calendar } from '@/shell/calendar'
 import { LeftPane } from '@/shell/left-pane'
 import { RightPane } from '@/shell/right-pane'
 import { AppShellProvider, ShellInset, ShellSidebar } from '@/shell/shell'
 import { TopBar } from '@/shell/top-bar'
 import { useCalendarView } from '@/shell/use-calendar-view'
+import { useMemo } from 'react'
 
 /**
  * The three-column shell the whole app lives in.
@@ -17,15 +21,41 @@ import { useCalendarView } from '@/shell/use-calendar-view'
  * Below 768px both panes leave the flow and become one sheet at a time; see
  * `shell.tsx`, which owns that invariant.
  *
- * The two pieces of view state the whole app reads sit here, one hook each, and
- * travel by prop: where the calendar is pointed, and which Friends are Hidden.
- * The roster is here rather than inside the left pane because Hidden is a query
- * tool — issue 07's heatmap and issue 08's Candidate list are computed over
- * `roster.visible`, and neither of them is in the sidebar.
+ * The three pieces of view state the whole app reads sit here, one hook each,
+ * and travel by prop: where the calendar is pointed, which Friends are Hidden,
+ * and everyone's Availability. The roster is here rather than inside the left
+ * pane because Hidden is a query tool — issue 07's heatmap and issue 08's
+ * Candidate list are computed over `roster.visible`, and neither of them is in
+ * the sidebar. Availability is here for the same reason twice over: issue 06
+ * writes into it from the grid and issue 08 computes Candidates from it in the
+ * right pane.
  */
 export const AppShell = () => {
   const calendar = useCalendarView()
   const roster = useRoster()
+  const availability = useAvailability(calendar.days)
+
+  /**
+   * Whose Availability the grid draws, and the one colour it draws in.
+   *
+   * `RequireSetup` stands between here and the route, so an identity is
+   * guaranteed in practice — but the row's columns are nullable in the type,
+   * and `identityOf` is the codebase's single predicate for "finished setup".
+   * Null renders the lattice with nothing on it, which is the honest picture of
+   * a Friend who has no colour yet.
+   *
+   * Read from the session rather than off `roster.friends.find(f => f.isSelf)`,
+   * which holds the same thing. The session provider owns your own row and has
+   * it before the roster query lands; going through the roster would make the
+   * grid's colour wait on a read it otherwise has nothing to do with. It is not
+   * a second read of `friend` either — no query is issued here.
+   */
+  const { state } = useSession()
+  const viewer = useMemo(() => {
+    if (state.status !== 'signed-in') return null
+    const identity = identityOf(state.friend)
+    return identity === null ? null : { id: state.user.id, hue: identity.hue }
+  }, [state])
 
   return (
     <AppShellProvider>
@@ -38,7 +68,7 @@ export const AppShell = () => {
           <TopBar calendar={calendar} />
           <div className="flex min-h-0 flex-1">
             <ShellInset>
-              <CalendarStub calendar={calendar} />
+              <Calendar calendar={calendar} availability={availability} viewer={viewer} />
             </ShellInset>
             <ShellSidebar side="right">
               <RightPane />

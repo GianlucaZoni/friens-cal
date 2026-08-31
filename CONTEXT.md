@@ -18,16 +18,30 @@ The single shared calendar all Friends belong to. There is exactly one, and it
 is implicit — it is never named, switched, or selected in the UI. Its existence
 as a term only matters because a future effort may introduce several.
 
+## Slot
+
+Half an hour, on the one grid the whole product is drawn on. It is the smallest
+thing anybody can say anything about: nothing in the product refers to a moment
+finer than a Slot, and every Availability, Candidate and Hangout begins and ends
+on one.
+
+A day is **not** always forty-eight Slots. The Group keeps one fixed time zone,
+and twice a year that zone gives a day twenty-three hours or twenty-five.
+
 ## Availability
 
-A statement by one Friend that they are free for one continuous time range:
-*(friend, start, end)*. It has no title, no participants and no invite state —
-those belong to a Hangout.
+A statement by one Friend that they are free for one Slot: *(friend, slot)*. It
+has no title, no participants and no invite state — those belong to a Hangout.
 
-Availability is **binary**: a range is either drawn or it is not. There is no
-"maybe". Adjacent or overlapping ranges belonging to the same Friend **merge**
-into one continuous range, so a Friend's Availability on any given day is always
-a set of non-touching ranges.
+Availability is **binary**: a Slot is drawn or it is not. There is no "maybe",
+and there is no half a Slot.
+
+A Friend who is free all evening holds a **run** — Slots that happen to sit next
+to each other. Say "run", not "range": a run is what a person sees and points
+at, but it is not a thing the product holds. It has no identity, no start and no
+end of its own; it is only ever its Slots, and it grows, splits and vanishes as
+they do. Drawing a Slot you already hold changes nothing, so **merging never
+happens** — there is never anything to merge.
 
 Not having drawn Availability is **silence**, not a claim of being busy — but
 the tool cannot tell the two apart, and so treats silence as unavailable. The
@@ -42,8 +56,8 @@ the grid. It never hides Hangouts.
 
 ## Candidate
 
-A **computed** suggestion: a time range in which two or more non-Hidden Friends
-all have Availability. A Candidate is not stored and has no identity — it exists
+A **computed** suggestion: a run of Slots in which two or more non-Hidden
+Friends all have Availability. A Candidate is not stored and has no identity — it exists
 only as long as the Availability underneath it does, and it is recomputed
 whenever that changes.
 
@@ -53,6 +67,10 @@ A **committed** record that a set of Friends is meeting at a given time,
 created by confirming a Candidate. It survives changes to the Availability that
 produced it, carries an optional title, and is visible to every Friend —
 including those who are not Participants.
+
+Unlike Availability, a Hangout **is** a range, with a start and an end of its
+own. That is what lets it outlive the Availability underneath it: a run
+disappears when its Slots do, and a Hangout does not.
 
 Candidate and Hangout look alike on screen and are entirely different things:
 a Candidate is a live derivation, a Hangout is a fact that was written down.

@@ -180,6 +180,20 @@ export const mergeSlots = (
   return next
 }
 
+/**
+ * The wall clock the end of a day reads as.
+ *
+ * `23:30–00:00` reads as a range that runs backwards, so the closing edge of a
+ * day is spelled `24:00` — in the grid's aria-labels, on a draft's time tag, and
+ * in the toast that names a range it could not save. One rule, one spelling,
+ * one place: three call sites had it written out before.
+ */
+export const DAY_END_LABEL = '24:00'
+
+/** A wall clock, with midnight read as the *end* of a day rather than its start. */
+export const closingLabel = (label: string | undefined): string =>
+  label === undefined || label === '00:00' ? DAY_END_LABEL : label
+
 /** A block on the grid: where in the day's slots it starts, and how many it covers. */
 export type Run = { start: number; length: number }
 

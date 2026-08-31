@@ -40,11 +40,41 @@ import {
  * forward and ignore where the calendar is pointed (ticket 09). That cost was
  * weighed and accepted when variant C was chosen over the alternatives.
  */
-export const TopBar = ({ calendar }: { calendar: CalendarViewState }) => (
+export const TopBar = ({
+  calendar,
+  saving,
+}: {
+  calendar: CalendarViewState
+  /** Some write has been outstanding for 400ms. See `SavingChip`. */
+  saving: boolean
+}) => (
   <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2">
     <RangeLabel label={calendar.label} onToday={calendar.goToday} />
+    {saving ? <SavingChip /> : null}
     <TopCluster calendar={calendar} />
   </header>
+)
+
+/**
+ * The only thing an outstanding write is allowed to say.
+ *
+ * Ticket 19 paints optimistically with **no pending treatment**, and after
+ * ~400ms shows something "in a channel the grid does not own" — because ticket
+ * 15 spent opacity on *how many Friends are free*, so a faded block would read
+ * as fewer people rather than as unsaved. This is that channel: outside the
+ * grid, in the bar, and gone again the moment the round trip lands.
+ *
+ * `shrink-0` so it never squeezes the range label, which is the one thing on the
+ * bar you cannot do without.
+ */
+const SavingChip = () => (
+  <span
+    role="status"
+    aria-live="polite"
+    className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground"
+  >
+    Saving…
+  </span>
 )
 
 const RANGE_LABEL_CLASS = 'mx-1 flex-1 truncate text-left text-sm font-medium tabular-nums'

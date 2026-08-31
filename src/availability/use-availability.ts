@@ -1,8 +1,18 @@
 import { useSession } from '@/auth/use-session'
 import { mergeSlots, slotKey, startOfDayInZone, type SlotRow } from '@/availability/slots'
+import {
+  SLOW_WRITE_MS,
+  describeSlots,
+  withRetries,
+  type WriteFailure,
+} from '@/availability/write-model'
+import { toast } from '@/components/ui/toast-manager'
 import { supabase } from '@/lib/supabase'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+/** Which way a gesture moved the store. The two write paths are symmetric. */
+type Stroke = 'draw' | 'erase'
 
 export type AvailabilityStore = {
   /**
@@ -15,6 +25,26 @@ export type AvailabilityStore = {
   isFree: (friendId: string, slotStart: Date) => boolean
   /** `loading` while the range the view is pointed at is still in flight. */
   status: 'loading' | 'ready' | 'error'
+  /**
+   * Draw these Slots for the viewer — painted at once, written once.
+   *
+   * Slots the viewer already holds are dropped before either happens, so
+   * drawing across the edge of existing Availability writes only the new part
+   * and reverts only the new part. Silent on a gesture that adds nothing, which
+   * is what redrawing what you already have *is* (CONTEXT.md: merging never
+   * happens, because there is never anything to merge).
+   */
+  draw: (slots: readonly Date[]) => void
+  /** Erase these Slots. Symmetric with `draw`, down to the retry. */
+  erase: (slots: readonly Date[]) => void
+  /**
+   * True once some write has been outstanding for `SLOW_WRITE_MS`.
+   *
+   * Deliberately **not** consumed by the grid. Ticket 15 spent opacity on *how
+   * many Friends are free*, so a faded block would read as "fewer people"; this
+   * belongs in a channel the grid does not own, and the top bar is it.
+   */
+  saving: boolean
 }
 
 /**
@@ -46,10 +76,23 @@ const PAGE_SIZE = 1000
  *
  * - **Issue 06** paints into it optimistically the moment a gesture ends, with
  *   no pending treatment (ticket 19). That is an `add`/`delete` against `slots`
- *   and a revert on failure; the key is already the one the write uses.
+ *   and a revert on failure; the key is already the one the write uses. Now
+ *   built — see `draw`, `erase` and `perform` below.
  * - **Issue 07** fills it with *everyone's* rows. That is the removal of one
  *   `.eq('friend_id', …)` below — nothing else here is per-Friend, because the
  *   key carries the Friend.
+ *
+ * ## The write (ticket 19)
+ *
+ * **Paint first, with no pending treatment**, then one statement per gesture:
+ * `insert ... on conflict do nothing` to draw, one `delete ... in (…)` to erase.
+ * Both are idempotent on the natural key, which is what makes a retry free —
+ * and PostgREST sends a multi-row insert as one statement in one transaction,
+ * so **partial failure is not reachable** and there is no chunking to do.
+ *
+ * On failure: two retries with backoff, then **revert and toast**. The toast
+ * names the range, because once the paint is gone there is nothing on screen to
+ * point at and ticket 01 left no undo stack.
  *
  * ## The read
  *
@@ -69,6 +112,28 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
   const [slots, setSlots] = useState<ReadonlySet<string>>(() => new Set())
   const [loadedFrom, setLoadedFrom] = useState<number | null>(null)
   const [failed, setFailed] = useState(false)
+  const [slowWrites, setSlowWrites] = useState(0)
+
+  /**
+   * The store, as a ref — the **source of truth**, with `slots` as its render
+   * mirror.
+   *
+   * Not an optimisation and not an accident. Three writers compose through this
+   * set: the paged read, a gesture's optimistic paint, and that gesture's revert
+   * two seconds later. The last two have to *read it back* — a revert must
+   * remove only the Slots its own gesture introduced, or a failed write would
+   * un-paint Availability that is on the server and make the grid lie — and a
+   * `setSlots(current => …)` updater cannot be read back synchronously. It is
+   * also what makes the toast's **Retry** work: a stale closure over `slots`
+   * would compute an empty delta and retry nothing at all.
+   */
+  const held = useRef<ReadonlySet<string>>(slots)
+
+  /** The one mutator. Keeps the ref and its mirror in step, in that order. */
+  const change = useCallback((next: (current: ReadonlySet<string>) => ReadonlySet<string>) => {
+    held.current = next(held.current)
+    setSlots(held.current)
+  }, [])
 
   /**
    * The earliest instant the view needs.
@@ -143,18 +208,119 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
       // a result that lands late — after a StrictMode remount, or after the
       // viewer has navigated on — is the same rows arriving in the same store.
       // Discarding it would be the only way to lose them.
-      setSlots((current) => mergeSlots(current, data))
+      //
+      // A union, so a read that lands mid-gesture cannot un-paint it either:
+      // the optimistic rows are already in `held` and the server's answer adds
+      // to them rather than replacing them.
+      change((current) => mergeSlots(current, data))
       setLoadedFrom((current) => (current === null ? wantedFrom : Math.min(current, wantedFrom)))
     })
-  }, [userId, wantedFrom])
+  }, [userId, wantedFrom, change])
 
   const isFree = useCallback(
     (friendId: string, slotStart: Date) => slots.has(slotKey(friendId, slotStart)),
     [slots]
   )
 
+  /**
+   * How a gesture is re-run from the toast's **Retry**.
+   *
+   * A ref, written in an effect, because the round trip that raises the toast
+   * closes over `stroke` before `stroke` exists — and by the time anybody can
+   * click Retry the effect has run many times over. Ticket 01 left no undo
+   * stack, so this button and redrawing by hand are the only two routes back.
+   */
+  const again = useRef<(kind: Stroke, instants: readonly Date[]) => void>(() => {})
+
+  /**
+   * One gesture, from the failed round trip onwards.
+   *
+   * Split from `stroke` only so the paint is not inside an `async` function:
+   * the paint must happen in the same tick as the gesture, and an `await` before
+   * it would put it a microtask later — one frame of the grid not showing what
+   * the hand just drew, which is the whole thing ticket 19 forbids.
+   */
+  const perform = useCallback(
+    async (kind: Stroke, friendId: string, instants: readonly Date[]) => {
+      const failure = await announcingIfSlow(setSlowWrites, () =>
+        withRetries(() => writeStroke(kind, friendId, instants))
+      )
+      if (failure === null) return
+
+      /*
+       * Revert, then say so. Reverting silently was rejected outright in ticket
+       * 19 — Availability would simply vanish — and so was retrying forever,
+       * which leaves the screen permanently lying.
+       *
+       * One accepted race, named rather than left to be found: a second gesture
+       * that redraws the same Slot inside the ~2s this takes to fail has its
+       * paint reverted with ours. It survives as a row on the server if its own
+       * write landed, so the next read repairs it.
+       */
+      change((current) => withSlots(current, friendId, instants, kind === 'erase'))
+
+      const range = describeSlots(instants, GROUP_TIME_ZONE)
+      /*
+       * `raised.id` is filled in by the very next statement, and read only when
+       * Retry is pressed. Base UI does **not** close a toast when its action is
+       * pressed, and leaving "couldn't save Thu 20:00–23:00" on screen above the
+       * block that just saved is the one thing worse than not saying anything.
+       */
+      const raised: { id?: string } = {}
+      raised.id = toast.add({
+        type: 'error',
+        title: `Couldn't ${kind === 'draw' ? 'save' : 'erase'} ${range}`,
+        description: failure.message,
+        // Stays until it is dismissed. A toast that names something no longer
+        // on screen is the only record that it existed.
+        timeout: 0,
+        actionProps: {
+          children: 'Retry',
+          onClick: () => {
+            if (raised.id !== undefined) toast.close(raised.id)
+            again.current(kind, instants)
+          },
+        },
+      })
+    },
+    [change]
+  )
+
+  /**
+   * Paint, then write — the whole of a gesture's effect on the world.
+   *
+   * The **delta first**: only the Slots this gesture actually changes are
+   * painted, written and reverted. Drawing across Availability you already hold
+   * is the most ordinary action in the app (ticket 19), and it should neither
+   * re-write those rows nor put them at risk if the new part fails.
+   */
+  const stroke = useCallback(
+    (kind: Stroke, instants: readonly Date[]) => {
+      if (userId === null) return
+
+      const affected = instants.filter(
+        (instant) => held.current.has(slotKey(userId, instant)) === (kind === 'erase')
+      )
+      if (affected.length === 0) return
+
+      change((current) => withSlots(current, userId, affected, kind === 'draw'))
+      void perform(kind, userId, affected)
+    },
+    [userId, change, perform]
+  )
+
+  useEffect(() => {
+    again.current = stroke
+  }, [stroke])
+
+  const draw = useCallback((instants: readonly Date[]) => stroke('draw', instants), [stroke])
+  const erase = useCallback((instants: readonly Date[]) => stroke('erase', instants), [stroke])
+
   return {
     isFree,
+    draw,
+    erase,
+    saving: slowWrites > 0,
     // Derived, never assigned from inside the effect — the shape issue 04 hit
     // with the mini calendar and solved the same way. `loading` therefore also
     // covers a backwards navigation whose strip has not landed, which is right:
@@ -164,6 +330,90 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
       : loadedFrom !== null && loadedFrom <= wantedFrom
         ? 'ready'
         : 'loading',
+  }
+}
+
+/** The same set with these Slots added, or taken out. */
+const withSlots = (
+  current: ReadonlySet<string>,
+  friendId: string,
+  instants: readonly Date[],
+  holding: boolean
+): ReadonlySet<string> => {
+  const next = new Set(current)
+  instants.forEach((instant) => {
+    const key = slotKey(friendId, instant)
+    if (holding) next.add(key)
+    else next.delete(key)
+  })
+  return next
+}
+
+/**
+ * One gesture, one statement.
+ *
+ * **Draw** is `insert ... on conflict do nothing`, which supabase-js spells
+ * `upsert` with `ignoreDuplicates` — and which needs no `update` grant, because
+ * `do nothing` never updates. That matters: `02-availability.sql` withholds the
+ * update grant on purpose, and a `merge-duplicates` upsert would be refused by
+ * it.
+ *
+ * **Erase** is one `delete ... in (…)`. Deleting a row that is already gone is a
+ * no-op, so the erase path retries exactly as safely as the insert path.
+ *
+ * Never chunked, in either direction. PostgREST puts a multi-row write in one
+ * transaction, so the "some landed, some did not" case ticket 19 asked about
+ * cannot arise unless we build it.
+ */
+const writeStroke = async (
+  kind: Stroke,
+  friendId: string,
+  instants: readonly Date[]
+): Promise<WriteFailure | null> => {
+  const starts = instants.map((instant) => instant.toISOString())
+
+  const { error } =
+    kind === 'draw'
+      ? await supabase.from('availability').upsert(
+          starts.map((slot_start) => ({ friend_id: friendId, slot_start })),
+          { onConflict: 'friend_id,slot_start', ignoreDuplicates: true }
+        )
+      : await supabase
+          .from('availability')
+          .delete()
+          .eq('friend_id', friendId)
+          .in('slot_start', starts)
+
+  return error === null ? null : { message: error.message }
+}
+
+/**
+ * Run a write, and count it as slow if it is still going after 400ms.
+ *
+ * The 400ms lives here rather than in a render effect on purpose: a `setTimeout`
+ * started and cleared inside one `async` call needs no state to remember whether
+ * it fired, and `eslint-plugin-react-hooks` v7 rejects the synchronous
+ * `setState` in an effect that the state version would need (the same wall
+ * issues 04 and 05 hit).
+ *
+ * `announced` is a plain local, not a ref: this function runs once per gesture,
+ * so there is nothing for a second invocation to get wrong.
+ */
+const announcingIfSlow = async (
+  setSlowWrites: (update: (count: number) => number) => void,
+  run: () => Promise<WriteFailure | null>
+): Promise<WriteFailure | null> => {
+  let announced = false
+  const timer = setTimeout(() => {
+    announced = true
+    setSlowWrites((count) => count + 1)
+  }, SLOW_WRITE_MS)
+
+  try {
+    return await run()
+  } finally {
+    clearTimeout(timer)
+    if (announced) setSlowWrites((count) => count - 1)
   }
 }
 

@@ -1,4 +1,5 @@
 import type { AvailabilityStore } from '@/availability/use-availability'
+import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { WeekGrid, type Viewer } from '@/availability/week-grid'
 import { WEEK_STARTS_ON, type CalendarViewState } from '@/shell/use-calendar-view'
 import {
@@ -23,13 +24,15 @@ export const Calendar = ({
   calendar,
   availability,
   viewer,
+  tools,
 }: {
   calendar: CalendarViewState
   availability: AvailabilityStore
   viewer: Viewer | null
+  tools: DrawingTools
 }) =>
   calendar.view === 'week' ? (
-    <WeekGrid days={calendar.days} availability={availability} viewer={viewer} />
+    <WeekGrid days={calendar.days} availability={availability} viewer={viewer} tools={tools} />
   ) : (
     <MonthLattice anchor={calendar.anchor} />
   )

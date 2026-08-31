@@ -60,3 +60,12 @@ export type Database = {
  * the account exists; the setup flow fills it in.
  */
 export type Friend = Database['public']['Tables']['friend']['Row']
+
+/**
+ * The columns a Friend may write on their own row.
+ *
+ * Exactly the five in the column-scoped `grant update` — `id` and `created_at`
+ * are absent because the browser holds no grant on them at all, so RLS never
+ * has to defend them (supabase/01-friend.sql).
+ */
+export type FriendUpdate = Database['public']['Tables']['friend']['Update']

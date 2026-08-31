@@ -1,0 +1,31 @@
+{
+  "//": "The tests run under Node, not under Vite, so they need `types: node` for `node:test` and `node:assert` — which the app project must not have. Same split tsconfig.node.json already makes for vite.config.ts. DOM stays in `lib` because the modules under test are app modules and one of them touches `document`; nothing in a test calls it. `erasableSyntaxOnly` is not optional here: Node strips the types rather than compiling them, so anything it cannot erase would be a runtime error instead of a type error.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src/**/*.test.ts"]
+}

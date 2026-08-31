@@ -28,5 +28,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "//exclude": "The tests run under Node and need its types, which this project must not have. They are typechecked by tsconfig.test.json, which the root solution file references.",
+  "exclude": ["src/**/*.test.ts"]
 }

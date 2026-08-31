@@ -13,11 +13,22 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { FriendBlob } from '@/identity/friend-blob'
+import { identityOf } from '@/identity/friend-row'
+import { ChangePasswordDialog, CustomiseDialog, ProfileDialog } from '@/identity/profile-dialogs'
 import { cn } from '@/lib/utils'
 import { ShellTrigger } from '@/shell/shell'
 import { useAppShell } from '@/shell/shell-context'
 import type { CalendarView, CalendarViewState } from '@/shell/use-calendar-view'
-import { ChevronLeftIcon, ChevronRightIcon, LogOutIcon } from 'lucide-react'
+import { useState } from 'react'
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  KeyRoundIcon,
+  LogOutIcon,
+  PaletteIcon,
+  UserIcon,
+} from 'lucide-react'
 
 /**
  * The bar spans the centre and right columns (variant C), so the cluster sits
@@ -133,9 +144,14 @@ const TopCluster = ({ calendar }: { calendar: CalendarViewState }) => {
 /**
  * The current Friend's blobatar, and the menu behind it.
  *
- * Sign out lives here (ticket 18) and is the only entry so far. Profile,
- * blobatar customisation and change-password are issue 03's, and land in this
- * menu — the shell places the cluster, issue 03 decides what is inside it.
+ * The shell places the cluster (ticket 12); what is inside it is ticket 18's.
+ * Four items in the account group: who you are, your **profile**, **how you
+ * look**, and **change password** — then sign out.
+ *
+ * Deliberately absent, and each is a claim someone may want to argue with. No
+ * theme switch: light/dark is ephemeral view state, not a Friend column, and
+ * does not belong beside things that are. No "delete account": membership is a
+ * hand-curated allowlist and leaving is a conversation.
  */
 const FriendMenu = ({
   view,
@@ -145,74 +161,123 @@ const FriendMenu = ({
   onView: (view: CalendarView) => void
 }) => {
   const { state, signOut } = useSession()
+  const [dialog, setDialog] = useState<'profile' | 'customise' | 'password' | null>(null)
+
   if (state.status !== 'signed-in') return null
 
   const { user, friend } = state
-  // Every identity column is blank until the setup flow runs (issue 03), so the
-  // seed falls back through what we do have. It is only a seed — the blobatar
-  // it draws today is not the one this Friend will keep.
   const name = friend?.display_name || user.email || 'Friend'
-  const seed = friend?.blobatar_seed || name
+  const identity = identityOf(friend)
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            className="flex size-8 items-center justify-center rounded-full ring-offset-1 outline-hidden hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={`${name} — account`}
-          />
-        }
-      >
-        <Blobatar
-          className="size-7"
-          name={seed}
-          blobatar={{
-            // Null until issue 03 writes them; blobatar derives both from the
-            // seed in the meantime rather than rendering nothing.
-            hue: friend?.hue ?? undefined,
-            tone: friend?.tone ?? undefined,
-            title: name,
-            // Always, for this one avatar (ticket 18). The roster's animate on
-            // sidebar hover instead, and that is issue 04's.
-            animate: 'always',
-          }}
-        />
-      </DropdownMenuTrigger>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              className="flex size-8 items-center justify-center rounded-full ring-offset-1 outline-hidden hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`${name} — account`}
+            />
+          }
+        >
+          {identity ? (
+            // Always, for this one avatar (ticket 18 decision 3). The roster's
+            // animate on sidebar hover instead, and that is issue 04's.
+            <FriendBlob identity={identity} className="size-7" animate title={name} />
+          ) : (
+            /*
+            Before setup, or while the row is in flight. `RequireSetup` means a
+            Friend cannot linger here, but the bar renders during that gap — so
+            the seed falls back to what we have and blobatar derives colour from
+            it, rather than the cluster being empty for a beat. Not `FriendBlob`,
+            because there is no `Identity` to give it: an invented hue would be a
+            colour nobody chose, indistinguishable from one they had.
+          */
+            <Blobatar
+              className="size-7"
+              name={friend?.blobatar_seed || name}
+              blobatar={{ title: name, animate: 'always' }}
+            />
+          )}
+        </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-56">
-        {/*
+        <DropdownMenuContent align="end" className="w-56">
+          {/*
           Every label here is Base UI's `Menu.GroupLabel` and throws outside a
           `Menu.Group` — so the menu is groups, and the narrow-only view select
           is a group of its own rather than a pair of loose items.
         */}
-        <div className="md:hidden">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>View</DropdownMenuLabel>
-            <DropdownMenuCheckboxItem checked={view === 'week'} onClick={() => onView('week')}>
-              Week
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={view === 'month'} onClick={() => onView('month')}>
-              Month
-            </DropdownMenuCheckboxItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-        </div>
+          <div className="md:hidden">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>View</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem checked={view === 'week'} onClick={() => onView('week')}>
+                Week
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={view === 'month'} onClick={() => onView('month')}>
+                Month
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </div>
 
-        {/* Issue 03's profile, blobatar customisation and change-password join
-            this group; sign out is the shell's, because the placeholder page it
-            replaced was the only way out. */}
-        <DropdownMenuGroup>
-          <DropdownMenuLabel className="flex flex-col gap-0.5">
-            <span>{name}</span>
-            <span className="text-[11px] font-normal text-muted-foreground">{user.email}</span>
-          </DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => void signOut()}>
-            <LogOutIcon /> Sign out
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="flex flex-col gap-0.5">
+              <span>{name}</span>
+              <span className="text-[11px] font-normal text-muted-foreground">{user.email}</span>
+            </DropdownMenuLabel>
+
+            <DropdownMenuItem onClick={() => setDialog('profile')}>
+              <UserIcon /> Profile…
+            </DropdownMenuItem>
+
+            {/*
+            "How you look…" is the customise-blobatar item, under the name
+            ticket 18 gave it. Disabled only in the gap before the row lands:
+            there is no identity to seed the controls from, and opening them on
+            an invented one would let a Friend "keep" a colour they never chose.
+          */}
+            <DropdownMenuItem onClick={() => setDialog('customise')} disabled={identity === null}>
+              <PaletteIcon /> How you look…
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={() => setDialog('password')}>
+              <KeyRoundIcon /> Change password…
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={() => void signOut()}>
+              <LogOutIcon /> Sign out
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/*
+      Mounted only while open, and outside the menu rather than inside an item.
+      A dialog nested in a `DropdownMenuItem` unmounts with the menu the moment
+      the item is clicked, so it would open and vanish in the same frame — and
+      mounting on open is also what makes each dialog's draft start from the
+      row as it is now.
+    */}
+      {dialog === 'profile' ? (
+        <ProfileDialog
+          displayName={friend?.display_name ?? ''}
+          email={user.email}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+
+      {dialog === 'customise' && identity !== null ? (
+        <CustomiseDialog
+          identity={identity}
+          displayName={friend?.display_name ?? ''}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+
+      {dialog === 'password' ? (
+        <ChangePasswordDialog email={user.email} onClose={() => setDialog(null)} />
+      ) : null}
+    </>
   )
 }

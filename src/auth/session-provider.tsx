@@ -1,5 +1,5 @@
 import { SessionContext, type SessionValue } from '@/auth/use-session'
-import type { Friend } from '@/lib/database.types'
+import type { Friend, FriendUpdate } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import type { AuthError, User } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -14,8 +14,14 @@ type AuthState =
   | { status: 'signed-out' }
   | { status: 'signed-in'; user: User }
 
-/** A fetched Friend row, tagged with whose it is. */
-type FetchedFriend = { forUserId: string; friend: Friend | null }
+/**
+ * A fetched Friend row, tagged with whose it is.
+ *
+ * `failed` separates "no row came back" from "we have not asked yet", which the
+ * setup gate needs: an unfinished Friend belongs on `/setup` and a Friend whose
+ * row failed to load belongs nowhere until it does.
+ */
+type FetchedFriend = { forUserId: string; friend: Friend | null; failed: boolean }
 
 /**
  * Sign-in copy.
@@ -75,10 +81,10 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
           // missing rather than the query being wrong — the project does not
           // expose new tables automatically. See supabase/01-friend.sql.
           console.error('Could not load the signed-in Friend:', error.message)
-          setFetched({ forUserId: userId, friend: null })
+          setFetched({ forUserId: userId, friend: null, failed: true })
           return
         }
-        setFetched({ forUserId: userId, friend: data })
+        setFetched({ forUserId: userId, friend: data, failed: false })
       })
 
     return () => {
@@ -95,16 +101,52 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
     await supabase.auth.signOut()
   }, [])
 
+  const saveFriend = useCallback(
+    async (patch: FriendUpdate) => {
+      if (userId === null) return 'You are signed out. Sign in again and try that once more.'
+
+      // `.eq` as well as RLS, and not only for belt and braces: `.single()`
+      // needs the statement to name one row, and RLS narrows what is visible
+      // rather than what is addressed.
+      const { data, error } = await supabase
+        .from('friend')
+        .update(patch)
+        .eq('id', userId)
+        .select()
+        .single()
+
+      if (error) {
+        // A permission-denied here is the column-scoped grant or RLS refusing a
+        // column we may not write; a check violation is `tone` outside the six
+        // band interiors. Neither is a sentence to show a Friend.
+        console.error('Could not save the Friend row:', error.message)
+        return 'That did not save. Try again in a moment.'
+      }
+
+      setFetched({ forUserId: userId, friend: data, failed: false })
+      return null
+    },
+    [userId]
+  )
+
   const value = useMemo<SessionValue>(() => {
     // Matching on the user id rather than clearing on sign-out is what keeps a
     // previous Friend's name from flashing on the next one's screen.
-    const friend = fetched !== null && fetched.forUserId === userId ? fetched.friend : null
+    const mine = fetched !== null && fetched.forUserId === userId ? fetched : null
     return {
-      state: auth.status === 'signed-in' ? { ...auth, friend } : auth,
+      state:
+        auth.status === 'signed-in'
+          ? {
+              ...auth,
+              friend: mine?.friend ?? null,
+              friendStatus: mine === null ? 'loading' : mine.failed ? 'error' : 'ready',
+            }
+          : auth,
       signIn,
       signOut,
+      saveFriend,
     }
-  }, [auth, fetched, userId, signIn, signOut])
+  }, [auth, fetched, userId, signIn, signOut, saveFriend])
 
   return <SessionContext value={value}>{children}</SessionContext>
 }

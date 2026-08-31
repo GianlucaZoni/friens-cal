@@ -1,6 +1,6 @@
 # 03 — Setup flow and blobatar identity
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 01
 
 ## Parent

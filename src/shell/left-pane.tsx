@@ -24,10 +24,13 @@ import { useState } from 'react'
 export const LeftPane = ({
   calendar,
   roster,
+  silent,
   tools,
 }: {
   calendar: CalendarViewState
   roster: RosterState
+  /** Ids of the Friends with no Availability in the current view (issue 07). */
+  silent: ReadonlySet<string>
   tools: DrawingTools
 }) => {
   const { sheet } = useAppShell()
@@ -65,7 +68,7 @@ export const LeftPane = ({
       <SidebarContent>
         <MiniCalendar calendar={calendar} />
         <DrawingControls tools={tools} />
-        <FriendRoster roster={roster} animate={animate} />
+        <FriendRoster roster={roster} silent={silent} animate={animate} />
       </SidebarContent>
     </div>
   )

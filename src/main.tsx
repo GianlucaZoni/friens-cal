@@ -1,4 +1,5 @@
 import { App } from '@/App'
+import { installHeatTokens } from '@/availability/heat'
 import { installFriendColourTokens } from '@/identity/ui-colour'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -24,6 +25,18 @@ import 'blobatar/motion.css'
  * `identity/ui-colour.ts` for why it is not a number typed into the stylesheet.
  */
 installFriendColourTokens()
+
+/**
+ * The heatmap's opacity ramp, per theme, for the same reason and in the same
+ * shape.
+ *
+ * Ticket 15 requires the ramp to be tuned twice — "the alpha that whispers on
+ * white shouts on near-black" — and nothing in this app can ask which theme is
+ * on: light and dark are the `.dark` class and the stylesheet, and ticket 18
+ * ruled out a theme switch. So the cascade picks the pair, exactly as it picks
+ * `--border`. See `availability/heat.ts`.
+ */
+installHeatTokens()
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

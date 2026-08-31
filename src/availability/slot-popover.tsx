@@ -8,28 +8,57 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { FriendBlob } from '@/identity/friend-blob'
+import type { Identity } from '@/identity/identity'
 import { format } from 'date-fns'
 import { CopyIcon, EraserIcon, PlusIcon } from 'lucide-react'
 
+/** A Friend who is free here, with the face and name that identify them. */
+type FreeFriend = { id: string; name: string; identity: Identity; isSelf: boolean }
+
 /**
- * What a click on the grid opens — **the shell of it**.
+ * Who is free at the Slot that was clicked, and the span that answer holds for.
+ *
+ * `from`/`to` are the **segment's** wall clock, not the Slot's — see `answerAt`
+ * in `week-grid.tsx` for why the hit target and the answer unit differ. Both are
+ * null when nobody is free, which is when there is no segment to name.
+ */
+export type SlotAnswer = {
+  /** In roster order. Includes the viewer, if they are free here. */
+  free: FreeFriend[]
+  from: string | null
+  to: string | null
+}
+
+/**
+ * What a click on the grid opens.
  *
  * A bare click reads; only a drag writes (ticket 10, reversing ticket 06's
- * click-to-create on both platforms). This is the thing it opens, and it is the
- * seam this issue shares with issue 07: **who is free here** — the Friends'
- * blobatars, the Candidate marker — is issue 07's to fill in, and after ticket
- * 15 removed per-Friend colour from the grid it is the *only* answer to "who".
- * Nothing about that is built here, and nothing here is in its way.
+ * click-to-create on both platforms).
  *
- * What this issue owns is the three actions, and one of them is an acceptance
- * criterion rather than a convenience: **Duplicate**. ⌥+drag is the
- * accelerator, and ticket 01's corrections require the discoverable route to be
- * a visible control on the block — undiscoverable-by-construction was the one
- * thing ticket 06's prototype could not fix about ⌥+drag, and it cannot exist
- * at all on touch.
+ * ## This is the only answer to "who"
  *
- * `Erase block` is the same bargain for erasing: the drag is the fast route and
- * this is the one you can find.
+ * Ticket 15 removed per-Friend colour from the grid outright: the wash is one
+ * hue — the viewer's — and opacity carries *how many*. So the grid answers how
+ * many and this panel answers who, and it is **load-bearing rather than a
+ * nicety**. It is also the only place a Friend's face appears alongside the
+ * calendar.
+ *
+ * **Blobatar and name, both.** Colour alone cannot identify anybody here: hue
+ * collisions between Friends are permitted (ticket 11 settled it — hue stays
+ * continuous and free, and the blobatar shape disambiguates), and prototype 05
+ * measured the failure it produces: two Friends at h262 and h268 in a composite
+ * "do not read as two similar colours, they read as *one* Friend". A coloured
+ * dot per Friend would reproduce exactly that here. So the shape carries the
+ * identity and the name settles it.
+ *
+ * ## The three actions
+ *
+ * **Duplicate** is an acceptance criterion rather than a convenience: ⌥+drag is
+ * the accelerator, and ticket 01's corrections require the discoverable route to
+ * be a visible control — undiscoverable-by-construction was the one thing ticket
+ * 06's prototype could not fix about ⌥+drag, and it cannot exist at all on
+ * touch. `Erase block` is the same bargain for erasing.
  */
 export const SlotPopover = ({
   day,
@@ -38,6 +67,7 @@ export const SlotPopover = ({
   top,
   height,
   held,
+  answer,
   onClose,
   onDraw,
   onErase,
@@ -52,6 +82,7 @@ export const SlotPopover = ({
   height: number
   /** Whether the viewer already holds this Slot. */
   held: boolean
+  answer: SlotAnswer
   onClose: () => void
   onDraw: () => void
   onErase: () => void
@@ -93,6 +124,8 @@ export const SlotPopover = ({
         </PopoverDescription>
       </PopoverHeader>
 
+      <FreeHere answer={answer} />
+
       <div className="flex flex-wrap gap-1">
         {held ? (
           <>
@@ -112,3 +145,57 @@ export const SlotPopover = ({
     </PopoverContent>
   </Popover>
 )
+
+/**
+ * The answer: how many, then who, then over what span.
+ *
+ * **The count is written out as a numeral** rather than left to the wash.
+ * Prototype 05's third contradiction: opacity is a comparative channel — it says
+ * "more here than there" and cannot be read as a number — and "the count needs
+ * to be legible independently of the colours". This is where it becomes legible.
+ *
+ * The span is the **segment's**, so the sentence is complete: these Friends,
+ * from here to here. A viewer who clicked 20:00 and reads `2 free · 20:00–22:00`
+ * knows the answer holds for four Slots without clicking any of the other three.
+ *
+ * Nobody free is stated rather than left blank: silence is not a claim of being
+ * busy (CONTEXT.md), and an empty panel would read as a rendering fault.
+ *
+ * "Nobody **else**", because `free` includes the viewer — so an empty answer
+ * implies the viewer is not free either, and the header has already said so.
+ * "Nobody has marked this" underneath "You haven't marked this" says one fact
+ * twice and reads as a stutter.
+ */
+const FreeHere = ({ answer }: { answer: SlotAnswer }) => {
+  const { free, from, to } = answer
+
+  if (free.length === 0) {
+    return <p className="text-[11px] text-muted-foreground">Nobody else has either.</p>
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-[11px] tabular-nums text-muted-foreground">
+        {free.length} free
+        {from === null || to === null ? null : ` · ${from}–${to}`}
+      </p>
+      <ul className="flex flex-col gap-0.5">
+        {free.map((friend) => (
+          <li key={friend.id} className="flex items-center gap-2">
+            {/*
+              No `title` on the blobatar: the name is written beside it, and a
+              titled blobatar would make a screen reader read the Friend twice.
+              Without one it is `alt=""` and skipped, which is right for a
+              picture that is already labelled.
+            */}
+            <FriendBlob identity={friend.identity} size="xs" />
+            <span className="min-w-0 flex-1 truncate text-[13px]">{friend.name}</span>
+            {friend.isSelf && (
+              <span className="shrink-0 text-[10px] text-muted-foreground">you</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}

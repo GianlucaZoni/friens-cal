@@ -62,9 +62,18 @@ const UNNAMED = 'Someone new'
  * both of which are exactly wrong here. `select` on `friend` is group-wide
  * (issue 01), so this needs no new grant.
  *
- * Not Realtime either: a Friend changing their hue should eventually recolour
- * their row live, and that is issue 07's. Your *own* changes do land
- * immediately, through `mergeSelf`.
+ * **And a Realtime subscription on `friend`**, added by issue 07. Your *own*
+ * changes always landed immediately through `mergeSelf`; this is what makes
+ * everybody else's land too — a Friend changing their hue recolours their
+ * sidebar row, and a Friend finishing setup appears as a Friend rather than as a
+ * dashed placeholder.
+ *
+ * It is not decoration in this slice, which is why it arrives with the heatmap:
+ * **the wash counts `visible`**, so a Friend the roster has not heard about is a
+ * Friend whose Availability arrives over Realtime and is then not counted. The
+ * grid would under-report by one, silently, until a reload. The two
+ * subscriptions have to exist together or the count is only as fresh as the
+ * roster read.
  */
 export const useRoster = (): RosterState => {
   const { state } = useSession()
@@ -91,6 +100,44 @@ export const useRoster = (): RosterState => {
 
     return () => {
       live = false
+    }
+  }, [userId])
+
+  /**
+   * Everybody else's row, as it changes.
+   *
+   * `*` here, unlike the Availability subscription's two explicit events, and for
+   * the mirror-image reason: `friend` rows *are* updated — that is the whole of
+   * changing your colour (ticket 11: "freely, from the profile dropdown,
+   * propagating over Realtime like any other row") — and they are inserted by
+   * the `on_auth_user_created` trigger when a new Friend signs up. Deletes are
+   * not reachable from the browser and cost nothing to handle.
+   *
+   * Folded by id rather than refetched: a re-`select` would be a second source of
+   * truth for a row the payload already carries in full, and would race with
+   * `mergeSelf`. Your own row still wins through that overlay, which is right —
+   * the session provider is the thing that *wrote* it.
+   */
+  useEffect(() => {
+    if (userId === null) return
+
+    const channel = supabase
+      .channel('friend')
+      .on<Friend>(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'friend' },
+        ({ eventType, new: row, old }) => {
+          setRows((current) =>
+            eventType === 'DELETE'
+              ? (current ?? []).filter((existing) => existing.id !== old.id)
+              : upsertRow(current ?? [], row)
+          )
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
     }
   }, [userId])
 
@@ -121,3 +168,15 @@ export const useRoster = (): RosterState => {
     visible,
   }
 }
+
+/**
+ * One row folded into the roster's copy, replacing whatever was there.
+ *
+ * A Friend's row has a stable id and nothing else about it is a key, so an
+ * upsert by id is the whole reconciliation — the same property `(friend_id,
+ * slot_start)` gives the Availability store, one table along.
+ */
+const upsertRow = (rows: readonly Friend[], row: Friend): Friend[] =>
+  rows.some((existing) => existing.id === row.id)
+    ? rows.map((existing) => (existing.id === row.id ? row : existing))
+    : [...rows, row]

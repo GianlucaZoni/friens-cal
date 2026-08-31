@@ -1,6 +1,7 @@
 import type { AvailabilityStore } from '@/availability/use-availability'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { WeekGrid, type Viewer } from '@/availability/week-grid'
+import type { RosterFriend } from '@/roster/use-roster'
 import { WEEK_STARTS_ON, type CalendarViewState } from '@/shell/use-calendar-view'
 import {
   eachDayOfInterval,
@@ -24,15 +25,24 @@ export const Calendar = ({
   calendar,
   availability,
   viewer,
+  visible,
   tools,
 }: {
   calendar: CalendarViewState
   availability: AvailabilityStore
   viewer: Viewer | null
+  /** The Friends the viewer is trying to meet — the heatmap's query (issue 07). */
+  visible: RosterFriend[]
   tools: DrawingTools
 }) =>
   calendar.view === 'week' ? (
-    <WeekGrid days={calendar.days} availability={availability} viewer={viewer} tools={tools} />
+    <WeekGrid
+      days={calendar.days}
+      availability={availability}
+      viewer={viewer}
+      visible={visible}
+      tools={tools}
+    />
   ) : (
     <MonthLattice anchor={calendar.anchor} />
   )
@@ -42,6 +52,12 @@ export const Calendar = ({
  * concurrency and the avatars carry who. So the stub is a bare lattice: it
  * marks no cell in any way, because every way of marking one is issue 11's to
  * spend, and a wash on the out-of-month days would spend the wash first.
+ *
+ * **The week grid's heatmap does not carry here**, and reusing it would be the
+ * obvious mistake: prototype 05's Q4 found the composite reads as "a corrupted
+ * thumbnail" at month-cell size, where the time axis is illegible and the
+ * stripes read as UI noise. Month wants discrete blobatar dots or a peak
+ * numeral, and picking between them is ticket 14's.
  */
 const MonthLattice = ({ anchor }: { anchor: Date }) => {
   const days = eachDayOfInterval({

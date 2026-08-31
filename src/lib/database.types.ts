@@ -44,6 +44,32 @@ export type Database = {
         }
         Relationships: []
       }
+      availability: {
+        Row: {
+          friend_id: string
+          slot_start: string
+        }
+        Insert: {
+          friend_id: string
+          slot_start: string
+        }
+        /**
+         * Empty because there is **no update grant at all** on this table
+         * (supabase/02-availability.sql). The row is two columns and both are
+         * the key: changing either one is not an edit, it is a different row.
+         * Editing Availability is `insert` and `delete`.
+         */
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: 'availability_friend_id_fkey'
+            columns: ['friend_id']
+            isOneToOne: false
+            referencedRelation: 'friend'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -69,3 +95,13 @@ export type Friend = Database['public']['Tables']['friend']['Row']
  * has to defend them (supabase/01-friend.sql).
  */
 export type FriendUpdate = Database['public']['Tables']['friend']['Update']
+
+/**
+ * One half hour a Friend is free.
+ *
+ * **Slot rows, not ranges** (ticket 07). A continuous Availability is a run of
+ * adjacent rows, reassembled at render time by `runsOf` — merging does not
+ * exist in the data at all. `CONTEXT.md`'s Availability entry describes the
+ * range model this replaced.
+ */
+export type Availability = Database['public']['Tables']['availability']['Row']

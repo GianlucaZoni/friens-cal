@@ -7,8 +7,7 @@
  * run of adjacent slots put back together *at render time and only there*.
  * Merging does not exist in the data — which is what makes overlap a `group
  * by`, concurrent writes safe, and the ADR-0002 RPC structurally insert-only.
- * `CONTEXT.md`'s Availability entry still describes merging ranges; it is the
- * glossary that is behind, not this.
+ * `CONTEXT.md` calls that run a **run**, and is explicit that it is not a range.
  *
  * **No `@/` imports, deliberately.** These are the claims worth a test, and
  * `slots.test.ts` runs under plain Node (`yarn test`), which cannot resolve the
@@ -30,7 +29,7 @@
 import { TZDate, tzOffset } from '@date-fns/tz'
 import { groupBy, times } from 'lodash-es'
 
-export const SLOT_MINUTES = 30
+const SLOT_MINUTES = 30
 export const SLOT_MS = SLOT_MINUTES * 60_000
 
 /** One row of the grid: half an hour, in the group's time zone. */

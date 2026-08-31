@@ -1,21 +1,36 @@
 import { useSession } from '@/auth/use-session'
-import { mergeSlots, slotKey, startOfDayInZone } from '@/availability/slots'
+import { mergeSlots, slotKey, startOfDayInZone, type SlotRow } from '@/availability/slots'
 import { supabase } from '@/lib/supabase'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type AvailabilityStore = {
   /**
-   * Every slot the store holds, keyed `(friend_id, slot_start)` — the table's
-   * own key (ticket 07), and the key that makes an optimistic row and its
-   * Realtime echo the same row (ticket 19).
+   * Is this Friend free in the slot beginning at this instant?
+   *
+   * The store behind it is keyed `(friend_id, slot_start)` — the table's own
+   * key (ticket 07), and the key that makes an optimistic row and its Realtime
+   * echo the same row rather than two (ticket 19).
    */
-  slots: ReadonlySet<string>
-  /** Is this Friend free in the slot beginning at this instant? */
   isFree: (friendId: string, slotStart: Date) => boolean
   /** `loading` while the range the view is pointed at is still in flight. */
   status: 'loading' | 'ready' | 'error'
 }
+
+/**
+ * PostgREST's page size, and the reason this is not one `select`.
+ *
+ * Supabase caps every response at `db-max-rows`, 1000 by default, and it does
+ * so **silently** — a truncated read is indistinguishable from a Friend who
+ * drew less. Slot rows reach that fast: 1000 rows is 500 hours, so a Friend who
+ * marks eight hours a day crosses it inside four months, and issue 07 multiplies
+ * it by the size of the Group when the `friend_id` filter comes out.
+ *
+ * So the first page IS the one query the issue asks for, and the loop below
+ * only continues when a page comes back full — which, until someone has drawn a
+ * great deal, never happens.
+ */
+const PAGE_SIZE = 1000
 
 /**
  * Everyone's Availability — which, in this slice, is your own.
@@ -90,22 +105,34 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
     if (alreadyRequested !== null && wantedFrom >= alreadyRequested) return
     requestedFrom.current = wantedFrom
 
-    const fromFloor = supabase
-      .from('availability')
-      .select('friend_id, slot_start')
-      // Issue 07 deletes this line and the grid becomes everyone's.
-      .eq('friend_id', userId)
-      .gte('slot_start', new Date(wantedFrom).toISOString())
+    /**
+     * Rebuilt per page rather than held: a PostgREST builder is single-use, and
+     * `range` on a spent one throws rather than paging.
+     */
+    const page = (index: number) => {
+      const query = supabase
+        .from('availability')
+        .select('friend_id, slot_start')
+        // Issue 07 deletes this line and the grid becomes everyone's.
+        .eq('friend_id', userId)
+        .gte('slot_start', new Date(wantedFrom).toISOString())
+        // Ordered because `range` is meaningless over an unordered result:
+        // without it the pages may overlap and miss rows between them.
+        .order('slot_start')
+        .range(index * PAGE_SIZE, index * PAGE_SIZE + PAGE_SIZE - 1)
 
-    void (
-      alreadyRequested === null
-        ? // The first query is unbounded above: today forward, all of it.
-          fromFloor
-        : // Every later one is only the strip the store does not already hold.
-          fromFloor.lt('slot_start', new Date(alreadyRequested).toISOString())
-    ).then(({ data, error }) => {
+      return alreadyRequested === null
+        ? // Unbounded above: today forward, all of it.
+          query
+        : // Only the strip of the past the store does not already hold.
+          query.lt('slot_start', new Date(alreadyRequested).toISOString())
+    }
+
+    void readEveryPage(page).then(({ data, error }) => {
       if (error) {
         // Put the floor back, or this range would never be asked for again.
+        // Nothing re-runs on its own, though — the effect's inputs have not
+        // moved — so the retry happens on the viewer's next navigation.
         requestedFrom.current = alreadyRequested
         console.error('Could not read Availability:', error.message)
         setFailed(true)
@@ -127,7 +154,6 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
   )
 
   return {
-    slots,
     isFree,
     // Derived, never assigned from inside the effect — the shape issue 04 hit
     // with the mini calendar and solved the same way. `loading` therefore also
@@ -139,4 +165,32 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
         ? 'ready'
         : 'loading',
   }
+}
+
+/**
+ * Every page of one range, concatenated.
+ *
+ * A `while` rather than recursion or `reduce`: the page count is not known
+ * before the last short page arrives, so there is nothing to iterate over. The
+ * repo's style rule forbids `for`, `for...of` and `for...in`; this is none of
+ * them.
+ */
+const readEveryPage = async (
+  page: (
+    index: number
+  ) => PromiseLike<{ data: SlotRow[] | null; error: { message: string } | null }>
+): Promise<{ data: SlotRow[]; error: { message: string } | null }> => {
+  const rows: SlotRow[] = []
+  let index = 0
+  let full = true
+
+  while (full) {
+    const { data, error } = await page(index)
+    if (error) return { data: rows, error }
+    rows.push(...(data ?? []))
+    full = (data?.length ?? 0) === PAGE_SIZE
+    index += 1
+  }
+
+  return { data: rows, error: null }
 }

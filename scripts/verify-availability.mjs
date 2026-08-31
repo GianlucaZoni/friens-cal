@@ -198,10 +198,17 @@ if (erased.length !== 2) die(`erasing my own slots removed ${erased.length} rows
 ok('a Friend erases their own Availability')
 
 if (other) {
+  /*
+   * Scoped a year out, on purpose. An unscoped `delete ... eq(friend_id)` would
+   * be the sharper check — but if the policy were ever wrong it would prove it
+   * by destroying somebody's real Availability, and there is no undo in this
+   * product (ticket 01). Everything past this horizon is script-made.
+   */
   const { data: touched, error: otherDeleteErr } = await supabase
     .from('availability')
     .delete()
     .eq('friend_id', other.id)
+    .gte('slot_start', romeAt(364, 0).toISOString())
     .select()
   if (otherDeleteErr) {
     ok(`erasing another Friend's Availability is refused (${otherDeleteErr.code})`)
@@ -209,7 +216,8 @@ if (other) {
     die(`ERASED ANOTHER FRIEND'S AVAILABILITY — the delete policy is wrong`)
   } else {
     ok("erasing another Friend's Availability touches nothing")
-    note('  weaker than check 7: that Friend holds no rows, so there was nothing to spare')
+    note('  a shape check, not a proof: that Friend holds no rows in range to spare.')
+    note('  Check 7 is the conclusive half — the insert is refused outright.')
   }
 }
 

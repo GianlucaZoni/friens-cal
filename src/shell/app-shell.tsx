@@ -43,6 +43,12 @@ export const AppShell = () => {
    * and `identityOf` is the codebase's single predicate for "finished setup".
    * Null renders the lattice with nothing on it, which is the honest picture of
    * a Friend who has no colour yet.
+   *
+   * Read from the session rather than off `roster.friends.find(f => f.isSelf)`,
+   * which holds the same thing. The session provider owns your own row and has
+   * it before the roster query lands; going through the roster would make the
+   * grid's colour wait on a read it otherwise has nothing to do with. It is not
+   * a second read of `friend` either — no query is issued here.
    */
   const { state } = useSession()
   const viewer = useMemo(() => {

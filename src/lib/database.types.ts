@@ -101,7 +101,6 @@ export type FriendUpdate = Database['public']['Tables']['friend']['Update']
  *
  * **Slot rows, not ranges** (ticket 07). A continuous Availability is a run of
  * adjacent rows, reassembled at render time by `runsOf` — merging does not
- * exist in the data at all. `CONTEXT.md`'s Availability entry describes the
- * range model this replaced.
+ * exist in the data at all.
  */
 export type Availability = Database['public']['Tables']['availability']['Row']

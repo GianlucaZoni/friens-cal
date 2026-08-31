@@ -3,8 +3,8 @@ import type { AvailabilityStore } from '@/availability/use-availability'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
-import { useMemo } from 'react'
-import { maxBy } from 'lodash-es'
+import { Fragment, useMemo } from 'react'
+import { groupBy, maxBy } from 'lodash-es'
 import { format, isToday } from 'date-fns'
 
 /**
@@ -17,6 +17,13 @@ import { format, isToday } from 'date-fns'
  * than taller ones — see `slotsOfDay`.
  */
 const SLOT_PX = 20
+
+/**
+ * The hour gutter's width. Named because four places have to agree on it — the
+ * shared gutter, a DST day's own gutter, and the spacer each of those needs in
+ * the header row to keep the columns under their own dates.
+ */
+const GUTTER_W = 'w-10'
 
 /** The signed-in Friend: whose rows these are, and the one colour on the grid. */
 export type Viewer = { id: string; hue: number }
@@ -32,17 +39,20 @@ export type Viewer = { id: string; hue: number }
  * ## The row axis is the time zone's, not 48
  *
  * Each column asks the group time zone how many half hours its day holds, so
- * the autumn Sunday renders 50 rows and the spring one 46 (ticket 07 §5). Two
- * consequences worth naming, because they look like bugs:
+ * the autumn Sunday renders 50 rows and the spring one 46 (ticket 07 §5).
  *
- * 1. **The gutter is the week's longest day**, so no column can run past it. On
- *    the 50 weeks a year where every day is 48 rows it is exactly right for all
- *    seven; on the two DST weeks it is right above the transition and an hour
- *    out below it for the columns that did not transition. That is not a
- *    rendering fault, it is the fact that those seven days genuinely disagree
- *    about what time it is — one shared axis cannot be true for all of them.
- * 2. **The transitioning column is marked in place**, with a chip naming the
- *    hour it lands on, so that column can be read without the gutter at all.
+ * That breaks the one thing a week grid normally takes for granted: **on a DST
+ * week the seven days genuinely disagree about what time it is**, so no single
+ * hour gutter can be true for all of them. Below the transition, one column is
+ * an hour out from the other six whichever axis is picked.
+ *
+ * So the axis is not picked, it is counted. **The shared gutter is the day
+ * length the week agrees on** — unanimous 50 weeks a year, and six-to-one on the
+ * two DST weeks — and **the day that disagrees carries its own gutter**,
+ * immediately to its left. Every column is then labelled correctly, including
+ * the repeated 02:00, which appears twice in that day's own gutter with its UTC
+ * offset beside it. The transitioning column is additionally marked in place
+ * with a chip naming the hour it lands on.
  *
  * The alternative — one wall-clock axis for the week — would need rows of
  * unequal duration, and equal duration is what makes a block's height mean
@@ -62,28 +72,43 @@ export const WeekGrid = ({
     [days]
   )
 
-  const gutter = maxBy(columns, (column) => column.slots.length)?.slots ?? []
+  /**
+   * The day length most of the week shares — its modal row count, not its
+   * longest. On a DST week that is six columns against one, so the shared
+   * gutter is right for six of them and the odd one out gets its own.
+   */
+  const shared = useMemo(() => {
+    const byLength = groupBy(columns, (column) => column.slots.length)
+    return maxBy(Object.values(byLength), (group) => group.length)?.[0]?.slots ?? []
+  }, [columns])
+
+  /** Does this day disagree with the rest of the week about how long it is? */
+  const disagrees = (slots: Slot[]) => slots.length !== shared.length
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 border-b">
         {/* The gutter's width, so the columns line up with their headers. */}
         <LoadState status={availability.status} />
-        {days.map((day) => (
-          <div
-            key={day.toISOString()}
-            className={cn(
-              'flex-1 border-l py-1.5 text-center text-[11px] font-medium tabular-nums',
-              isToday(day) ? 'text-foreground' : 'text-muted-foreground'
-            )}
-          >
-            {/*
-              "the date number after the three-letter weekday" (ticket 12
-              decision 6), at every width. The bar's label is month and year
-              only, so this is the only place day-level precision lives.
-            */}
-            {format(day, 'EEE d')}
-          </div>
+        {columns.map(({ day, slots }) => (
+          <Fragment key={day.toISOString()}>
+            {/* Reserves the width of that day's own gutter, so its date stays
+                over its column rather than sliding one gutter to the left. */}
+            {disagrees(slots) ? <div className={cn(GUTTER_W, 'shrink-0')} /> : null}
+            <div
+              className={cn(
+                'flex-1 border-l py-1.5 text-center text-[11px] font-medium tabular-nums',
+                isToday(day) ? 'text-foreground' : 'text-muted-foreground'
+              )}
+            >
+              {/*
+                "the date number after the three-letter weekday" (ticket 12
+                decision 6), at every width. The bar's label is month and year
+                only, so this is the only place day-level precision lives.
+              */}
+              {format(day, 'EEE d')}
+            </div>
+          </Fragment>
         ))}
       </div>
 
@@ -99,16 +124,13 @@ export const WeekGrid = ({
         simply leaves its last rows empty.
       */}
       <div className="flex min-h-0 flex-1 items-start overflow-auto">
-        <Gutter slots={gutter} />
-        <div className="flex flex-1">
+        <Gutter slots={shared} />
+        <div className="flex flex-1 items-start">
           {columns.map(({ day, slots }) => (
-            <DayColumn
-              key={day.toISOString()}
-              day={day}
-              slots={slots}
-              isFree={availability.isFree}
-              viewer={viewer}
-            />
+            <Fragment key={day.toISOString()}>
+              {disagrees(slots) ? <Gutter slots={slots} /> : null}
+              <DayColumn day={day} slots={slots} isFree={availability.isFree} viewer={viewer} />
+            </Fragment>
           ))}
         </div>
       </div>
@@ -151,7 +173,7 @@ const LoadState = ({ status }: { status: AvailabilityStore['status'] }) => {
 }
 
 const Gutter = ({ slots }: { slots: Slot[] }) => (
-  <div className="w-10 shrink-0">
+  <div className={cn(GUTTER_W, 'shrink-0')}>
     {slots.map((slot) => (
       <div
         key={slot.start.getTime()}

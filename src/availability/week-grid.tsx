@@ -1,20 +1,27 @@
+import { SlotPopover } from '@/availability/slot-popover'
 import { runsOf, slotsOfDay, type Slot } from '@/availability/slots'
 import type { AvailabilityStore } from '@/availability/use-availability'
+import { draftCell, useDrawGesture } from '@/availability/use-draw-gesture'
+import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
-import { Fragment, useMemo } from 'react'
+import { Fragment, useCallback, useMemo, useRef } from 'react'
 import { groupBy, maxBy } from 'lodash-es'
 import { format, isToday } from 'date-fns'
 
 /**
  * Half an hour, in pixels. The hour is 40px, which is what the shell's lattice
- * was — this slice halves the row, it does not change the density.
+ * was — issue 05 halved the row, it did not change the density.
  *
- * One constant, because issue 06 maps pixels back to slots with it: a drag's
- * offset divided by this is a slot index, and that is only true while every
- * row is the same height. Which is also why the DST day gets *more rows* rather
- * than taller ones — see `slotsOfDay`.
+ * One constant, because a drag maps pixels back to slots with it: an offset
+ * divided by this is a slot index, and that is only true while every row is the
+ * same height. Which is also why the DST day gets *more rows* rather than taller
+ * ones — see `slotsOfDay`.
+ *
+ * The gesture itself divides by each column's measured height rather than by
+ * this, so that the arithmetic stays right for the column that holds 46 or 50 of
+ * them; this is the number the rows are *drawn* at.
  */
 const SLOT_PX = 20
 
@@ -30,11 +37,11 @@ export type Viewer = { id: string; hue: number }
 
 /**
  * The centre column: seven days of 30-minute rows, with your own Availability
- * drawn on them.
+ * drawn on them and drawn *into*.
  *
- * Read path only. There is not a single pointer handler in this file — drawing
- * and erasing are issue 06, everyone else's Availability and the heatmap are
- * issue 07.
+ * Issue 05 built the read path; issue 06 adds the pointer. The state machine
+ * behind it is `useDrawGesture` and the geometry behind that is `gesture.ts` —
+ * this file owns pixels, and only pixels.
  *
  * ## The row axis is the time zone's, not 48
  *
@@ -56,21 +63,36 @@ export type Viewer = { id: string; hue: number }
  *
  * The alternative — one wall-clock axis for the week — would need rows of
  * unequal duration, and equal duration is what makes a block's height mean
- * something and issue 06's pixel arithmetic honest.
+ * something and the drag's pixel arithmetic honest.
+ *
+ * **And it is why hit-testing asks the elements.** That extra gutter makes the
+ * columns unevenly spaced, so `x / columnWidth` is a column out from it
+ * rightwards — correct 50 weeks a year, which is the worst kind of wrong. Each
+ * column therefore carries `data-column` and the gesture reads their rects.
  */
 export const WeekGrid = ({
   days,
   availability,
   viewer,
+  tools,
 }: {
   days: Date[]
   availability: AvailabilityStore
   viewer: Viewer | null
+  tools: DrawingTools
 }) => {
   const columns = useMemo(
     () => days.map((day) => ({ day, slots: slotsOfDay(day, GROUP_TIME_ZONE) })),
     [days]
   )
+
+  /**
+   * The element the gesture hit-tests against. Created here so the ref travels
+   * from `useRef` straight into a `ref=`, which is the only shape
+   * `eslint-plugin-react-hooks` will believe is not a read during render.
+   */
+  const body = useRef<HTMLDivElement | null>(null)
+  const drawing = useDrawGesture({ columns, tools, availability, viewer, body })
 
   /**
    * The day length most of the week shares — its modal row count, not its
@@ -99,7 +121,7 @@ export const WeekGrid = ({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 border-b">
         {/* The gutter's width, so the columns line up with their headers. */}
-        <LoadState status={availability.status} />
+        <LoadState status={availability.status} saving={availability.saving} />
         {laidOut.map(({ day, ownGutter }) => (
           <Fragment key={day.toISOString()}>
             {/* Reserves the width of that day's own gutter, so its date stays
@@ -137,16 +159,36 @@ export const WeekGrid = ({
       */}
       <div className="flex min-h-0 flex-1 items-start overflow-auto">
         <Gutter slots={shared} />
-        <div className="flex flex-1 items-start">
-          {laidOut.map(({ day, slots, ownGutter }) => (
+        {/*
+          Move, up and cancel live here rather than on each column, because a
+          drag is captured by the column it began on and every later event
+          retargets to it — so they arrive here by bubbling however far the
+          pointer has since travelled, including outside the window.
+
+          `select-none` stops the browser from painting a text selection across
+          the hour labels while a drag is in flight; `cursor-copy` is the whole
+          of the feedback that a duplicate is armed and waiting for somewhere to
+          land.
+        */}
+        <div
+          ref={body}
+          className={cn('flex flex-1 items-start select-none', drawing.placing && 'cursor-copy')}
+          onPointerMove={drawing.onPointerMove}
+          onPointerUp={drawing.onPointerUp}
+          onPointerCancel={drawing.onPointerCancel}
+          onClick={drawing.onClick}
+        >
+          {laidOut.map(({ day, slots, ownGutter }, index) => (
             <Fragment key={day.toISOString()}>
               {ownGutter ? <Gutter slots={slots} className="border-l" /> : null}
               <DayColumn
+                index={index}
                 day={day}
                 slots={slots}
-                isFree={availability.isFree}
+                availability={availability}
                 viewer={viewer}
                 opensWithGutter={ownGutter}
+                drawing={drawing}
               />
             </Fragment>
           ))}
@@ -163,10 +205,27 @@ export const WeekGrid = ({
  * `loading` covers a backwards navigation as well as the first read: a past
  * week whose rows have not arrived looks exactly like a week you drew nothing
  * in, and this is the only thing that tells them apart.
+ *
+ * It shows `saving` too, and that is deliberate rather than convenient. Ticket
+ * 19 forbids a pending treatment *on the blocks* — ticket 15 spent opacity on
+ * how many Friends are free, so a faded block would read as "fewer people" —
+ * and asks for a channel the grid does not own. The top bar carries the words;
+ * this dot is the same fact where the eye already is, and it never touches a
+ * block.
  */
-const LoadState = ({ status }: { status: AvailabilityStore['status'] }) => {
+const LoadState = ({
+  status,
+  saving,
+}: {
+  status: AvailabilityStore['status']
+  saving: boolean
+}) => {
   const message =
-    status === 'error' ? 'Could not load your Availability' : 'Loading your Availability'
+    status === 'error'
+      ? 'Could not load your Availability'
+      : status === 'loading'
+        ? 'Loading your Availability'
+        : 'Saving'
 
   return (
     <div
@@ -174,7 +233,7 @@ const LoadState = ({ status }: { status: AvailabilityStore['status'] }) => {
       role="status"
       aria-live="polite"
     >
-      {status === 'ready' ? null : (
+      {status === 'ready' && !saving ? null : (
         <>
           <span
             title={message}
@@ -217,31 +276,74 @@ const Gutter = ({ slots, className }: { slots: Slot[]; className?: string }) => 
   </div>
 )
 
+/** The wall clock a Slot ends at — `24:00` at the end of the day. */
+const endOf = (slots: Slot[], row: number): string => slots[row + 1]?.label ?? '24:00'
+
 const DayColumn = ({
+  index,
   day,
   slots,
-  isFree,
+  availability,
   viewer,
   opensWithGutter,
+  drawing,
 }: {
+  /** Its position in the week, which is the identity the gesture addresses it by. */
+  index: number
   day: Date
   slots: Slot[]
-  isFree: AvailabilityStore['isFree']
+  availability: AvailabilityStore
   viewer: Viewer | null
   /** Its own gutter is immediately to the left, and carries the day separator. */
   opensWithGutter: boolean
+  drawing: ReturnType<typeof useDrawGesture>
 }) => {
-  /**
-   * Adjacent held slots, put back together into one block.
-   *
-   * This is the whole of what ticket 07 traded the stored range for: merging
-   * happens here, at render time, over indices, and nowhere else.
-   */
-  const runs = useMemo(
-    () =>
-      viewer === null ? [] : runsOf(slots.length, (index) => isFree(viewer.id, slots[index].start)),
-    [slots, isFree, viewer]
+  const { draft } = drawing
+  const inDraft = useCallback(
+    (row: number) => draft?.cells.has(draftCell(index, row)) ?? false,
+    [draft, index]
   )
+
+  /**
+   * Adjacent held slots, put back together into one block — **including whatever
+   * the gesture in flight is contributing**.
+   *
+   * This is where ticket 07's traded-away range comes back, and it is also the
+   * whole of the live merging feedback: with `08:00–22:00` committed, drawing
+   * `06:00→07:59` shows one `06:00–22:00` block *mid-drag*, and releasing just
+   * commits what you are already looking at. An erase draft subtracts here for
+   * the same reason, so the hole opens under the pointer rather than on release.
+   */
+  const runs = useMemo(() => {
+    if (viewer === null) return []
+    return runsOf(slots.length, (row) => {
+      const held = availability.isFree(viewer.id, slots[row].start)
+      if (draft === null || draft.kind === 'duplicate') return held
+      return draft.kind === 'erase' ? held && !inDraft(row) : held || inDraft(row)
+    })
+  }, [slots, availability, viewer, draft, inDraft])
+
+  /**
+   * This gesture's own contribution, over the top of the union above.
+   *
+   * Both at once was the prototype's finding: the solid outline says what the
+   * block will be and the dashed one says which part of it you are drawing.
+   */
+  const draftRuns = useMemo(
+    () => (draft === null ? [] : runsOf(slots.length, inDraft)),
+    [draft, slots.length, inDraft]
+  )
+
+  /** A duplicate's original, which stays where it is and reads as a source. */
+  const sourceRuns = useMemo(
+    () =>
+      draft === null || draft.source.size === 0
+        ? []
+        : runsOf(slots.length, (row) => draft.source.has(draftCell(index, row))),
+    [draft, slots.length, index]
+  )
+
+  const popover = drawing.popover?.column === index ? drawing.popover.row : null
 
   return (
     /*
@@ -251,15 +353,19 @@ const DayColumn = ({
       then steals a pixel from each of them and slides every column out from
       under its own date.
     */
-    <div className={cn('relative min-w-0 flex-1', opensWithGutter || 'border-l')}>
-      {slots.map((slot, index) => (
+    <div
+      data-column={index}
+      className={cn('relative min-w-0 flex-1', opensWithGutter || 'border-l')}
+      onPointerDown={(event) => drawing.onPointerDown(event, index)}
+    >
+      {slots.map((slot, row) => (
         <div
           key={slot.start.getTime()}
           style={{ height: SLOT_PX }}
           className={cn(
             'relative flex justify-center',
-            index === 0 && 'border-t-0',
-            index > 0 && 'border-t',
+            row === 0 && 'border-t-0',
+            row > 0 && 'border-t',
             slot.shiftsClock
               ? 'border-dashed border-muted-foreground/45'
               : slot.opensHour
@@ -272,7 +378,7 @@ const DayColumn = ({
               a 25-hour one just stops, and reads as unfinished rather than
               over.
             */
-            index === slots.length - 1 && 'border-b border-b-border/60'
+            row === slots.length - 1 && 'border-b border-b-border/60'
           )}
         >
           {slot.shiftsClock ? <ClockShift slot={slot} /> : null}
@@ -285,9 +391,10 @@ const DayColumn = ({
             <div
               key={run.start}
               role="img"
-              aria-label={`You are free ${slots[run.start].label} to ${
-                slots[run.start + run.length]?.label ?? '24:00'
-              } on ${format(day, 'EEEE d MMMM')}`}
+              aria-label={`You are free ${slots[run.start].label} to ${endOf(
+                slots,
+                run.start + run.length - 1
+              )} on ${format(day, 'EEEE d MMMM')}`}
               /*
                 Border and ring, never a solid fill (ticket 15). Your own block
                 used to be solid and on top, which covered precisely the thing
@@ -295,7 +402,7 @@ const DayColumn = ({
                 care who else is. Issue 07 fills the middle with the density of
                 everyone else, straight through this outline.
 
-                `pointer-events-none` because issue 06 owns every pointer on
+                `pointer-events-none` because the gesture owns every pointer on
                 this grid, and a drag begun on your own Availability must reach
                 the column beneath, not stop on a div with no handler.
               */
@@ -308,9 +415,102 @@ const DayColumn = ({
               }}
             />
           ))}
+
+      {sourceRuns.map((run) => (
+        <div
+          key={`source-${run.start}`}
+          className="pointer-events-none absolute inset-x-[3px] rounded-[3px] border border-dashed border-muted-foreground/60"
+          style={{ top: run.start * SLOT_PX, height: run.length * SLOT_PX }}
+        />
+      ))}
+
+      {draft === null
+        ? null
+        : draftRuns.map((run) => (
+            <DraftRun
+              key={`draft-${run.start}`}
+              erasing={draft.kind === 'erase'}
+              hue={viewer?.hue ?? 0}
+              from={slots[run.start].label}
+              to={endOf(slots, run.start + run.length - 1)}
+              top={run.start * SLOT_PX}
+              height={run.length * SLOT_PX}
+            />
+          ))}
+
+      {popover === null || viewer === null ? null : (
+        <SlotPopover
+          day={day}
+          slot={slots[popover]}
+          end={endOf(slots, popover)}
+          top={popover * SLOT_PX}
+          height={SLOT_PX}
+          held={availability.isFree(viewer.id, slots[popover].start)}
+          onClose={drawing.closePopover}
+          onDraw={() => {
+            availability.draw([slots[popover].start])
+            drawing.closePopover()
+          }}
+          onErase={() => {
+            availability.erase(
+              drawing.instantsOf(drawing.runUnder({ column: index, row: popover }))
+            )
+            drawing.closePopover()
+          }}
+          onDuplicate={() =>
+            drawing.armDuplicate(drawing.runUnder({ column: index, row: popover }).length)
+          }
+        />
+      )}
     </div>
   )
 }
+
+/**
+ * The gesture's own contribution, and what time it says.
+ *
+ * A dashed outline and **no fill**: opacity in this grid means *how many
+ * Friends are free* (ticket 15), and issue 07 has not spent it yet. A wash here
+ * would be the one channel the draft is not allowed to borrow.
+ *
+ * The time tag is ticket 10's, ported from touch: mid-gesture it is worth more
+ * than the toolbar's state, because it says what you have actually drawn rather
+ * than what mode you are in. Inside the run rather than above it — the grid is a
+ * scroller, and a tag hanging off the top of the first row would be clipped by
+ * it.
+ */
+const DraftRun = ({
+  erasing,
+  hue,
+  from,
+  to,
+  top,
+  height,
+}: {
+  erasing: boolean
+  hue: number
+  from: string
+  to: string
+  top: number
+  height: number
+}) => (
+  <div
+    className={cn(
+      'pointer-events-none absolute inset-x-[3px] overflow-hidden rounded-[3px] border border-dashed',
+      erasing && 'border-destructive'
+    )}
+    style={{ top, height, ...(erasing ? {} : { borderColor: friendColour(hue) }) }}
+  >
+    <span
+      className={cn(
+        'absolute inset-x-0 top-0 truncate px-0.5 text-center text-[9px] leading-[11px] font-medium tabular-nums',
+        erasing ? 'text-destructive' : 'text-foreground/70'
+      )}
+    >
+      {from}–{to}
+    </span>
+  </div>
+)
 
 /**
  * The row where the clocks moved, named in place.
@@ -330,6 +530,11 @@ const ClockShift = ({ slot }: { slot: Slot }) => (
       Absolutely positioned so it contributes no width at all — in flow it
       would be the widest thing in the column and set a min-content floor no
       other column has. See `min-w-0` on the column.
+
+      It keeps its pointer events, unlike the Availability blocks: it is the only
+      thing on the grid with something to say on hover, and a `title` needs them.
+      A press on it still reaches the drag — the gesture's handler is on the
+      column and the event bubbles there.
     */
     className="pointer-events-auto absolute left-1/2 top-0 -translate-x-1/2 whitespace-nowrap rounded-b-sm bg-muted px-1 text-[8px] leading-[11px] tabular-nums text-muted-foreground"
   >

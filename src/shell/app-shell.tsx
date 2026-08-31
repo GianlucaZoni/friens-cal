@@ -1,9 +1,12 @@
 import { useSession } from '@/auth/use-session'
 import { useAvailability } from '@/availability/use-availability'
+import { useDrawingTools } from '@/availability/use-drawing-tools'
+import { Toaster } from '@/components/ui/toast'
 import { identityOf } from '@/identity/friend-row'
 import { useRoster } from '@/roster/use-roster'
 import { Calendar } from '@/shell/calendar'
 import { LeftPane } from '@/shell/left-pane'
+import { OfflineBanner } from '@/shell/offline-banner'
 import { RightPane } from '@/shell/right-pane'
 import { AppShellProvider, ShellInset, ShellSidebar } from '@/shell/shell'
 import { TopBar } from '@/shell/top-bar'
@@ -21,19 +24,24 @@ import { useMemo } from 'react'
  * Below 768px both panes leave the flow and become one sheet at a time; see
  * `shell.tsx`, which owns that invariant.
  *
- * The three pieces of view state the whole app reads sit here, one hook each,
+ * The four pieces of view state the whole app reads sit here, one hook each,
  * and travel by prop: where the calendar is pointed, which Friends are Hidden,
- * and everyone's Availability. The roster is here rather than inside the left
- * pane because Hidden is a query tool — issue 07's heatmap and issue 08's
- * Candidate list are computed over `roster.visible`, and neither of them is in
- * the sidebar. Availability is here for the same reason twice over: issue 06
- * writes into it from the grid and issue 08 computes Candidates from it in the
- * right pane.
+ * everyone's Availability, and what a drag on the grid means. The roster is here
+ * rather than inside the left pane because Hidden is a query tool — issue 07's
+ * heatmap and issue 08's Candidate list are computed over `roster.visible`, and
+ * neither of them is in the sidebar. Availability is here for the same reason
+ * twice over: issue 06 writes into it from the grid and issue 08 computes
+ * Candidates from it in the right pane.
+ *
+ * The drawing tools are here because they are **split across two columns**:
+ * ticket 01 put the "Drawing mode:" tabbar and the erase toggle in the left
+ * pane, and the grid they govern is in the centre.
  */
 export const AppShell = () => {
   const calendar = useCalendarView()
   const roster = useRoster()
   const availability = useAvailability(calendar.days)
+  const tools = useDrawingTools()
 
   /**
    * Whose Availability the grid draws, and the one colour it draws in.
@@ -59,16 +67,26 @@ export const AppShell = () => {
 
   return (
     <AppShellProvider>
+      {/*
+        Above the columns, so it is a fact about the app rather than about the
+        calendar — see `OfflineBanner`.
+      */}
+      <OfflineBanner />
       <div className="flex min-h-0 flex-1">
         <ShellSidebar side="left">
-          <LeftPane calendar={calendar} roster={roster} />
+          <LeftPane calendar={calendar} roster={roster} tools={tools} />
         </ShellSidebar>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar calendar={calendar} />
+          <TopBar calendar={calendar} saving={availability.saving} />
           <div className="flex min-h-0 flex-1">
             <ShellInset>
-              <Calendar calendar={calendar} availability={availability} viewer={viewer} />
+              <Calendar
+                calendar={calendar}
+                availability={availability}
+                viewer={viewer}
+                tools={tools}
+              />
             </ShellInset>
             <ShellSidebar side="right">
               <RightPane />
@@ -76,6 +94,13 @@ export const AppShell = () => {
           </div>
         </div>
       </div>
+
+      {/*
+        One `Toaster` for the app. The manager it renders is the module-level one
+        in `toast-manager.ts`, so `useAvailability` can raise a failed write from
+        outside this tree — which it is, being a hook rather than a component.
+      */}
+      <Toaster />
     </AppShellProvider>
   )
 }

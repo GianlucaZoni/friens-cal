@@ -82,22 +82,34 @@ export const WeekGrid = ({
     return maxBy(Object.values(byLength), (group) => group.length)?.[0]?.slots ?? []
   }, [columns])
 
-  /** Does this day disagree with the rest of the week about how long it is? */
-  const disagrees = (slots: Slot[]) => slots.length !== shared.length
+  /**
+   * The day that disagrees with the rest of the week opens with its own gutter,
+   * and **the day separator moves to the gutter's left edge** — so the time
+   * column reads as belonging to the day it labels rather than to the day
+   * before it. That day's column therefore carries no left border of its own;
+   * there is one line between two days, and it is in front of both of them.
+   */
+  const laidOut = useMemo(
+    () =>
+      columns.map((column) => ({ ...column, ownGutter: column.slots.length !== shared.length })),
+    [columns, shared]
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 border-b">
         {/* The gutter's width, so the columns line up with their headers. */}
         <LoadState status={availability.status} />
-        {columns.map(({ day, slots }) => (
+        {laidOut.map(({ day, ownGutter }) => (
           <Fragment key={day.toISOString()}>
             {/* Reserves the width of that day's own gutter, so its date stays
-                over its column rather than sliding one gutter to the left. */}
-            {disagrees(slots) ? <div className={cn(GUTTER_W, 'shrink-0')} /> : null}
+                over its column rather than sliding one gutter to the left —
+                and carries the day separator, as the body's gutter does. */}
+            {ownGutter ? <div className={cn(GUTTER_W, 'shrink-0 border-l')} /> : null}
             <div
               className={cn(
-                'flex-1 border-l py-1.5 text-center text-[11px] font-medium tabular-nums',
+                'flex-1 py-1.5 text-center text-[11px] font-medium tabular-nums',
+                ownGutter || 'border-l',
                 isToday(day) ? 'text-foreground' : 'text-muted-foreground'
               )}
             >
@@ -126,10 +138,16 @@ export const WeekGrid = ({
       <div className="flex min-h-0 flex-1 items-start overflow-auto">
         <Gutter slots={shared} />
         <div className="flex flex-1 items-start">
-          {columns.map(({ day, slots }) => (
+          {laidOut.map(({ day, slots, ownGutter }) => (
             <Fragment key={day.toISOString()}>
-              {disagrees(slots) ? <Gutter slots={slots} /> : null}
-              <DayColumn day={day} slots={slots} isFree={availability.isFree} viewer={viewer} />
+              {ownGutter ? <Gutter slots={slots} className="border-l" /> : null}
+              <DayColumn
+                day={day}
+                slots={slots}
+                isFree={availability.isFree}
+                viewer={viewer}
+                opensWithGutter={ownGutter}
+              />
             </Fragment>
           ))}
         </div>
@@ -172,8 +190,8 @@ const LoadState = ({ status }: { status: AvailabilityStore['status'] }) => {
   )
 }
 
-const Gutter = ({ slots }: { slots: Slot[] }) => (
-  <div className={cn(GUTTER_W, 'shrink-0')}>
+const Gutter = ({ slots, className }: { slots: Slot[]; className?: string }) => (
+  <div className={cn(GUTTER_W, 'shrink-0', className)}>
     {slots.map((slot) => (
       <div
         key={slot.start.getTime()}
@@ -204,11 +222,14 @@ const DayColumn = ({
   slots,
   isFree,
   viewer,
+  opensWithGutter,
 }: {
   day: Date
   slots: Slot[]
   isFree: AvailabilityStore['isFree']
   viewer: Viewer | null
+  /** Its own gutter is immediately to the left, and carries the day separator. */
+  opensWithGutter: boolean
 }) => {
   /**
    * Adjacent held slots, put back together into one block.
@@ -223,20 +244,35 @@ const DayColumn = ({
   )
 
   return (
-    <div className="relative flex-1 border-l">
+    /*
+      `min-w-0` so the column can shrink with its siblings. Without it a flex
+      item cannot go below its own min-content width, and the DST day's chip
+      gives this one a floor the other six do not have — at a narrow grid it
+      then steals a pixel from each of them and slides every column out from
+      under its own date.
+    */
+    <div className={cn('relative min-w-0 flex-1', opensWithGutter || 'border-l')}>
       {slots.map((slot, index) => (
         <div
           key={slot.start.getTime()}
           style={{ height: SLOT_PX }}
           className={cn(
-            'flex justify-center',
+            'relative flex justify-center',
             index === 0 && 'border-t-0',
             index > 0 && 'border-t',
             slot.shiftsClock
               ? 'border-dashed border-muted-foreground/45'
               : slot.opensHour
                 ? 'border-border/60'
-                : 'border-border/25'
+                : 'border-border/25',
+            /*
+              Closes the day at its own last row rather than at the bottom of
+              the box, which on a DST week is 40px lower — the column is
+              stretched to the week's tallest. Without it a 24-hour day beside
+              a 25-hour one just stops, and reads as unfinished rather than
+              over.
+            */
+            index === slots.length - 1 && 'border-b border-b-border/60'
           )}
         >
           {slot.shiftsClock ? <ClockShift slot={slot} /> : null}
@@ -290,7 +326,12 @@ const ClockShift = ({ slot }: { slot: Slot }) => (
         ? `The clocks go forward here — ${slot.label} follows 01:30, and the hour between them does not exist`
         : `The clocks go back here — this is the second ${slot.label} of the day`
     }
-    className="rounded-b-sm bg-muted px-1 text-[8px] leading-[11px] tabular-nums text-muted-foreground"
+    /*
+      Absolutely positioned so it contributes no width at all — in flow it
+      would be the widest thing in the column and set a min-content floor no
+      other column has. See `min-w-0` on the column.
+    */
+    className="pointer-events-auto absolute left-1/2 top-0 -translate-x-1/2 whitespace-nowrap rounded-b-sm bg-muted px-1 text-[8px] leading-[11px] tabular-nums text-muted-foreground"
   >
     {slot.label}
     {slot.offset}

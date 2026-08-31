@@ -1,6 +1,6 @@
 # 05 — The week grid renders your Availability
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 02
 
 ## Parent
@@ -39,15 +39,15 @@ store, and excluded from Candidate computation by date.
 
 ## Acceptance criteria
 
-- [ ] `availability` table with the unique constraint and index above
-- [ ] `revoke all` + explicit grants, and RLS: a Friend reads all rows, and
+- [x] `availability` table with the unique constraint and index above
+- [x] `revoke all` + explicit grants, and RLS: a Friend reads all rows, and
       inserts/deletes **only their own** — the `with check` on any update policy
       is load-bearing, or a Friend could reassign `friend_id`
 - [x] Week grid renders 30-minute rows for seven day columns
 - [x] Row count is derived from the time zone: 46 rows on the March DST day, 50
       on the October one, with the repeated hour distinguishable
-- [ ] Your own Availability renders from real rows
-- [ ] Today-forward Availability loads in one query; navigating backwards fetches
+- [x] Your own Availability renders from real rows
+- [x] Today-forward Availability loads in one query; navigating backwards fetches
       past ranges on demand into the same store
 - [x] Prev/next and Today from the top bar move the view
 - [x] `npx tsc -p tsconfig.app.json --noEmit` is clean
@@ -58,9 +58,8 @@ store, and excluded from Candidate computation by date.
 
 ## Comments
 
-**Built on `feat/05-week-grid`.** Two commits: the slice, then the two-axis
-review applied. **The database half is not done** — see "What is waiting on you"
-at the bottom.
+**Built on `feat/05-week-grid`.** The slice, the two-axis review applied, then
+the database half and the DST boundaries. All eight criteria met.
 
 ### The slot row generator is the tested seam, and it was written first
 
@@ -214,7 +213,81 @@ classic rather than overlay scrollbars they would be offset from the columns by
 the scrollbar's width. Pre-existing in the stub, invisible on macOS, and
 properly issue 12's to settle.
 
-### What is waiting on you
+### Closed — the database half ran
+
+The human applied `supabase/02-availability.sql`.
+`scripts/verify-availability.mjs` then passed every check against the live
+project:
+
+```
+✓ anonymous read of `availability` is refused
+✓ a Friend reads `availability` unfiltered
+✓ a Friend inserts their own Availability
+✓ the same slot twice is refused by the key (23505)
+✓ a different slot for the same Friend is a different row
+✓ re-drawing slots you already hold is a no-op, so a retry is idempotent
+✓ inserting another Friend's Availability is refused (42501)
+✓ updating `availability` is refused (42501)
+✓ a Friend erases their own Availability
+✓ erasing another Friend's Availability touches nothing
+```
+
+Three of those are the ones worth having. **`23505`** is the key refusing a
+duplicate, which is what ticket 07 bought the whole slot-row model for.
+**`42501` on insert** is the `with check` refusing to let one Friend paint
+another's calendar — the conclusive half of "inserts only their own".
+**`42501` on update** is a grant that was never given, so RLS never has to
+defend `friend_id` at all.
+
+The index is the one thing a publishable key cannot see; confirm it in the SQL
+Editor with `select indexdef from pg_indexes where tablename = 'availability'`.
+
+### Then the read path, against those rows
+
+The script seeds three runs through the client and leaves them. In the browser,
+signed in:
+
+- today's **18:00–22:00** renders at `top: 720px, height: 160px` and the
+  **10:00–13:00** two days out at `400px / 120px` — exactly the seeded slots,
+  reassembled into runs;
+- the week-ago **20:00–22:00** is **not** there, because it sits below the boot
+  floor;
+- pressing `‹` flips the corner dot to *Loading your Availability*, and then
+  **Mon 24 Aug 20:00–22:00** appears — the past range fetched on demand;
+- pressing `›` back needs no refetch, and both of the current week's runs are
+  still there, which is the merge rather than a replace.
+
+### The DST boundaries, after seeing it on screen
+
+Three changes the human asked for once the two gutters were real:
+
+1. **The day separator moved in front of the time column.** It was on the day's
+   column, which put the line to the *right* of that day's own gutter and made
+   the gutter look like it belonged to the day before. The gutter now carries
+   the separator and the column carries none — one line between two days, in
+   front of both.
+2. **The header spacer carries it too**, so the line runs unbroken from the
+   dates down through the grid.
+3. **Each day closes with a bottom line at its own last row**, not at the bottom
+   of its box — which on a DST week is 40px away, since every column is
+   stretched to the week's tallest. A 24-hour day beside a 25-hour one used to
+   just stop.
+
+Measured (`|` is a left border): October is
+`col48| col48| col48| col48| col48| col48| gut50| col50`, March is
+`… gut46| col46`, an ordinary week is seven bordered columns and no second
+gutter. Closing lines land at 352px and 392px on both DST weeks — the 40px
+apart they should be, in opposite directions — and at one shared 392px on an
+ordinary week.
+
+**And one real bug that only showed at narrow width.** The `ClockShift` chip was
+in flow, so it set a min-content floor on the DST column that no other column
+had: with both sidebars open the column pinned to 41.3px while its siblings
+shrank to 34.8px, and every column slid a further pixel out from under its own
+date. The chip is now absolutely positioned and the column is `min-w-0`. Header
+offsets are 0px on all three week shapes, at 330px and at full width.
+
+### Superseded — what was waiting
 
 `npx tsc -b` is clean for all three projects, 46 tests pass, and lint is
 unchanged at the 9 errors already on `main` (all in `src/components/ui/*` and
@@ -235,5 +308,5 @@ Availability through the client** and leaves them — including one a week in th
 past, which sits below the store's boot floor, so it only appears once you
 navigate to the previous week. That is the on-demand past fetch made visible.
 
-The last four criteria are ticked when that script runs green, and the issue is
-`resolved` then and not before.
+Both steps are done, the script ran green, and the last four criteria are
+ticked.

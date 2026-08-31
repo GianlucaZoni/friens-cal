@@ -14,8 +14,13 @@ export type RosterEntry = {
   id: string
   /** Already resolved for display — never a null column. */
   name: string
-  /** Has this Friend been through setup? */
-  complete: boolean
+  /**
+   * Null when this Friend has not finished setup. Structural on purpose: this
+   * module cannot import `Identity` and does not need to — the roster's one
+   * predicate for "unfinished" is that there is no identity, and stating it
+   * once here is what keeps the order and the rendering from disagreeing.
+   */
+  identity: object | null
 }
 
 /**
@@ -33,7 +38,7 @@ export const rosterOrder = <T extends RosterEntry>(entries: readonly T[]): T[] =
   // state held elsewhere.
   [...entries].sort(
     (a, b) =>
-      Number(b.complete) - Number(a.complete) ||
+      Number(a.identity === null) - Number(b.identity === null) ||
       a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) ||
       // Two Friends may share a display name. Without this the comparator
       // returns 0 and the order is whatever the engine's sort did last.

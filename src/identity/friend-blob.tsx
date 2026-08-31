@@ -37,9 +37,11 @@ export const FriendBlob = ({
   /** `xl` is the setup and customisation preview; `sm` is a roster row. */
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   /**
-   * `always`, when set. Reserved for the two avatars ticket 18 names — the
-   * customisation preview and the top-right cluster — because a static blobatar
-   * is one `<img>` and an animated one is a dozen SVG nodes.
+   * `always`, when set. Sparingly, because a static blobatar is one `<img>` and
+   * an animated one is a dozen SVG nodes: the two avatars ticket 18 names — the
+   * customisation preview and the top-right cluster — and the roster rows,
+   * which ticket 12 decision 9 animates while the cursor is over the sidebar
+   * and so pass this as a *changing* value rather than a constant.
    */
   animate?: boolean
   /**

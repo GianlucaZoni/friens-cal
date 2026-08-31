@@ -13,7 +13,12 @@ import { mergeSelf, rosterOrder, toggled, withoutHidden } from './roster.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const entry = (id: string, name: string, complete = true) => ({ id, name, complete })
+const entry = (id: string, name: string, complete = true) => ({
+  id,
+  name,
+  // Any object stands for a finished identity; only null/not-null is read.
+  identity: complete ? {} : null,
+})
 
 /* ================================================================== *
  * Order

@@ -1,5 +1,5 @@
 import { useSession } from '@/auth/use-session'
-import { identityOf, isSetupComplete } from '@/identity/friend-row'
+import { identityOf } from '@/identity/friend-row'
 import type { Identity } from '@/identity/identity'
 import type { Friend } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
@@ -100,8 +100,9 @@ export const useRoster = (): RosterState => {
         mergeSelf(rows ?? [], self).map((row) => ({
           id: row.id,
           name: row.display_name?.trim() || UNNAMED,
+          // The one predicate for "has not finished setup", used by the order
+          // and by the rendering both. `isSetupComplete` is what it is built on.
           identity: identityOf(row),
-          complete: isSetupComplete(row),
           isSelf: row.id === userId,
         }))
       ),

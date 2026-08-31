@@ -1,5 +1,4 @@
 import { FriendBlob } from '@/identity/friend-blob'
-import type { Identity } from '@/identity/identity'
 import { friendColour } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import type { RosterFriend, RosterState } from '@/roster/use-roster'
@@ -11,6 +10,7 @@ import {
   SidebarMenuSkeleton,
   ShellMenuButton,
 } from '@/shell/shell'
+import { times } from 'lodash-es'
 import { EyeIcon, EyeOffIcon, UserRoundIcon } from 'lucide-react'
 
 /**
@@ -38,7 +38,13 @@ export const FriendRoster = ({
     <SidebarGroup>
       <SidebarGroupLabel className="justify-between">
         Friends
-        {friends.length > 0 && (
+        {/*
+          Only while something is Hidden. A permanent "6/6" is a tally nobody
+          asked for; the same span while a Friend is out reads as what it is —
+          a filter is on, and it is also driving the Candidate list in the other
+          pane, where nothing else would say so.
+        */}
+        {hidden.size > 0 && (
           <span
             className="text-[10px] tabular-nums"
             title={`${visible.length} of ${friends.length} shown`}
@@ -80,10 +86,12 @@ export const FriendRoster = ({
 }
 
 /** Three, because the real group is small and a wall of bars is worse than a gap. */
+const SKELETON_ROWS = 3
+
 const RosterSkeleton = () => (
   <>
-    {[0, 1, 2].map((row) => (
-      <SidebarMenuItem key={row}>
+    {times(SKELETON_ROWS, (index) => (
+      <SidebarMenuItem key={index}>
         <SidebarMenuSkeleton showIcon />
       </SidebarMenuItem>
     ))}
@@ -119,15 +127,18 @@ const RosterRow = ({
   onToggle: () => void
 }) => {
   const Eye = hidden ? EyeOffIcon : EyeIcon
+  // One string for the tooltip and the accessible name. Two that differ is one
+  // control answering "what is this?" two ways.
+  const action = `${hidden ? 'Show' : 'Hide'} ${friend.name}${friend.isSelf ? ' (you)' : ''}`
 
   return (
     <SidebarMenuItem>
       <ShellMenuButton
         className="h-10 gap-2.5 px-2"
-        // Explicit, rather than left to the row's contents: the name is the one
-        // thing here that is a person's, and "you" and the eye are not part of it.
-        aria-label={`${hidden ? 'Show' : 'Hide'} ${friend.name}${friend.isSelf ? ' (you)' : ''}`}
-        title={hidden ? `Show ${friend.name}` : `Hide ${friend.name}`}
+        // Explicit, rather than left to the row's contents: the eye and the
+        // "you" tag are not part of anybody's name.
+        aria-label={action}
+        title={action}
         onClick={onToggle}
       >
         {/* Dimming the contents rather than the button, so the eye keeps its
@@ -141,7 +152,21 @@ const RosterRow = ({
           {friend.identity === null ? (
             <NotSetUpYet />
           ) : (
-            <FriendMark identity={friend.identity} animate={animate} />
+            <>
+              {/*
+                The rail is `oklch(var(--friend-l) var(--friend-c) hue)` — the
+                computed UI colour, one of the three places a per-Friend colour
+                survives (ticket 11). Never blobatar's `head`: that carries the
+                *tone's* lightness, which is free per Friend, and the whole
+                point of the model is that lightness is not.
+              */}
+              <span
+                aria-hidden
+                className="h-5 w-0.5 shrink-0 rounded-full"
+                style={{ background: friendColour(friend.identity.hue) }}
+              />
+              <FriendBlob identity={friend.identity} size="sm" animate={animate} />
+            </>
           )}
           <span className="min-w-0 flex-1 truncate text-[13px]">{friend.name}</span>
           {friend.isSelf && <span className="shrink-0 text-[10px] text-muted-foreground">you</span>}
@@ -157,25 +182,6 @@ const RosterRow = ({
     </SidebarMenuItem>
   )
 }
-
-/**
- * The blobatar, and the Friend's colour beside it.
- *
- * The rail is `oklch(var(--friend-l) var(--friend-c) hue)` — the computed UI
- * colour, one of the three places a per-Friend colour survives (ticket 11).
- * Never blobatar's `head`: that carries the *tone's* lightness, which is free
- * per Friend, and the whole point of the model is that lightness is not.
- */
-const FriendMark = ({ identity, animate }: { identity: Identity; animate: boolean }) => (
-  <>
-    <span
-      aria-hidden
-      className="h-5 w-0.5 shrink-0 rounded-full"
-      style={{ background: friendColour(identity.hue) }}
-    />
-    <FriendBlob identity={identity} size="sm" animate={animate} />
-  </>
-)
 
 /**
  * A Friend whose account exists and whose setup does not — the row is created

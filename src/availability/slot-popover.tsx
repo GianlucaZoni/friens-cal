@@ -69,8 +69,16 @@ export const SlotPopover = ({
       about is half an hour of one column — so the anchor is that half hour.
       `pointer-events-none` because the grid's own handlers own every pointer
       here, and `aria-hidden` because it is a position, not a button.
+
+      `nativeButton={false}` for the same reason, and it is not optional: Base UI
+      assumes a trigger is a real `<button>` and warns in the console about the
+      form and accessibility semantics a `<span>` would drop. Nothing focuses or
+      presses this — the grid's own click is what opens the popover — so the
+      honest answer is to tell Base UI it is not a button rather than to make it
+      one nobody can reach.
     */}
     <PopoverTrigger
+      nativeButton={false}
       render={<span aria-hidden />}
       className="pointer-events-none absolute inset-x-0"
       style={{ top, height }}

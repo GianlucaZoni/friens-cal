@@ -1,7 +1,7 @@
 import { SlotPopover } from '@/availability/slot-popover'
-import { runsOf, slotsOfDay, type Slot } from '@/availability/slots'
+import { closingLabel, runsOf, slotsOfDay, type Run, type Slot } from '@/availability/slots'
 import type { AvailabilityStore } from '@/availability/use-availability'
-import { draftCell, useDrawGesture } from '@/availability/use-draw-gesture'
+import { draftCell, useDrawGesture, type DrawGesture } from '@/availability/use-draw-gesture'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
@@ -121,7 +121,7 @@ export const WeekGrid = ({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 border-b">
         {/* The gutter's width, so the columns line up with their headers. */}
-        <LoadState status={availability.status} saving={availability.saving} />
+        <LoadState status={availability.status} />
         {laidOut.map(({ day, ownGutter }) => (
           <Fragment key={day.toISOString()}>
             {/* Reserves the width of that day's own gutter, so its date stays
@@ -185,7 +185,7 @@ export const WeekGrid = ({
                 index={index}
                 day={day}
                 slots={slots}
-                availability={availability}
+                isFree={availability.isFree}
                 viewer={viewer}
                 opensWithGutter={ownGutter}
                 drawing={drawing}
@@ -206,26 +206,14 @@ export const WeekGrid = ({
  * week whose rows have not arrived looks exactly like a week you drew nothing
  * in, and this is the only thing that tells them apart.
  *
- * It shows `saving` too, and that is deliberate rather than convenient. Ticket
- * 19 forbids a pending treatment *on the blocks* — ticket 15 spent opacity on
- * how many Friends are free, so a faded block would read as "fewer people" —
- * and asks for a channel the grid does not own. The top bar carries the words;
- * this dot is the same fact where the eye already is, and it never touches a
- * block.
+ * It does **not** show an outstanding write, though the store offers one. Ticket
+ * 19 asked for that in "a channel the grid does not already own", and the top
+ * bar's `Saving…` is it; putting it here as well would give one dot two
+ * meanings and add a second channel to a decision that asked for one.
  */
-const LoadState = ({
-  status,
-  saving,
-}: {
-  status: AvailabilityStore['status']
-  saving: boolean
-}) => {
+const LoadState = ({ status }: { status: AvailabilityStore['status'] }) => {
   const message =
-    status === 'error'
-      ? 'Could not load your Availability'
-      : status === 'loading'
-        ? 'Loading your Availability'
-        : 'Saving'
+    status === 'error' ? 'Could not load your Availability' : 'Loading your Availability'
 
   return (
     <div
@@ -233,7 +221,7 @@ const LoadState = ({
       role="status"
       aria-live="polite"
     >
-      {status === 'ready' && !saving ? null : (
+      {status === 'ready' ? null : (
         <>
           <span
             title={message}
@@ -276,14 +264,22 @@ const Gutter = ({ slots, className }: { slots: Slot[]; className?: string }) => 
   </div>
 )
 
-/** The wall clock a Slot ends at — `24:00` at the end of the day. */
-const endOf = (slots: Slot[], row: number): string => slots[row + 1]?.label ?? '24:00'
+/** Where a run sits in its column, in pixels. The one place `SLOT_PX` is spent. */
+const boxOf = (run: Run) => ({ top: run.start * SLOT_PX, height: run.length * SLOT_PX })
+
+/**
+ * The wall clock a Slot ends at — the next row's label, or the day's own end.
+ *
+ * `closingLabel` rather than a literal, because the same rule is what makes the
+ * toast say `Thu 23:30–24:00` instead of a range that runs backwards.
+ */
+const endOf = (slots: Slot[], row: number): string => closingLabel(slots[row + 1]?.label)
 
 const DayColumn = ({
   index,
   day,
   slots,
-  availability,
+  isFree,
   viewer,
   opensWithGutter,
   drawing,
@@ -292,11 +288,11 @@ const DayColumn = ({
   index: number
   day: Date
   slots: Slot[]
-  availability: AvailabilityStore
+  isFree: AvailabilityStore['isFree']
   viewer: Viewer | null
   /** Its own gutter is immediately to the left, and carries the day separator. */
   opensWithGutter: boolean
-  drawing: ReturnType<typeof useDrawGesture>
+  drawing: DrawGesture
 }) => {
   const { draft } = drawing
   const inDraft = useCallback(
@@ -317,11 +313,11 @@ const DayColumn = ({
   const runs = useMemo(() => {
     if (viewer === null) return []
     return runsOf(slots.length, (row) => {
-      const held = availability.isFree(viewer.id, slots[row].start)
+      const held = isFree(viewer.id, slots[row].start)
       if (draft === null || draft.kind === 'duplicate') return held
       return draft.kind === 'erase' ? held && !inDraft(row) : held || inDraft(row)
     })
-  }, [slots, availability, viewer, draft, inDraft])
+  }, [slots, isFree, viewer, draft, inDraft])
 
   /**
    * This gesture's own contribution, over the top of the union above.
@@ -408,8 +404,7 @@ const DayColumn = ({
               */
               className="pointer-events-none absolute inset-x-[3px] rounded-[3px] border"
               style={{
-                top: run.start * SLOT_PX,
-                height: run.length * SLOT_PX,
+                ...boxOf(run),
                 borderColor: friendColour(viewer.hue),
                 boxShadow: `inset 0 0 0 2px ${friendColourAlpha(viewer.hue, 0.3)}`,
               }}
@@ -420,7 +415,7 @@ const DayColumn = ({
         <div
           key={`source-${run.start}`}
           className="pointer-events-none absolute inset-x-[3px] rounded-[3px] border border-dashed border-muted-foreground/60"
-          style={{ top: run.start * SLOT_PX, height: run.length * SLOT_PX }}
+          style={boxOf(run)}
         />
       ))}
 
@@ -433,8 +428,7 @@ const DayColumn = ({
               hue={viewer?.hue ?? 0}
               from={slots[run.start].label}
               to={endOf(slots, run.start + run.length - 1)}
-              top={run.start * SLOT_PX}
-              height={run.length * SLOT_PX}
+              {...boxOf(run)}
             />
           ))}
 
@@ -445,21 +439,11 @@ const DayColumn = ({
           end={endOf(slots, popover)}
           top={popover * SLOT_PX}
           height={SLOT_PX}
-          held={availability.isFree(viewer.id, slots[popover].start)}
+          held={isFree(viewer.id, slots[popover].start)}
           onClose={drawing.closePopover}
-          onDraw={() => {
-            availability.draw([slots[popover].start])
-            drawing.closePopover()
-          }}
-          onErase={() => {
-            availability.erase(
-              drawing.instantsOf(drawing.runUnder({ column: index, row: popover }))
-            )
-            drawing.closePopover()
-          }}
-          onDuplicate={() =>
-            drawing.armDuplicate(drawing.runUnder({ column: index, row: popover }).length)
-          }
+          onDraw={() => drawing.drawSlot({ column: index, row: popover })}
+          onErase={() => drawing.eraseRun({ column: index, row: popover })}
+          onDuplicate={() => drawing.armDuplicateAt({ column: index, row: popover })}
         />
       )}
     </div>

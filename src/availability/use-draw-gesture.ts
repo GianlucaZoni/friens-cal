@@ -1,4 +1,5 @@
 import {
+  clamp,
   columnUnderPointer,
   fromAbsolute,
   isDrag,
@@ -14,6 +15,7 @@ import type { AvailabilityStore } from '@/availability/use-availability'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import type { Viewer } from '@/availability/week-grid'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { times } from 'lodash-es'
 
 /** One day column, as the gesture needs it: its own Slots, in order. */
 export type GridColumn = { day: Date; slots: Slot[] }
@@ -53,7 +55,13 @@ export const draftCell = (column: number, row: number): string => `${column}:${r
 type Placing = { length: number }
 
 type Drag = {
-  kind: DraftKind
+  /**
+   * `read` is a press that cannot write: the erase toggle is on and there is no
+   * block under the pointer. It still runs through the whole machine so that
+   * `moved` decides the outcome — a *drag* that subtracts nothing should also
+   * read nothing, and only a press that stayed still opens the popover.
+   */
+  kind: DraftKind | 'read'
   anchor: SlotAddress
   /**
    * The anchor as an **absolute slot index**, not a pixel offset.
@@ -239,7 +247,7 @@ export const useDrawGesture = ({
       )
       return run === undefined
         ? []
-        : Array.from({ length: run.length }, (_, index) => ({ column, row: run.start + index }))
+        : times(run.length, (index) => ({ column, row: run.start + index }))
     },
     [columns, availability, viewer]
   )
@@ -263,19 +271,25 @@ export const useDrawGesture = ({
 
       const held = availability.isFree(viewer.id, columns[column].slots[anchor.row].start)
 
-      // With the erase toggle on, empty grid is not a place a drag begins — so
-      // the press falls through to the one thing a press on empty grid can
-      // always do, which is read it.
-      if (tools.erasing && !held) {
-        pending.current = anchor
-        return
-      }
-
       // Otherwise the browser starts selecting the grid's own text under the drag.
       event.preventDefault()
       event.currentTarget.setPointerCapture(event.pointerId)
 
-      const kind: DraftKind = tools.erasing ? 'erase' : held && event.altKey ? 'duplicate' : 'draw'
+      /*
+       * With the erase toggle on, empty grid is not a place a drag begins: there
+       * is nothing under the pointer to subtract, and an erase toggle that
+       * quietly drew would be the surprise the toggle exists to prevent. The
+       * press is a `read` — which still has to travel through the machine,
+       * because a *drag* from there must do nothing at all while a still press
+       * opens the popover.
+       */
+      const kind: Drag['kind'] = tools.erasing
+        ? held
+          ? 'erase'
+          : 'read'
+        : held && event.altKey
+          ? 'duplicate'
+          : 'draw'
 
       drag.current = {
         kind,
@@ -332,15 +346,23 @@ export const useDrawGesture = ({
        * The row follows the pointer freely: the hazard ticket 10 measured is
        * lateral, and a budget on the vertical axis would only make the gesture
        * feel stuck.
+       *
+       * **Linear only.** The hazard is Linear's — a stray column sideways turns
+       * two hours into twenty-six — and ticket 10 found Multi-day "safe at week
+       * width", where the same drift adds one visible extra day's block. Spending
+       * the budget there would cost something instead: crossing a column IS the
+       * gesture, and at a narrow grid (57px columns with both panes open) 45px
+       * would refuse a deliberate two-day rectangle.
        */
-      const column = columnUnderPointer(
-        current.anchor.column,
-        over.column,
-        point.x - current.origin.x
-      )
+      const column =
+        tools.mode === 'linear'
+          ? columnUnderPointer(current.anchor.column, over.column, point.x - current.origin.x)
+          : over.column
       // The row was read against `over`'s column, which may not be the column
       // hysteresis chose — so clamp it into the one that won.
       const pointer = { column, row: clamp(over.row, 0, lengths[column] - 1) }
+
+      if (current.kind === 'read') return
 
       const selection =
         current.kind === 'duplicate'
@@ -378,7 +400,7 @@ export const useDrawGesture = ({
      * commits (ticket 01's correction to ticket 06).
      */
     if (!current.moved) pending.current = current.anchor
-    else if (current.selection.length > 0) {
+    else if (current.kind !== 'read' && current.selection.length > 0) {
       const instants = instantsOf(current.selection)
       if (current.kind === 'erase') availability.erase(instants)
       else availability.draw(instants)
@@ -418,6 +440,44 @@ export const useDrawGesture = ({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [abort, placing])
 
+  const closePopover = useCallback(() => setPopover(null), [])
+
+  /**
+   * The popover's three controls, as three whole actions.
+   *
+   * Composed here rather than in the grid, which would otherwise have to walk
+   * `instantsOf(runUnder(address))` to erase a block and read `.length` off a run
+   * to arm a copy — the view reaching into this hook's parts to assemble
+   * behaviour that belongs to it.
+   */
+  const actions = {
+    /** The deliberate 30-minute block: ticket 10's create action on the panel. */
+    drawSlot: useCallback(
+      (address: SlotAddress) => {
+        availability.draw(instantsOf([address]))
+        closePopover()
+      },
+      [availability, instantsOf, closePopover]
+    ),
+    /** Whole-block erase, which the erase drag gives only by dragging its length. */
+    eraseRun: useCallback(
+      (address: SlotAddress) => {
+        availability.erase(instantsOf(runUnder(address)))
+        closePopover()
+      },
+      [availability, instantsOf, runUnder, closePopover]
+    ),
+    /** Arm a copy of the run under this Slot; the next press drops it. */
+    armDuplicateAt: useCallback(
+      (address: SlotAddress) => {
+        const length = runUnder(address).length
+        closePopover()
+        if (length > 0) setPlacing({ length })
+      },
+      [runUnder, closePopover]
+    ),
+  }
+
   return {
     draft,
     placing: placing !== null,
@@ -428,19 +488,13 @@ export const useDrawGesture = ({
     /** Pointer capture lost to a context menu, a window blur, or the OS. */
     onPointerCancel: abort,
     popover,
-    closePopover: useCallback(() => setPopover(null), []),
-    /** The popover's Duplicate control: arm a copy of the run it was opened on. */
-    armDuplicate: useCallback((length: number) => {
-      setPopover(null)
-      setPlacing({ length })
-    }, []),
-    runUnder,
-    instantsOf,
+    closePopover,
+    ...actions,
   }
 }
 
-const clamp = (value: number, low: number, high: number): number =>
-  Math.min(Math.max(value, low), high)
+/** Everything the grid needs from the gesture, under one name. */
+export type DrawGesture = ReturnType<typeof useDrawGesture>
 
 const centre = (rect: DOMRect): number => rect.left + rect.width / 2
 

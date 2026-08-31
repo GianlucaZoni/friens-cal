@@ -25,7 +25,6 @@ import {
   DRAG_THRESHOLD_PX,
   HYSTERESIS_PX,
   columnUnderPointer,
-  describeSlots,
   fromAbsolute,
   isDrag,
   linearSelection,
@@ -33,12 +32,10 @@ import {
   selectionFor,
   shiftSelection,
   toAbsolute,
-  withRetries,
 } from './gesture.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-const ROME = 'Europe/Rome'
+import { times } from 'lodash-es'
 
 /** An ordinary week: seven days that all agree what a day is. */
 const ORDINARY_WEEK = [48, 48, 48, 48, 48, 48, 48]
@@ -207,7 +204,7 @@ test('a linear drag out of the 46-row day resumes at the next day’s row 0', ()
 
 /** Labels for a 48-row day: `00:00`, `00:30`, … `23:30`. */
 const ordinaryLabels = (): string[] =>
-  Array.from({ length: 48 }, (_, index) => {
+  times(48, (index) => {
     const hour = String(Math.floor(index / 2)).padStart(2, '0')
     return `${hour}:${index % 2 ? '30' : '00'}`
   })
@@ -348,111 +345,4 @@ test('a duplicate translates through midnight, and through a DST day', () => {
   assert.deepEqual(shiftSelection(AUTUMN_WEEK, [{ column: 5, row: 47 }], 1), [
     { column: 6, row: 0 },
   ])
-})
-
-/* ================================================================== *
- * The toast has to name the range, because nothing else will
- * ================================================================== */
-
-const SLOT_MS = 30 * 60_000
-
-/** A run of adjacent slots beginning at this instant. */
-const run = (start: Date, count: number): Date[] =>
-  Array.from({ length: count }, (_, index) => new Date(start.getTime() + index * SLOT_MS))
-
-/** Rome wall clock, as a true instant, on a day with nothing wrong with it. */
-const romeOn = (year: number, month: number, day: number, hour: number, minute = 0) =>
-  new Date(Date.UTC(year, month, day, hour - 2, minute))
-
-test('one run is named by its day and its two ends', () => {
-  // Thursday 3 September 2026, 20:00 for three hours.
-  assert.equal(describeSlots(run(romeOn(2026, 8, 3, 20), 6), ROME), 'Thu 20:00–23:00')
-})
-
-test('the end is the end of the last slot, not its start', () => {
-  assert.equal(describeSlots(run(romeOn(2026, 8, 3, 20), 1), ROME), 'Thu 20:00–20:30')
-})
-
-test('a run through midnight names both days', () => {
-  assert.equal(describeSlots(run(romeOn(2026, 8, 3, 23), 4), ROME), 'Thu 23:00 – Fri 01:00')
-})
-
-test('a run that ends at midnight says 24:00', () => {
-  // `Thu 23:30–00:00` reads as a range that goes backwards.
-  assert.equal(describeSlots(run(romeOn(2026, 8, 3, 23, 30), 1), ROME), 'Thu 23:30–24:00')
-})
-
-test('a multi-day rectangle names the span of days once', () => {
-  const days = [0, 1, 2].flatMap((offset) => run(romeOn(2026, 8, 7 + offset, 20), 4))
-  assert.equal(describeSlots(days, ROME), 'Mon–Wed 20:00–22:00')
-})
-
-test('anything else is named by how much of it there was', () => {
-  const scattered = [...run(romeOn(2026, 8, 7, 20), 2), ...run(romeOn(2026, 8, 9, 9), 2)]
-  assert.equal(describeSlots(scattered, ROME), '2 blocks from Mon 20:00')
-})
-
-test('an empty gesture has nothing to name', () => {
-  assert.equal(describeSlots([], ROME), 'nothing')
-})
-
-test('the slots are named in order however they arrived', () => {
-  const forwards = run(romeOn(2026, 8, 3, 20), 4)
-  assert.equal(describeSlots(forwards.slice().reverse(), ROME), describeSlots(forwards, ROME))
-})
-
-/* ================================================================== *
- * Two automatic retries, then give up (ticket 19)
- * ================================================================== */
-
-test('a write that lands first time is attempted once', async () => {
-  const attempts: number[] = []
-  const failure = await withRetries(
-    (attempt) => {
-      attempts.push(attempt)
-      return Promise.resolve(null)
-    },
-    { delays: [10, 20], sleep: () => Promise.resolve() }
-  )
-
-  assert.equal(failure, null)
-  assert.deepEqual(attempts, [0])
-})
-
-test('two retries, and no more', async () => {
-  const attempts: number[] = []
-  const slept: number[] = []
-  const failure = await withRetries(
-    (attempt) => {
-      attempts.push(attempt)
-      return Promise.resolve({ message: 'network' })
-    },
-    {
-      delays: [10, 20],
-      sleep: (ms) => {
-        slept.push(ms)
-        return Promise.resolve()
-      },
-    }
-  )
-
-  // Three attempts in total: the write, then the two retries ticket 19 allows.
-  assert.deepEqual(attempts, [0, 1, 2])
-  // Backoff, and no sleep after the last attempt — there is nothing to wait for.
-  assert.deepEqual(slept, [10, 20])
-  assert.deepEqual(failure, { message: 'network' })
-})
-
-test('a retry that lands stops the rest', async () => {
-  const attempts: number[] = []
-  const failure = await withRetries(
-    (attempt) => {
-      attempts.push(attempt)
-      return Promise.resolve(attempt === 1 ? null : { message: 'flaky' })
-    },
-    { delays: [10, 20], sleep: () => Promise.resolve() }
-  )
-
-  assert.equal(failure, null)
-  assert.deepEqual(attempts, [0, 1])
 })

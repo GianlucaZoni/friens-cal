@@ -1,11 +1,11 @@
 import { useSession } from '@/auth/use-session'
+import { mergeSlots, slotKey, startOfDayInZone, type SlotRow } from '@/availability/slots'
 import {
   SLOW_WRITE_MS,
   describeSlots,
   withRetries,
   type WriteFailure,
-} from '@/availability/gesture'
-import { mergeSlots, slotKey, startOfDayInZone, type SlotRow } from '@/availability/slots'
+} from '@/availability/write-model'
 import { toast } from '@/components/ui/toast-manager'
 import { supabase } from '@/lib/supabase'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'

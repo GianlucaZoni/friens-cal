@@ -1,14 +1,14 @@
 import { heatFraction, heatOpacity } from '@/availability/heat'
-import { runsOfSegments, segmentsOf, type Segment } from '@/availability/segments'
-import { SlotPopover, type SlotAnswer } from '@/availability/slot-popover'
+import { bandsOf, segmentsOf, type Band } from '@/availability/segments'
+import { answerAt } from '@/availability/slot-answer'
+import { SlotPopover } from '@/availability/slot-popover'
 import { closingLabel, runsOf, slotsOfDay, type Run, type Slot } from '@/availability/slots'
 import type { AvailabilityStore } from '@/availability/use-availability'
 import { draftCell, useDrawGesture, type DrawGesture } from '@/availability/use-draw-gesture'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
-import type { Identity } from '@/identity/identity'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
-import type { RosterFriend } from '@/roster/use-roster'
+import { setUpOnly, type RosterFriend, type SetUpFriend } from '@/roster/use-roster'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
 import { Fragment, useCallback, useMemo, useRef } from 'react'
 import { groupBy, maxBy } from 'lodash-es'
@@ -38,34 +38,6 @@ const GUTTER_W = 'w-10'
 
 /** The signed-in Friend: whose rows these are, and the one colour on the grid. */
 export type Viewer = { id: string; hue: number }
-
-/**
- * A Friend the wash can count and the popover can draw — a `RosterFriend` whose
- * setup is finished, so their `identity` is not null.
- *
- * Narrowed once, here, rather than checked at every use: the grid answers *how
- * many* and the popover answers *who*, and "who" needs a face and a name.
- * Everything downstream of this type gets both.
- *
- * ## What it excludes, and the cost
- *
- * A Friend who has not finished setup is left out of the wash entirely — out of
- * the count *and* out of the denominator. Two reasons, and neither is
- * cosmetic:
- *
- * - They cannot have drawn anything. `RequireSetup` stands between an unfinished
- *   Friend and the calendar, so there is no route by which they hold a row.
- * - Counting them anyway would put them in the denominator forever and cap the
- *   ramp below its top: with two Friends in the Group and one of them
- *   unfinished — which is this project's state today — every wash on the grid
- *   would sit at the floor and a full house would be unreachable.
- *
- * The cost, named: a row seeded from the SQL editor for a Friend who has not
- * finished setup is **invisible to the wash and absent from the popover**. It
- * appears the moment they finish, and nothing else in the product can produce
- * one.
- */
-export type GridFriend = RosterFriend & { identity: Identity }
 
 /**
  * The centre column: seven days of 30-minute rows, carrying **everyone's**
@@ -153,11 +125,25 @@ export const WeekGrid = ({
     [days]
   )
 
-  /** The visible Friends the wash can count — see `GridFriend`. */
-  const counted = useMemo(
-    () => visible.filter((friend): friend is GridFriend => friend.identity !== null),
-    [visible]
-  )
+  /**
+   * The visible Friends the wash can count: those who have finished setup.
+   *
+   * A Friend who has not is left out of the count **and** the denominator. Two
+   * reasons, neither cosmetic:
+   *
+   * - They cannot have drawn anything. `RequireSetup` stands between an
+   *   unfinished Friend and the calendar, so there is no route by which they
+   *   hold a row.
+   * - Counting them anyway would put them in the denominator forever and cap the
+   *   ramp below its top: with two Friends in the Group and one of them
+   *   unfinished — this project's state today — a full house would be
+   *   unreachable and every wash would sit at the floor.
+   *
+   * The cost, named: a row seeded from the SQL editor for a Friend who has not
+   * finished setup is **invisible to the wash and absent from the popover**. It
+   * appears the moment they finish, and nothing else in the product can make one.
+   */
+  const counted = useMemo(() => setUpOnly(visible), [visible])
 
   /**
    * The element the gesture hit-tests against. Created here so the ref travels
@@ -364,8 +350,8 @@ const DayColumn = ({
   slots: Slot[]
   isFree: AvailabilityStore['isFree']
   viewer: Viewer | null
-  /** The wash's query, already narrowed to Friends with an identity. */
-  counted: GridFriend[]
+  /** The wash's query, already narrowed to Friends who have finished setup. */
+  counted: SetUpFriend[]
   /** Its own gutter is immediately to the left, and carries the day separator. */
   opensWithGutter: boolean
   drawing: DrawGesture
@@ -396,7 +382,7 @@ const DayColumn = ({
   )
 
   /** Contiguous segments, so each stretch gets one silhouette (prototype 05 Q1). */
-  const washRuns = useMemo(() => runsOfSegments(segments), [segments])
+  const bands = useMemo(() => bandsOf(segments), [segments])
   const inDraft = useCallback(
     (row: number) => draft?.cells.has(draftCell(index, row)) ?? false,
     [draft, index]
@@ -494,8 +480,13 @@ const DayColumn = ({
       */}
       {viewer === null
         ? null
-        : washRuns.map((run) => (
-            <HeatWash key={`heat-${run[0].start}`} run={run} hue={viewer.hue} of={counted.length} />
+        : bands.map((band) => (
+            <HeatWash
+              key={`heat-${band[0].start}`}
+              band={band}
+              hue={viewer.hue}
+              outOf={counted.length}
+            />
           ))}
 
       {viewer === null
@@ -576,31 +567,31 @@ const DayColumn = ({
 }
 
 /**
- * One stretch where somebody is free, as one silhouette with hard internal
- * boundaries.
+ * One band — a stretch where somebody is free — as one silhouette with hard
+ * internal boundaries.
  *
- * **Segments inside runs** — prototype 05's recommendation, and the half of it
- * ticket 15 kept. The rounded corners and the clip belong to the *run*, so the
- * stretch reads as one continuous window; the edges *inside* it are hard and
- * flush, because each one is a moment when the set of free Friends changed and
- * that is exactly what the viewer needs to be able to point at. Adjacent
- * segments drawn as separate rounded boxes read as three separate offers, which
- * is the mistake that finding names.
+ * **Segments inside runs** was prototype 05's recommendation, and this is the
+ * half of it ticket 15 kept. The rounded corners and the clip belong to the
+ * *band*, so the stretch reads as one continuous window; the edges *inside* it
+ * are hard and flush, because each one is a moment when the set of free Friends
+ * changed and that is exactly what the viewer needs to be able to point at.
+ * Adjacent segments drawn as separate rounded boxes read as three separate
+ * offers, which is the mistake that finding names.
  *
  * No shadow, against the prototype's "one rounded outline and one drop shadow
- * per run": the shadow was there to lift a *coloured composite* off the grid,
- * and what sits on top of this one now is your own border and ring. A shadow
- * under those would blur the one edge ticket 15 spent to keep the density
- * legible through them.
+ * per run": the shadow was there to lift a *coloured composite* off the grid, and
+ * what sits on top of this one now is your own border and ring. A shadow under
+ * those would blur the one edge ticket 15 spent to keep the density legible
+ * through them.
  *
  * `pointer-events-none` because the gesture owns every pointer on this grid —
  * the same reason your own blocks have it. And it is absolutely positioned, so
  * it contributes no height: the columns are content-sized (`items-start`) and
  * the drag divides a column's measured height by its own row count.
  */
-const HeatWash = ({ run, hue, of }: { run: Segment[]; hue: number; of: number }) => {
-  const start = run[0].start
-  const end = run[run.length - 1].end
+const HeatWash = ({ band, hue, outOf }: { band: Band; hue: number; outOf: number }) => {
+  const start = band[0].start
+  const end = band[band.length - 1].end
 
   return (
     <div
@@ -616,7 +607,7 @@ const HeatWash = ({ run, hue, of }: { run: Segment[]; hue: number; of: number })
       className="pointer-events-none absolute inset-x-0 overflow-hidden rounded-[3px]"
       style={{ top: start * SLOT_PX, height: (end - start) * SLOT_PX }}
     >
-      {run.map((segment) => (
+      {band.map((segment) => (
         <div
           key={segment.start}
           className="absolute inset-x-0"
@@ -630,58 +621,12 @@ const HeatWash = ({ run, hue, of }: { run: Segment[]; hue: number; of: number })
               See `heat.ts`.
             */
             background: friendColour(hue),
-            opacity: heatOpacity(heatFraction(segment.friendIds.length, of)),
+            opacity: heatOpacity(heatFraction(segment.friendIds.length, outOf)),
           }}
         />
       ))}
     </div>
   )
-}
-
-/**
- * Who is free at this Slot, and over what span — the popover's whole answer.
- *
- * The **segment** is the unit, resolved from the Slot that was clicked. That
- * reconciles three documents which appear to disagree, and it is worth stating
- * because the disagreement is real:
- *
- * - Issue 07's criterion says clicking a *Slot* opens the popover, and issue 06
- *   built it anchored to one.
- * - Prototype 05 Q5 recommends the *segment* as the answer unit and measured the
- *   slot layer as "objectively worse".
- * - Ticket 15 says who is answered "only by hovering", and ticket 10 then
- *   replaced hover with a click on both platforms.
- *
- * The prototype's measurement was **about hover**: the panel "re-renders on
- * every 24px of pointer travel through one continuous block whose answer never
- * changes, and flickers as you cross a boundary". Ticket 10 removed hover, and
- * with it that entire failure — a click fires once, and nothing re-renders while
- * the pointer moves. So the *hit target* stays the Slot, which is what issue 06
- * built and what a finger can address, and the *answer unit* is the segment,
- * which is what the prototype was actually protecting.
- *
- * The cost, named: clicking two different Slots inside one segment opens the
- * same answer in two different places, so the panel appears to move for no
- * reason. That is cheap next to the alternative, which is a hit target whose
- * height varies from 20px to 500px depending on data.
- */
-const answerAt = (
-  segments: readonly Segment[],
-  counted: readonly GridFriend[],
-  slots: Slot[],
-  row: number
-): SlotAnswer => {
-  const segment = segments.find((candidate) => row >= candidate.start && row < candidate.end)
-  if (segment === undefined) return { free: [], from: null, to: null }
-
-  return {
-    // Filtered from `counted` rather than mapped from `friendIds`, so the list
-    // arrives in roster order and cannot contain a hole — `segmentsOf` returns
-    // the ids in the order it was handed them, which is that order.
-    free: counted.filter((friend) => segment.friendIds.includes(friend.id)),
-    from: slots[segment.start].label,
-    to: closingLabel(slots[segment.end]?.label),
-  }
 }
 
 /**

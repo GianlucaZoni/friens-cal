@@ -1,3 +1,4 @@
+import type { SlotAnswer } from '@/availability/slot-answer'
 import type { Slot } from '@/availability/slots'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,26 +10,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { FriendBlob } from '@/identity/friend-blob'
-import type { Identity } from '@/identity/identity'
 import { format } from 'date-fns'
 import { CopyIcon, EraserIcon, PlusIcon } from 'lucide-react'
-
-/** A Friend who is free here, with the face and name that identify them. */
-type FreeFriend = { id: string; name: string; identity: Identity; isSelf: boolean }
-
-/**
- * Who is free at the Slot that was clicked, and the span that answer holds for.
- *
- * `from`/`to` are the **segment's** wall clock, not the Slot's — see `answerAt`
- * in `week-grid.tsx` for why the hit target and the answer unit differ. Both are
- * null when nobody is free, which is when there is no segment to name.
- */
-export type SlotAnswer = {
-  /** In roster order. Includes the viewer, if they are free here. */
-  free: FreeFriend[]
-  from: string | null
-  to: string | null
-}
 
 /**
  * What a click on the grid opens.
@@ -167,7 +150,7 @@ export const SlotPopover = ({
  * twice and reads as a stutter.
  */
 const FreeHere = ({ answer }: { answer: SlotAnswer }) => {
-  const { free, from, to } = answer
+  const { free, span } = answer
 
   if (free.length === 0) {
     return <p className="text-[11px] text-muted-foreground">Nobody else has either.</p>
@@ -177,7 +160,7 @@ const FreeHere = ({ answer }: { answer: SlotAnswer }) => {
     <div className="flex flex-col gap-1">
       <p className="text-[11px] tabular-nums text-muted-foreground">
         {free.length} free
-        {from === null || to === null ? null : ` · ${from}–${to}`}
+        {span === null ? null : ` · ${span.from}–${span.to}`}
       </p>
       <ul className="flex flex-col gap-0.5">
         {free.map((friend) => (

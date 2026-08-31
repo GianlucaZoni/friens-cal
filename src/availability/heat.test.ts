@@ -54,10 +54,10 @@ test('a count of zero clamps to the foot of the ramp rather than below it', () =
  * ================================================================== */
 
 test('one Friend free sits at the bottom of the ramp, whatever the group size', () => {
-  // Not at zero: the floor is tuned to be *just* visible, and a single Friend
-  // free is the most ordinary thing on the grid. Not proportional either — with
-  // 1/9 of a proportional ramp a lone Friend would be invisible in a group of
-  // nine, which is the group this product has.
+  // Zero on the ramp is the FLOOR, not transparent — tuned to be just visible,
+  // because a single Friend free is the most ordinary thing on the grid. Not
+  // proportional either: 1/9 of a proportional ramp is invisible, and nine is
+  // the group size this product is for.
   assert.equal(heatFraction(1, 2), 0)
   assert.equal(heatFraction(1, 9), 0)
 })
@@ -70,10 +70,17 @@ test('everybody free sits at the top of the ramp, whatever the group size', () =
   assert.equal(heatFraction(9, 9), 1)
 })
 
-test('a group of one is a full house', () => {
-  // The degenerate denominator, which is reachable: hide everyone but one
-  // Friend and the wash is about that Friend alone.
-  assert.equal(heatFraction(1, 1), 1)
+test('a lone countable Friend sits at the FLOOR, not the ceiling', () => {
+  // The degenerate denominator, and it is reachable two ways: hide everyone but
+  // one Friend, or be the only Friend who has finished setup — which is this
+  // project's state right now.
+  //
+  // With one, every segment holds a count of one, so opacity discriminates
+  // nothing. The ceiling there would claim maximum density while density was
+  // meaningless, and would paint a near-solid block in the viewer's own hue
+  // under their own border — the occlusion ticket 15 removed, reached through
+  // the degenerate case rather than head on.
+  assert.equal(heatFraction(1, 1), 0)
 })
 
 test('more free than there are Friends is clamped, not extrapolated', () => {

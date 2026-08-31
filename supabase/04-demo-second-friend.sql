@@ -44,10 +44,12 @@
 -- Friend and the calendar, so there is no route by which they hold a row. A
 -- seeded row for a Friend with no identity would therefore be invisible.
 --
--- **Guarded to blank rows only.** A row with any of these columns already set is
+-- **Guarded to ONE blank row.** A row with any of these columns already set is
 -- somebody who has been through setup, or is part way through it, and this must
 -- never overwrite that. `on_auth_user_created` creates the row blank (issue 01),
--- so `null` on all four is exactly "has not started".
+-- so `null` on all five is exactly "has not started" — and the `limit 1` below
+-- keeps a Group with several unfinished Friends from acquiring several
+-- identical ones.
 --
 -- The values are deliberately unremarkable and entirely overridable: the Friend
 -- can change all of them from setup or the profile dropdown, and doing so is the
@@ -62,12 +64,21 @@ set
   hue = 200,
   tone = 0.49, -- `mid`, a band interior; the six legal values are in 01-friend.sql
   expression = 'happy'
-where
-  display_name is null
-  and blobatar_seed is null
-  and hue is null
-  and tone is null
-  and expression is null;
+where id = (
+  -- **Exactly one row**, and the oldest blank one. Without the `limit`, a Group
+  -- with two people mid-signup would get two Friends both called 'Demo Friend'
+  -- at hue 200 — indistinguishable in the roster and in the popover, which is
+  -- the one place identity is answered at all.
+  select id
+  from public.friend
+  where display_name is null
+    and blobatar_seed is null
+    and hue is null
+    and tone is null
+    and expression is null
+  order by created_at, id
+  limit 1
+);
 
 -- ---------------------------------------------------------------------------
 -- 2. The Availability, as slot rows.

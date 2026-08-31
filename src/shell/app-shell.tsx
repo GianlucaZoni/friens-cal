@@ -80,7 +80,17 @@ export const AppShell = () => {
    * anything — hiding is a query tool, not a reason to stop reporting.
    */
   const rosterIds = useMemo(() => roster.friends.map((friend) => friend.id), [roster.friends])
-  const silent = useMemo(() => availability.silent(rosterIds), [availability, rosterIds])
+  /*
+   * `silentAmong` is pulled off the store first, rather than reached through it
+   * inside the memo. Depending on `availability` would defeat the memo entirely —
+   * the store is a fresh object literal every render, so ~350 × N set lookups
+   * would re-run whenever anything in this shell re-rendered — and naming the
+   * narrow dependency inline instead is what React Compiler refuses to preserve,
+   * because the dependency it infers from the body is the whole object. A local
+   * makes the two agree: the body reads `silentAmong` and nothing else.
+   */
+  const { silent: silentAmong } = availability
+  const silent = useMemo(() => silentAmong(rosterIds), [silentAmong, rosterIds])
 
   return (
     <AppShellProvider>

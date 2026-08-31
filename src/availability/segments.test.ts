@@ -18,9 +18,9 @@
  * issue 08 will: that a boundary falls wherever the set changes *at all*
  * (including where the count does not move), that an empty span produces no
  * segment rather than an empty one, and that contiguous segments group back
- * into the run they visually belong to.
+ * into the band they visually belong to.
  */
-import { runsOfSegments, segmentsOf, type Segment } from './segments.ts'
+import { bandsOf, segmentsOf, type Segment } from './segments.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -60,17 +60,17 @@ test('Marco 18:00–22:00 and Sara 20:00–23:00 make three segments', () => {
   ])
 })
 
-test('the three segments are contiguous, so they are one run', () => {
+test('the three segments are contiguous, so they are one band', () => {
   const held = [
     { id: 'marco', from: 18, to: 22 },
     { id: 'sara', from: 20, to: 23 },
   ]
-  const runs = runsOfSegments(segmentsOf(SLOTS_IN_DAY, ['marco', 'sara'], freeIn(held)))
+  const bands = bandsOf(segmentsOf(SLOTS_IN_DAY, ['marco', 'sara'], freeIn(held)))
 
   // One silhouette, three internal boundaries: the prototype's "segments inside
   // runs" — steal A's segmentation and B's outer outline.
-  assert.equal(runs.length, 1)
-  assert.equal(runs[0].length, 3)
+  assert.equal(bands.length, 1)
+  assert.equal(bands[0].length, 3)
 })
 
 /* ================================================================== *
@@ -100,7 +100,7 @@ test('nobody free produces no segments at all', () => {
   )
 })
 
-test('a gap splits one Friend into two runs', () => {
+test('a gap splits one Friend into two bands', () => {
   const held = [
     { id: 'marco', from: 10, to: 12 },
     { id: 'marco', from: 18, to: 20 },
@@ -108,12 +108,12 @@ test('a gap splits one Friend into two runs', () => {
   const segments = segmentsOf(SLOTS_IN_DAY, ['marco'], freeIn(held))
 
   // Same set on both sides, so they are two segments only because they do not
-  // touch — and two runs for the same reason.
+  // touch — and two bands for the same reason.
   assert.deepEqual(shape(segments), [
     [row(10), row(12), 'marco'],
     [row(18), row(20), 'marco'],
   ])
-  assert.equal(runsOfSegments(segments).length, 2)
+  assert.equal(bandsOf(segments).length, 2)
 })
 
 test('a half-hour segment survives', () => {
@@ -177,14 +177,14 @@ test('the sweep never looks past the length it was given', () => {
  * Runs
  * ================================================================== */
 
-test('grouping an empty sweep gives no runs', () => {
-  assert.deepEqual(runsOfSegments([]), [])
+test('grouping an empty sweep gives no bands', () => {
+  assert.deepEqual(bandsOf([]), [])
 })
 
 test('grouping leaves the segments themselves alone', () => {
   const segments = segmentsOf(SLOTS_IN_DAY, ['marco'], freeIn([{ id: 'marco', from: 1, to: 2 }]))
   const before = shape(segments)
-  runsOfSegments(segments)
+  bandsOf(segments)
 
   assert.deepEqual(shape(segments), before)
 })

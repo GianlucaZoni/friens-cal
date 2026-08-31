@@ -22,6 +22,27 @@ export type RosterFriend = {
   isSelf: boolean
 }
 
+/**
+ * A Friend whose setup is finished, so their `identity` is not null.
+ *
+ * Narrowing it into its own type is what keeps `identity !== null` from being
+ * re-checked at every use downstream: the heatmap counts these Friends and the
+ * slot popover draws them, and both need a hue and a face. `setUpOnly` is the
+ * one place the check happens.
+ */
+export type SetUpFriend = RosterFriend & { identity: Identity }
+
+/**
+ * The Friends among these who have finished setup.
+ *
+ * Its own function, beside the type, because the predicate is `identityOf`'s
+ * answer and the roster is where that lives — a caller writing
+ * `filter(f => f.identity !== null)` inline would be restating the codebase's
+ * single definition of "has not finished setup".
+ */
+export const setUpOnly = (friends: readonly RosterFriend[]): SetUpFriend[] =>
+  friends.filter((friend): friend is SetUpFriend => friend.identity !== null)
+
 export type RosterState = {
   /** Every Friend in the Group, in roster order. */
   friends: RosterFriend[]

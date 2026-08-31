@@ -30,14 +30,20 @@
  * With segmentation, **the segment IS the answer set**. That is the property
  * the popover, the wash and — next — issue 08's Candidate scan all lean on.
  *
- * ## Why segments group back into runs
+ * ## Why segments group back into bands
  *
  * The same prototype's recommendation, and the half of it that survived ticket
  * 15: *segments inside runs*. Adjacent segments drawn as separate boxes read as
- * separate offers rather than one continuous window, so the boundaries where
- * the set changes are drawn hard and **internal**, inside one outline and one
- * shadow per contiguous stretch. `runsOfSegments` is that grouping, and it is
- * the only reason this module knows the word "run".
+ * separate offers rather than one continuous window, so the boundaries where the
+ * set changes are drawn hard and **internal**, inside one outline per contiguous
+ * stretch. `bandsOf` is that grouping.
+ *
+ * **Called a band and not a run, deliberately.** `CONTEXT.md` defines a run as
+ * *one Friend's* contiguous held Slots — "a Friend who is free all evening holds
+ * a run" — and this is a stretch where *anybody* is free, which is a different
+ * thing and is also not a Candidate (that needs two or more, and is issue 08's).
+ * Three meanings for one word in a file that already draws the viewer's own
+ * `runs` would be three ways to misread it.
  */
 import { times } from 'lodash-es'
 
@@ -108,18 +114,27 @@ const sameFriends = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((friendId, index) => friendId === b[index])
 
 /**
- * Contiguous segments, grouped — one group per stretch of time where somebody,
- * anybody, is free.
+ * A stretch of time where somebody — anybody — is free: contiguous segments,
+ * drawn as one silhouette.
  *
- * The grid gives each group one rounded outline and one shadow and draws the
- * segments inside it with no gaps, so the silhouette says *when anyone is free*
- * and the internal edges say *when that changed*.
+ * Not a **run** (`CONTEXT.md`: that is one Friend's own contiguous Slots) and not
+ * a **Candidate** (that needs two or more Friends, and is issue 08's). Its own
+ * word because it is its own thing.
  */
-export const runsOfSegments = (segments: readonly Segment[]): Segment[][] =>
-  segments.reduce<Segment[][]>((runs, segment) => {
-    const last = runs[runs.length - 1]
+export type Band = Segment[]
+
+/**
+ * Contiguous segments, grouped into bands.
+ *
+ * The grid gives each band one rounded outline and clips the segments to it, so
+ * the silhouette says *when anyone is free* and the hard internal edges say
+ * *when that changed*.
+ */
+export const bandsOf = (segments: readonly Segment[]): Band[] =>
+  segments.reduce<Band[]>((bands, segment) => {
+    const last = bands[bands.length - 1]
     const previous = last?.[last.length - 1]
     return previous !== undefined && previous.end === segment.start
-      ? [...runs.slice(0, -1), [...last, segment]]
-      : [...runs, [segment]]
+      ? [...bands.slice(0, -1), [...last, segment]]
+      : [...bands, [segment]]
   }, [])

@@ -13,7 +13,8 @@
  * shape of the ramp (below), and the fact that it is tuned **twice**.
  *
  * **No `@/` imports, deliberately**, so `heat.test.ts` can reach `heatFraction`
- * under plain Node.
+ * under plain Node — which is also why `lib/css-tokens.ts` below is reached by a
+ * relative path carrying its extension.
  *
  * ## Why the ramp is normalised, and what that costs
  *
@@ -27,11 +28,20 @@
  * The cost is real and worth naming: **the same absolute count reads
  * differently as the query changes.** Two Friends free is the darkest thing on
  * screen in a group of two and a middling wash in a group of nine, and
- * **hiding a Friend intensifies the wash** for everyone who is left. That last
- * one is coherent rather than surprising — hiding is a query tool, not a
- * blocklist (CONTEXT.md), so the denominator *is* "who I am trying to meet",
- * and the wash answers "how much of them is free". A full house is always the
- * darkest, which is the reading the grid exists for.
+ * **hiding a Friend intensifies the wash** for everyone who is left — even a
+ * Friend who was not free anywhere. That last one is coherent rather than
+ * surprising, since hiding is a query tool and not a blocklist (CONTEXT.md), so
+ * the denominator *is* "who I am trying to meet" and the wash answers "how much
+ * of them is free". A full house is always the darkest, which is the reading the
+ * grid exists for.
+ *
+ * It is nonetheless a **deviation from the literal wording** of issue 07 and
+ * ticket 15, both of which say opacity is *proportional to* the number of
+ * visible Friends free. Strict proportionality is unusable at this group size —
+ * one Friend of nine lands at 1/9 of the range, which is invisible — so every
+ * legible ramp is affine rather than proportional, and the only real question
+ * left is what the denominator is. Recorded here rather than assumed, because it
+ * is a decision a human may want to overrule.
  *
  * ## Why the two per-theme numbers are CSS custom properties
  *
@@ -47,6 +57,7 @@
  * question the stylesheet already answers, and would be wrong in the one case
  * that matters — a `.dark` class applied to a subtree rather than the root.
  */
+import { installCssTokens, themedTokensCss } from '../lib/css-tokens.ts'
 
 /**
  * The two ends of the ramp, per theme. The one pair of numbers here a human
@@ -85,17 +96,36 @@ export const HEAT_ALPHA = {
 /**
  * Where a count sits on the ramp: 0 at one Friend free, 1 at all of them.
  *
- * `of` is the size of the query — `roster.visible`, the Friends the viewer is
- * trying to meet — and not the size of the Group. Hidden Friends are not in the
- * numerator or the denominator, which is what makes hiding one take effect on
- * the very next render.
+ * `outOf` is the size of the query — `roster.visible`, the Friends the viewer is
+ * trying to meet — and **not** the size of the Group. Hidden Friends are in
+ * neither the numerator nor the denominator, which is what makes hiding one take
+ * effect on the very next render with no refetch.
+ *
+ * That is deliberately the opposite choice from ticket 09's glow rule, which
+ * compares a Candidate against `group_size` **counting Hidden**. The two
+ * denominators answer different questions: the glow asks "is this a big deal for
+ * the Group", where the whole Group is the right yardstick, and the wash asks
+ * "how much of who I am looking for is free here", where it is not. Filtering
+ * six Friends out and then never being able to reach a full house would take the
+ * top of the ramp away from the exact task the filter exists to serve.
  *
  * Monotonic in `count` by construction, which is the property ticket 15 chose
- * this whole view for: adding a Friend always *adds* information, where the
- * mesh gradient it replaced removed it.
+ * this whole view for: adding a Friend always *adds* information, where the mesh
+ * gradient it replaced removed it.
+ *
+ * **A single countable Friend sits at the FLOOR, not the ceiling.** With one, the
+ * ramp is degenerate — every segment holds a count of one, so opacity carries no
+ * signal at all — and a channel that cannot discriminate should sit at its quiet
+ * end rather than shout. The ceiling there would claim maximum density while
+ * density was meaningless, and would paint a near-solid block in the viewer's
+ * own hue underneath their own border: the occlusion ticket 15 removed, arriving
+ * through the degenerate case. Nothing is lost — the floor is tuned to be
+ * legible, and that is what a lone Friend is.
+ *
+ * So the ceiling means precisely "more than one Friend, and all of them".
  */
-export const heatFraction = (count: number, of: number): number =>
-  count <= 0 ? 0 : of <= 1 ? 1 : Math.min(1, (count - 1) / (of - 1))
+export const heatFraction = (count: number, outOf: number): number =>
+  count <= 1 || outOf <= 1 ? 0 : Math.min(1, (count - 1) / (outOf - 1))
 
 /**
  * That fraction as a CSS `opacity`, resolved against whichever theme is on.
@@ -116,27 +146,20 @@ export const heatOpacity = (fraction: number): string =>
 const FLOOR = '--heat-floor'
 const CEIL = '--heat-ceil'
 
-const TOKEN_STYLE_ID = 'heat-ramp-tokens'
-
-const heatTokensCss = (): string =>
-  [
-    `:root { ${FLOOR}: ${HEAT_ALPHA.light.floor}; ${CEIL}: ${HEAT_ALPHA.light.ceil}; }`,
-    `.dark { ${FLOOR}: ${HEAT_ALPHA.dark.floor}; ${CEIL}: ${HEAT_ALPHA.dark.ceil}; }`,
-  ].join('\n')
-
 /**
  * Call once, at startup, before the first render. Idempotent.
  *
- * `heatOpacity()` is meaningless until this has run — an `opacity` whose
- * `calc()` holds an undefined `var()` is invalid at computed-value time, which
- * paints the element fully opaque rather than throwing, and a fully opaque wash
- * is precisely the solid block ticket 15 got rid of. Hence one call site, in
- * `main.tsx`, beside `installFriendColourTokens()`.
+ * Until this has run, `heatOpacity()`'s `calc()` holds an undefined `var()`,
+ * which is invalid at computed-value time — so the browser drops the
+ * declaration and paints the wash **fully opaque**, which is precisely the solid
+ * block ticket 15 got rid of. Hence one call site, in `main.tsx`, beside
+ * `installFriendColourTokens()`.
  */
-export const installHeatTokens = (): void => {
-  const existing = document.getElementById(TOKEN_STYLE_ID)
-  const style = existing instanceof HTMLStyleElement ? existing : document.createElement('style')
-  style.id = TOKEN_STYLE_ID
-  style.textContent = heatTokensCss()
-  if (!existing) document.head.appendChild(style)
-}
+export const installHeatTokens = (): void =>
+  installCssTokens(
+    'heat-ramp-tokens',
+    themedTokensCss({
+      light: { [FLOOR]: HEAT_ALPHA.light.floor, [CEIL]: HEAT_ALPHA.light.ceil },
+      dark: { [FLOOR]: HEAT_ALPHA.dark.floor, [CEIL]: HEAT_ALPHA.dark.ceil },
+    })
+  )

@@ -62,6 +62,14 @@ export const useCalendarView = () => {
   const goNext = useCallback(() => step(1), [step])
   const goToday = useCallback(() => setAnchor(new Date()), [])
 
+  /**
+   * Jump to an arbitrary date — what the left pane's mini calendar drives
+   * (issue 04). Wrapped rather than handing out `setAnchor`, whose updater
+   * overload would let a caller pass a function and step relatively; the only
+   * relative moves this view has are the three above.
+   */
+  const goToDate = useCallback((date: Date) => setAnchor(date), [])
+
   return {
     view,
     setView,
@@ -71,6 +79,7 @@ export const useCalendarView = () => {
     goPrevious,
     goNext,
     goToday,
+    goToDate,
   }
 }
 

@@ -162,6 +162,19 @@ ok('both channels are SUBSCRIBED')
  * it is the reason the message below is as specific as it is: nothing else about
  * the app misbehaves in that state.
  * ---------------------------------------------------------------- */
+/**
+ * The same instant, compared as an instant.
+ *
+ * Not as text, and the distinction is the whole reason `slotKey` exists in the
+ * app: PostgREST and Realtime render a `timestamptz` as
+ * `2027-10-05T19:00:00+00:00` while `Date#toISOString` writes
+ * `2027-10-05T19:00:00.000Z`. Those are the same moment and two different
+ * strings, so a string comparison here fails against a payload that is
+ * perfectly correct — which is exactly what it did on this script's first run
+ * against a working publication.
+ */
+const sameInstant = (a, b) => new Date(a).getTime() === new Date(b).getTime()
+
 const probe = new Date(Date.now() + 400 * 86_400_000)
 // Snapped to the half hour, because that is what a Slot is (CONTEXT.md) and an
 // off-grid row would be invisible on the grid it is meant to be verifying.
@@ -202,7 +215,7 @@ if (insert === null) {
 }
 ok('an INSERT from the other session arrives over Realtime, with no reload')
 
-if (insert.new?.friend_id !== b.userId || insert.new?.slot_start !== probeIso) {
+if (insert.new?.friend_id !== b.userId || !sameInstant(insert.new?.slot_start, probeIso)) {
   await removeProbe()
   die(
     `the INSERT payload does not carry the row that was written — got ` +
@@ -251,7 +264,7 @@ if (removed === null) {
 }
 ok('a DELETE from the other session arrives over Realtime')
 
-if (removed.old?.friend_id !== b.userId || removed.old?.slot_start !== probeIso) {
+if (removed.old?.friend_id !== b.userId || !sameInstant(removed.old?.slot_start, probeIso)) {
   die(
     'the DELETE payload does not carry the full key, so `replica identity full` ' +
       `WOULD be needed after all — got ${JSON.stringify(removed.old)}`

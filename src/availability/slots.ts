@@ -168,8 +168,10 @@ export type SlotRow = { friend_id: string; slot_start: string }
  * property `(friend_id, slot_start)` was chosen for.
  *
  * The cost, named: a union cannot express a *deletion* that happened elsewhere.
- * Nothing in this slice deletes, and the subscription that will notice is issue
- * 07's.
+ * So it does not try — the Realtime subscription in `use-availability.ts` routes
+ * a DELETE event through the store's removal path instead of through this fold.
+ * A fold that could also subtract would have to be told which rows are *absent*
+ * from a result it was never given, which is not a thing a merge can know.
  */
 export const mergeSlots = (
   current: ReadonlySet<string>,

@@ -1,5 +1,11 @@
 import { useSession } from '@/auth/use-session'
-import { mergeSlots, slotKey, startOfDayInZone, type SlotRow } from '@/availability/slots'
+import {
+  mergeSlots,
+  slotKey,
+  slotsOfDay,
+  startOfDayInZone,
+  type SlotRow,
+} from '@/availability/slots'
 import {
   SLOW_WRITE_MS,
   describeSlots,
@@ -18,11 +24,18 @@ export type AvailabilityStore = {
   /**
    * Is this Friend free in the slot beginning at this instant?
    *
-   * The store behind it is keyed `(friend_id, slot_start)` — the table's own
-   * key (ticket 07), and the key that makes an optimistic row and its Realtime
-   * echo the same row rather than two (ticket 19).
+   * **Any** Friend, as of issue 07 — the store holds the whole Group's rows, and
+   * always could: it is keyed `(friend_id, slot_start)`, the table's own key
+   * (ticket 07), and the key that makes an optimistic row and its Realtime echo
+   * the same row rather than two (ticket 19).
    */
   isFree: (friendId: string, slotStart: Date) => boolean
+  /**
+   * Of these Friends, the ones holding no Availability at all in the current
+   * view. CONTEXT.md's **silence**, which the roster marks with a muted dot so
+   * that a Friend who has said nothing does not read as a Friend who is busy.
+   */
+  silent: (friendIds: readonly string[]) => ReadonlySet<string>
   /** `loading` while the range the view is pointed at is still in flight. */
   status: 'loading' | 'ready' | 'error'
   /**
@@ -53,17 +66,21 @@ export type AvailabilityStore = {
  * Supabase caps every response at `db-max-rows`, 1000 by default, and it does
  * so **silently** — a truncated read is indistinguishable from a Friend who
  * drew less. Slot rows reach that fast: 1000 rows is 500 hours, so a Friend who
- * marks eight hours a day crosses it inside four months, and issue 07 multiplies
- * it by the size of the Group when the `friend_id` filter comes out.
+ * marks eight hours a day crosses it inside four months.
  *
- * So the first page IS the one query the issue asks for, and the loop below
- * only continues when a page comes back full — which, until someone has drawn a
- * great deal, never happens.
+ * **And the `friend_id` filter is now gone, so multiply that by the size of the
+ * Group.** A nine-Friend group at eight hours a day crosses 1000 rows in under
+ * three weeks. The paging stopped being theoretical with that one deleted line:
+ * without it the grid would simply stop showing Availability past an arbitrary
+ * date, with no error anywhere.
+ *
+ * So the first page IS the one query issue 05 asked for, and the loop below only
+ * continues when a page comes back full.
  */
 const PAGE_SIZE = 1000
 
 /**
- * Everyone's Availability — which, in this slice, is your own.
+ * Everyone's Availability.
  *
  * Instantiated in `AppShell` beside `useCalendarView` and `useRoster`, and
  * passed down by prop: the established place for state the whole view reaches.
@@ -72,15 +89,20 @@ const PAGE_SIZE = 1000
  * and barely moves, while this one is written on every drag (issue 06) and
  * pushed to by Realtime (issue 07).
  *
- * ## Built for the two issues that consume it next
+ * ## Four writers, one door
  *
- * - **Issue 06** paints into it optimistically the moment a gesture ends, with
- *   no pending treatment (ticket 19). That is an `add`/`delete` against `slots`
- *   and a revert on failure; the key is already the one the write uses. Now
- *   built — see `draw`, `erase` and `perform` below.
- * - **Issue 07** fills it with *everyone's* rows. That is the removal of one
- *   `.eq('friend_id', …)` below — nothing else here is per-Friend, because the
- *   key carries the Friend.
+ * `held` is the source of truth and `slots` its render mirror; `change` is the
+ * only mutator. Four things compose through it, and they are why the ref exists
+ * rather than being an optimisation:
+ *
+ * 1. **The paged read**, folding rows in as a union.
+ * 2. **A gesture's optimistic paint** (issue 06, ticket 19) — no pending
+ *    treatment, painted the moment the gesture ends.
+ * 3. **That gesture's revert**, two seconds later, which has to *read the set
+ *    back* to remove only the Slots its own gesture introduced.
+ * 4. **Realtime** (issue 07) — and this is the one the union could not serve:
+ *    `mergeSlots` cannot express a deletion that happened elsewhere, so a
+ *    DELETE event goes through the removal path instead of the fold.
  *
  * ## The write (ticket 19)
  *
@@ -102,8 +124,14 @@ const PAGE_SIZE = 1000
  * strip below it and **merges** into the same store; a replace would blank the
  * week you were just looking at.
  *
- * No Realtime subscription, and no other Friend's rows. Both are issue 07's,
- * and both would be invisible here — there is nobody else to hear from yet.
+ * **Every Friend's rows, in one query with no `friend_id` filter at all.** The
+ * key carries the Friend, so nothing else in the read had to change — but it
+ * multiplies the row count by the size of the Group, which is what makes the
+ * paging above load-bearing rather than defensive.
+ *
+ * Then a **Realtime subscription** on top, so the grid keeps up with everybody
+ * else without a reload. See the effect below for the DELETE hole, the replica
+ * identity, and why your own echo needs no bookkeeping.
  */
 export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
   const { state } = useSession()
@@ -177,9 +205,12 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
     const page = (index: number) => {
       const query = supabase
         .from('availability')
+        // Everyone's, and there is nothing here that says so: the key carries
+        // the Friend, so the whole of "the grid stops being yours and becomes
+        // the group's" was the removal of one `.eq('friend_id', …)`. The read
+        // policy is `using (true)` (02-availability.sql) because the whole
+        // product is a count over other people's rows.
         .select('friend_id, slot_start')
-        // Issue 07 deletes this line and the grid becomes everyone's.
-        .eq('friend_id', userId)
         .gte('slot_start', new Date(wantedFrom).toISOString())
         // Ordered because `range` is meaningless over an unordered result:
         // without it the pages may overlap and miss rows between them.
@@ -217,9 +248,138 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
     })
   }, [userId, wantedFrom, change])
 
+  /**
+   * Everyone else's edits, as they happen.
+   *
+   * `postgres_changes` rather than Broadcast: Supabase now recommends Broadcast
+   * for scale, and the scale it means is three orders of magnitude past a group
+   * of nine (ticket 02 §6.1). **Unfiltered**, and filtered in the client — there
+   * is no `filter` expression for "rows overlapping the visible week", and one
+   * built from two column comparisons would need the channel torn down and
+   * re-subscribed on every calendar navigation (§6.4).
+   *
+   * ## Two events, not `*`
+   *
+   * `update` is unreachable: `02-availability.sql` withholds the update grant
+   * outright, because the row is two columns and both are the key — changing
+   * either is not an edit, it is a different row. Subscribing to it would be
+   * subscribing to something the database cannot produce.
+   *
+   * ## Why a DELETE payload is enough, and why `replica identity full` is not
+   * needed
+   *
+   * The default replica identity is the **primary key**, and here the primary
+   * key *is* the whole row: `(friend_id, slot_start)` and nothing else. So a
+   * delete payload carries exactly the key this store is keyed on — the reason
+   * `03-realtime.sql` deliberately does not set `replica identity full`, which
+   * would cost write amplification for a copy of two columns we already have.
+   *
+   * ## The documented hole, and why it is harmless here
+   *
+   * **RLS is not applied to DELETE events** (ticket 02 §6.3, quoting Supabase's
+   * own caution: there is no way for Postgres to check access to a row that no
+   * longer exists). So every subscriber sees every delete on this table. That
+   * leaks nothing: the select policy is `using (true)` and the entire product is
+   * a count over other Friends' rows, so a delete event says nothing a `select`
+   * would not. Written down rather than left implicit, so a later reader does
+   * not mistake the hole for a leak — it is a rule to remember before
+   * publishing a table whose *reads* are restricted, and this is not one.
+   *
+   * ## Your own echo is a no-op, and is not filtered out
+   *
+   * The key is the natural key, so an optimistic row and its echo are the same
+   * row and `mergeSlots` changes nothing (ticket 19). There is deliberately no
+   * "is this event mine" bookkeeping: filtering out your own session's events
+   * would break **your own second device**, and drawing on a laptop has to reach
+   * the phone.
+   *
+   * ## Auth
+   *
+   * Ticket 02 could not confirm from the docs whether Realtime's token refreshes
+   * as the session rotates. Reading the installed client settles it:
+   * `@supabase/supabase-js@2.112.4` wires `auth.onAuthStateChange` to
+   * `realtime.setAuth(token)` on `TOKEN_REFRESHED`, `SIGNED_IN` and
+   * `INITIAL_SESSION`, and to `setAuth()` on `SIGNED_OUT`
+   * (`_listenForAuthEvents` / `_handleTokenChanged`). So nothing is needed here
+   * — but that is evidence from the shipped source, not from the documentation
+   * the ticket asked about, and the ticket's advice stands: if the grid ever
+   * goes quiet after a long idle, this is the first thing to check.
+   */
+  useEffect(() => {
+    if (userId === null) return
+
+    const channel = supabase
+      .channel('availability')
+      .on<SlotRow>(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'availability' },
+        ({ new: row }) => change((current) => mergeSlots(current, [row]))
+      )
+      .on<SlotRow>(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'availability' },
+        ({ old: { friend_id: friendId, slot_start: slotStart } }) => {
+          // `old` is `Partial<SlotRow>` in the types, and honestly so: under a
+          // narrower replica identity than this table happens to have, it would
+          // be. Nothing to do if either half of the key is missing.
+          if (friendId === undefined || slotStart === undefined) return
+          /*
+           * The removal path `mergeSlots` cannot express. Its doc comment says
+           * so: a union folds rows *in* and has no way to say a row went away
+           * somewhere else. This is the subscription it was waiting for, and it
+           * goes through `change` like every other writer — the paged read, a
+           * gesture's optimistic paint, and that gesture's revert.
+           */
+          change((current) => withSlots(current, friendId, [new Date(slotStart)], false))
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [userId, change])
+
   const isFree = useCallback(
     (friendId: string, slotStart: Date) => slots.has(slotKey(friendId, slotStart)),
     [slots]
+  )
+
+  /**
+   * Every Slot the current view can show, as instants.
+   *
+   * Built from each day's **own** slots array rather than from a 48-row
+   * assumption: a day is 46, 48 or 50 slots (`slotsOfDay`), and the 25-hour
+   * Sunday holds 02:00 twice.
+   */
+  const viewInstants = useMemo(
+    () => days.flatMap((day) => slotsOfDay(day, GROUP_TIME_ZONE).map((slot) => slot.start)),
+    [days]
+  )
+
+  /**
+   * Of these Friends, the ones holding **no** Availability anywhere in the
+   * current view — CONTEXT.md's *silence*.
+   *
+   * "Not having drawn Availability is silence, not a claim of being busy — but
+   * the tool cannot tell the two apart." The roster marks these Friends with a
+   * muted dot (ticket 01) so an inactive Friend does not read as a busy one,
+   * which is a real confusion in a product whose only signal is presence.
+   *
+   * Answered here rather than in the sidebar because this is the only thing that
+   * holds the rows, and answered by asking about the view's own instants rather
+   * than by scanning the store: the set is keyed `friendId|instant` and cannot
+   * be range-queried, but the question is only ever about the ~350 Slots on
+   * screen. Nine Friends over a week is ~3000 set lookups behind a `useMemo`.
+   */
+  const silent = useCallback(
+    (friendIds: readonly string[]): ReadonlySet<string> =>
+      new Set(
+        friendIds.filter(
+          (friendId) => !viewInstants.some((instant) => slots.has(slotKey(friendId, instant)))
+        )
+      ),
+    [viewInstants, slots]
   )
 
   /**
@@ -318,6 +478,7 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
 
   return {
     isFree,
+    silent,
     draw,
     erase,
     saving: slowWrites > 0,

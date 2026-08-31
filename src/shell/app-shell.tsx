@@ -28,10 +28,14 @@ import { useMemo } from 'react'
  * and travel by prop: where the calendar is pointed, which Friends are Hidden,
  * everyone's Availability, and what a drag on the grid means. The roster is here
  * rather than inside the left pane because Hidden is a query tool — issue 07's
- * heatmap and issue 08's Candidate list are computed over `roster.visible`, and
- * neither of them is in the sidebar. Availability is here for the same reason
- * twice over: issue 06 writes into it from the grid and issue 08 computes
+ * heatmap is computed over `roster.visible` and issue 08's Candidate list will
+ * be, and neither of them is in the sidebar. Availability is here for the same
+ * reason twice over: issue 06 writes into it from the grid and issue 08 computes
  * Candidates from it in the right pane.
+ *
+ * The two derivations below are here because each needs **both** of those hooks,
+ * and nowhere further down the tree holds both: the wash's query is the roster
+ * crossed with the store, and so is silence.
  *
  * The drawing tools are here because they are **split across two columns**:
  * ticket 01 put the "Drawing mode:" tabbar and the erase toggle in the left
@@ -65,6 +69,29 @@ export const AppShell = () => {
     return identity === null ? null : { id: state.user.id, hue: identity.hue }
   }, [state])
 
+  /**
+   * The Friends holding no Availability anywhere in the week on screen —
+   * CONTEXT.md's **silence**, which the roster marks with a muted dot so an
+   * inactive Friend does not read as a busy one (ticket 01).
+   *
+   * Computed here because it is the one place that holds both halves: the store
+   * has every Friend's rows and the roster has the Friends. `friends` rather
+   * than `visible`, so a Hidden Friend's row still says whether they have said
+   * anything — hiding is a query tool, not a reason to stop reporting.
+   */
+  const rosterIds = useMemo(() => roster.friends.map((friend) => friend.id), [roster.friends])
+  /*
+   * `silentAmong` is pulled off the store first, rather than reached through it
+   * inside the memo. Depending on `availability` would defeat the memo entirely —
+   * the store is a fresh object literal every render, so ~350 × N set lookups
+   * would re-run whenever anything in this shell re-rendered — and naming the
+   * narrow dependency inline instead is what React Compiler refuses to preserve,
+   * because the dependency it infers from the body is the whole object. A local
+   * makes the two agree: the body reads `silentAmong` and nothing else.
+   */
+  const { silent: silentAmong } = availability
+  const silent = useMemo(() => silentAmong(rosterIds), [silentAmong, rosterIds])
+
   return (
     <AppShellProvider>
       {/*
@@ -74,7 +101,7 @@ export const AppShell = () => {
       <OfflineBanner />
       <div className="flex min-h-0 flex-1">
         <ShellSidebar side="left">
-          <LeftPane calendar={calendar} roster={roster} tools={tools} />
+          <LeftPane calendar={calendar} roster={roster} silent={silent} tools={tools} />
         </ShellSidebar>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -85,6 +112,7 @@ export const AppShell = () => {
                 calendar={calendar}
                 availability={availability}
                 viewer={viewer}
+                visible={roster.visible}
                 tools={tools}
               />
             </ShellInset>

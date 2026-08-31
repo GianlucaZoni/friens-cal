@@ -20,15 +20,29 @@ import { EyeIcon, EyeOffIcon, UserRoundIcon } from 'lucide-react'
  * viewer is currently trying to meet, so it filters the grid *and* drives
  * Candidate computation. It is ephemeral — see `useRoster`.
  *
- * Deliberately not here, so the room for it stays visible: the **silence dot**
- * beside Friends with no Availability in the current view. It needs Availability,
- * which does not exist until issues 05 and 06, and it lands in issue 07.
+ * The **silence dot** is here as of issue 07. Ticket 01 asked for it — "a muted
+ * dot beside Friends with zero Availability in the current view, so an inactive
+ * Friend does not read as a busy one" — and issue 07's acceptance criteria do
+ * not mention it. The ticket wins: the spec says so where they disagree, and the
+ * decision is load-bearing rather than decorative now that the grid is a *count*
+ * over everyone. A Friend contributing nothing to the wash is either free
+ * nowhere or has not said anything, and CONTEXT.md is explicit that those are
+ * different things the tool cannot otherwise tell apart.
  */
 export const FriendRoster = ({
   roster,
+  silent,
   animate,
 }: {
   roster: RosterState
+  /**
+   * Ids of the Friends holding no Availability anywhere in the current view.
+   *
+   * Passed in rather than computed here: the answer needs every Friend's rows,
+   * which live in the Availability store, and the sidebar has no business
+   * reaching for them. `AppShell` holds both.
+   */
+  silent: ReadonlySet<string>
   /** Blobatars animate while the cursor is over the sidebar (ticket 12 d9). */
   animate: boolean
 }) => {
@@ -63,6 +77,7 @@ export const FriendRoster = ({
               key={friend.id}
               friend={friend}
               hidden={hidden.has(friend.id)}
+              silent={silent.has(friend.id)}
               animate={animate}
               onToggle={() => toggleHidden(friend.id)}
             />
@@ -118,11 +133,14 @@ const RosterSkeleton = () => (
 const RosterRow = ({
   friend,
   hidden,
+  silent,
   animate,
   onToggle,
 }: {
   friend: RosterFriend
   hidden: boolean
+  /** No Availability anywhere in the current view. */
+  silent: boolean
   animate: boolean
   onToggle: () => void
 }) => {
@@ -169,6 +187,7 @@ const RosterRow = ({
             </>
           )}
           <span className="min-w-0 flex-1 truncate text-[13px]">{friend.name}</span>
+          {silent && <SilenceDot name={friend.name} />}
           {friend.isSelf && <span className="shrink-0 text-[10px] text-muted-foreground">you</span>}
         </span>
         <Eye
@@ -206,4 +225,24 @@ const NotSetUpYet = () => (
       <UserRoundIcon />
     </span>
   </>
+)
+
+/**
+ * A Friend who has said nothing about the week on screen.
+ *
+ * **Muted, and never coloured** (ticket 01 says "a muted dot"). Their own colour
+ * would read as a mark *of* them — as if they had contributed something — and
+ * this dot exists to say the opposite. It is also the reason it is a dot rather
+ * than dimming the row: the row is already dimmed when the Friend is Hidden, and
+ * Hidden and silent are different facts that can both be true at once.
+ *
+ * Screen-reader text rather than only a `title`, because this is information and
+ * not an affordance — and appended to the row's own label by being inside the
+ * button, so it is read as part of the Friend rather than as a second control.
+ */
+const SilenceDot = ({ name }: { name: string }) => (
+  <span className="flex shrink-0 items-center" title={`${name} has no Availability in this view`}>
+    <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/40" />
+    <span className="sr-only">— nothing marked in this view</span>
+  </span>
 )

@@ -27,6 +27,7 @@
  * evaluated below, once, at module load. Nothing in this file is a measured
  * number typed back in — change `L_THEME` and the chroma follows.
  */
+import { installCssTokens, themedTokensCss } from '../lib/css-tokens.ts'
 
 /* ------------------------------------------------------------------ *
  * The sRGB gamut boundary
@@ -146,42 +147,21 @@ export const C_THEME = {
  * The constants as CSS custom properties, so a Friend's colour switches theme
  * without any code asking which theme is on.
  *
- * That question has no good answer in JavaScript here. The app has no theme
- * state — light and dark are the `.dark` class and the stylesheet, and ticket
- * 18 ruled out putting a theme switch in the profile menu because light/dark is
- * not a Friend column. So `friendColour()` returns a colour whose lightness and
- * chroma are `var()`s and whose hue is the only literal, and the cascade
- * resolves the theme the same way it resolves `--border`.
+ * `friendColour()` therefore returns a colour whose lightness and chroma are
+ * `var()`s and whose hue is the only literal. Why that is the only workable
+ * shape — and why the values are injected rather than written into `index.css` —
+ * is in `lib/css-tokens.ts`, which the heatmap's ramp uses for the same reasons.
  *
- * Injected rather than written into `index.css` because the numbers are
- * computed above and two copies of a constant is one copy too many: a hand-kept
- * `--friend-c: 0.105` in the stylesheet would be exactly the eyeballed
- * constant this file exists to eliminate, and it would drift the first time
- * `L_THEME` moved.
- */
-const TOKEN_STYLE_ID = 'friend-colour-tokens'
-
-const friendColourTokensCss = (): string =>
-  [
-    `:root { --friend-l: ${L_THEME.light}; --friend-c: ${C_THEME.light}; }`,
-    `.dark { --friend-l: ${L_THEME.dark}; --friend-c: ${C_THEME.dark}; }`,
-  ].join('\n')
-
-/**
  * Call once, at startup, before the first render. Idempotent.
- *
- * `friendColour()` is meaningless until this has run — an `oklch()` with an
- * undefined `var()` in it is invalid at computed-value time, which paints the
- * inherited colour rather than throwing. Hence one call site, in `main.tsx`,
- * next to the stylesheet import.
  */
-export const installFriendColourTokens = (): void => {
-  const existing = document.getElementById(TOKEN_STYLE_ID)
-  const style = existing instanceof HTMLStyleElement ? existing : document.createElement('style')
-  style.id = TOKEN_STYLE_ID
-  style.textContent = friendColourTokensCss()
-  if (!existing) document.head.appendChild(style)
-}
+export const installFriendColourTokens = (): void =>
+  installCssTokens(
+    'friend-colour-tokens',
+    themedTokensCss({
+      light: { '--friend-l': L_THEME.light, '--friend-c': C_THEME.light },
+      dark: { '--friend-l': L_THEME.dark, '--friend-c': C_THEME.dark },
+    })
+  )
 
 /* ------------------------------------------------------------------ *
  * The colour itself

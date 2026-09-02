@@ -141,3 +141,25 @@ names.
       when either is null
 - [ ] Provenance gates nothing: every Friend can still retime and cancel every
       Hangout, including ones they did not confirm
+
+## Correction to §3 above — the columns are `created_by`, `edited_by`, `edited_at`
+
+The human answered ticket 07's `Needs the human`: **a rename counts as an edit.**
+So `retimed_by` / `retimed_at` above never existed. Build:
+
+```
+created_by uuid null        references friend (id) on delete set null
+edited_by  uuid null        references friend (id) on delete set null
+edited_at  timestamptz null
+```
+
+`edited_by` non-null is ticket 08 §1's mark, set by **both** the retime and the
+rename. One `with check (edited_by = (select auth.uid()))` on the update policy
+covers every update, with nothing to exempt — which is why this is the simpler
+schema as well as the decided one: no RLS policy can express *"if `starts_at`
+changed then the mark must be set"*, because `with check` cannot see the old row.
+
+The added acceptance criteria above stand with the names substituted, plus:
+
+- [ ] Renaming a Hangout sets `edited_by` / `edited_at` and shows the `edited`
+      word, exactly as retiming does

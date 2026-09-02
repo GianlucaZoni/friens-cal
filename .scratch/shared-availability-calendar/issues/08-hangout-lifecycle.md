@@ -203,3 +203,30 @@ set), it does not survive cancellation (hard delete, §3), and it gates nothing.
 Open, and deliberately left in ticket 07 rather than answered here: whether a
 **rename** is also an "edit". Recommended no, because §1's mark exists to say
 *availability was written for you* and a rename writes none.
+
+## Correction to the amendment above — the mark is `edited_by`, and a rename sets it
+
+The amendment above names the provenance columns `retimed_by` / `retimed_at`.
+**Superseded by the human's answer in ticket 07** before either was written: the
+columns are `created_by`, `edited_by` and `edited_at`, and **a rename counts as
+an edit**.
+
+§1's mark therefore means *"this Hangout has changed since it was confirmed"*
+rather than *"it has been moved"*. The transition table's added effects read:
+
+| From | To | Trigger | Added |
+|---|---|---|---|
+| — | Hangout exists | Confirm a Candidate | `created_by = auth.uid()` |
+| Live | Live, retimed | Retime | `edited_by = auth.uid()`, `edited_at = now()` |
+| Live | Live, renamed | Rename (issue 10's detail sheet) | the same two |
+
+**§1's stated justification does not survive this, and the replacement is
+better.** §1 called the mark *"the only signal a Participant gets that slots
+were written for them"*. A rename writes no Availability, so the badge can no
+longer promise that. But §11 already puts that signal where it actually
+lands — the retime dialog, naming the Friends it will write to, in front of the
+person doing the writing. A badge can only ever say *something changed*.
+
+See ticket 07's answer for the mechanical argument that makes this the easier
+schema as well as the human's preference: no RLS policy can say "if `starts_at`
+changed then the mark must be set", because `with check` cannot see the old row.

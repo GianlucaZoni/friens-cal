@@ -208,9 +208,13 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   gives its detail sheet its own content, **the Hangout's name** — issue 09
   found every action ticket 16 had put in that sheet belonged to issue 10, which
   is why confirm shipped as a bare tick — plus the `"Hangout"` default and the
-  name on the calendar marker. **Open for the human**: whether a *rename* counts
-  as an edit (ticket 07's `Needs the human`); recommended no, since the mark
-  exists to say "availability was written for you".
+  name on the calendar marker. **Resolved by the human**: a *rename* **does**
+  count as an edit, so the mark is `edited_by` / `edited_at` and not
+  `retimed_by` — against the recommendation, and correctly, because no RLS
+  policy can say "if `starts_at` changed then the mark must be set" (`with
+  check` cannot see the old row), so a retime-only mark could not have been
+  enforced by the policy that has to exist anyway. §1's "slots were written for
+  you" signal moves to §11's retime dialog, where it was always stronger.
 
 ## Not yet specified
 

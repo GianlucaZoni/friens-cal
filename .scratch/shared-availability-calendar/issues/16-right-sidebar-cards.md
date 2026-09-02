@@ -354,3 +354,20 @@ Hangout shows on every Friend's calendar, and the month is a calendar. Ticket 14
 settled that month cells carry no numeral and that the week grid's heatmap does
 not carry over; it never had a Hangout to place, and now it does — at a cell size
 where a name may not fit at all.
+
+## Correction — the sheet's provenance lines, and what `edited` now means
+
+The amendment above names the provenance lines `confirmed by` and `retimed by`.
+Ticket 07's answer supersedes the second: the columns are `created_by`,
+`edited_by`, `edited_at`, and **a rename counts as an edit**.
+
+The sheet holds:
+
+- **`confirmed by <Friend>`** — from `created_by`.
+- **`edited by <Friend>`, with `edited_at`** — from the other two.
+
+And the card's small muted `edited` word (§1, unchanged in form) now means
+*something about this Hangout changed after it was confirmed*, not *it was
+moved*. Since the sheet is the only place that can say **what** changed, it is
+the sheet that carries the time and the editor; the badge is only the pointer to
+it. Both lines are nullable and simply do not render when absent.

@@ -100,8 +100,9 @@ indistinguishable from the drag's own dashed outlines. → ticket 16's amendment
 1. **`edited` is not built.** Ticket 08 §1 wants the muted word after the title,
    but there is no column for it in this ticket's schema and nothing that could
    set one — retime is the only thing that marks a Hangout. It arrives with the
-   migration that writes it, now as `retimed_by` (ticket 07's amendment), which
-   is the mark *and* the name in one column.
+   migration that writes it, as **`edited_by`** (ticket 07's amendment and the
+   human's answer to its `Needs the human`), which is the mark *and* the name in
+   one column — and which a **rename** sets too.
 2. **The touch route is a permanently-visible tick, not ticket 16's detail
    sheet.** The sheet is the live decision and every action it lists — Join,
    Leave, `Change the time…`, Cancel — is issue 10's, so there was nothing for

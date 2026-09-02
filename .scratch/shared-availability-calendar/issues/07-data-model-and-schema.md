@@ -278,3 +278,56 @@ Friend's row goes, and the plan still happened. Null then reads honestly as
    five real ones. A single `edited_by` covering both was rejected for weakening
    the one signal ticket 08 asked for — but it is the cheapest option and worth
    overruling this on if the provenance matters more than the signal.
+
+## Answer to that `Needs the human` — a rename IS an edit
+
+Decided by the human, against the recommendation above. **`retimed_by` /
+`retimed_at` are superseded before they were ever written**; the columns are:
+
+```
+hangout   created_by uuid null        references friend (id) on delete set null,
+          edited_by  uuid null        references friend (id) on delete set null,
+          edited_at  timestamptz null
+```
+
+`edited_by` non-null is ticket 08 §1's mark, and it now covers **any** change to
+a Hangout after it was confirmed — retime or rename.
+
+### It is also structurally better, which the recommendation missed
+
+The argument for `retimed_by` was semantic. The argument against it is
+mechanical, and it is decisive: **an RLS policy cannot express "if `starts_at`
+changed, then `retimed_by` must be me".** `with check` sees only the new row and
+`using` only the old; there is no single expression over both. So a
+retime-specific mark could not be *enforced* by the policy that already has to
+exist — a rename would either be forced to claim a retime it did not perform, or
+the `with check` would have to be dropped and the column would become
+decorative, which is the exact failure mode this amendment was written to avoid.
+Policing it would have taken a trigger, for a distinction the card is not even
+trying to draw.
+
+With `edited_by`, **every** update to `hangout` is an edit, so one policy holds:
+
+```
+with check (edited_by = (select auth.uid()))
+```
+
+Nothing to exempt, nothing to compare across old and new, no trigger.
+
+### What this costs, recorded rather than glossed
+
+Ticket 08 §1's mark was justified as *"the only signal a Participant gets that
+slots were written for them"*, and a rename writes nobody's Availability. So the
+badge no longer implies that.
+
+**That signal moves to where it was always stronger.** Ticket 08 §11 already
+requires the retime dialog to name the Friends whose calendars it will write to —
+*"Marco, Sara and Luca will be marked free Tue 19:00–21:00"* — shown to the
+person doing it, at the moment they do it. A persistent badge on a card was
+never going to carry that; it can only ever say *something changed*, which is
+what `edited` now honestly means.
+
+The residue, named: a Friend who returns to a Hangout marked `edited` cannot tell
+from the badge alone whether their calendar was written to. The detail sheet can
+say which — `edited_at` plus the current time range is enough to reconstruct it —
+and that is the sheet's problem, not the badge's.

@@ -21,7 +21,6 @@ import { slotsOfDay } from '../availability/slots.ts'
 import {
   hangoutsFrom,
   isHappening,
-  isParticipant,
   isPast,
   isOverlapRejection,
   participantIds,
@@ -96,10 +95,6 @@ test('Participants are the rows with no `left_at`; Left is stored, not a Partici
   // readers, so nothing here throws Sara's row away.
   assert.equal(pizza.participants.length, 3)
   assert.deepEqual(participantIds(pizza), [MARCO, LUCA])
-
-  assert.equal(isParticipant(pizza, MARCO), true)
-  assert.equal(isParticipant(pizza, SARA), false, 'Left is not a Participant')
-  assert.equal(isParticipant(pizza, null), false, 'nobody signed in is nobody on it')
 })
 
 test('participants land on their own Hangout, not on whichever one folded first', () => {
@@ -171,8 +166,15 @@ test('a Hangout occupies the rows of its own column, clipped by it', () => {
   const saturday = slotsOfDay(new Date(at(4, 12)), ROME)
   const [pizza] = hangoutsFrom([PIZZA], [])
 
-  // 20:00 is row 40 of a 48-row day, and three hours is six slots.
+  /*
+   * 20:00 is row 40 of a 48-row day, and three hours is six slots — 40 through
+   * 45. **Not 46.** Row 46 is the 23:00 Slot, which is where the Hangout ends,
+   * and painting it would put the block half an hour past the plan and make a
+   * back-to-back Hangout overlap it on screen while the database calls them
+   * disjoint.
+   */
   assert.deepEqual(runInColumn(pizza, saturday), { start: 40, length: 6 })
+  assert.equal(saturday[46].label, '23:00')
   assert.equal(runInColumn(pizza, slotsOfDay(new Date(at(5, 12)), ROME)), null)
 })
 

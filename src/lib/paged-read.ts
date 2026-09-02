@@ -46,6 +46,11 @@ export const readEveryPage = async <Row>(
   let index = 0
   let full = true
 
+  /*
+   * A `while`, and the repo's style rule permits it: it forbids `for`,
+   * `for...of` and `for...in`, which this is none of. There is nothing to
+   * iterate over — the page count is not known until a page comes back short.
+   */
   while (full) {
     const { data, error } = await page(index)
     if (error) return { data: rows, error }

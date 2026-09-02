@@ -115,10 +115,32 @@ export const hangoutsFrom = (
 export const participantIds = (hangout: Hangout): string[] =>
   hangout.participants.filter(({ leftAt }) => leftAt === null).map(({ friendId }) => friendId)
 
-/** Whether this Friend is on it now — a row, with `left_at` still null. */
-export const isParticipant = (hangout: Hangout, friendId: string | null): boolean =>
-  friendId !== null &&
-  hangout.participants.some((row) => row.friendId === friendId && row.leftAt === null)
+/**
+ * The Participants of a Hangout, resolved against a roster — its **faces**.
+ *
+ * One function for the three places that draw them (the pinned card, the grid
+ * block, and whatever issue 10 adds), because the `flatMap` is the whole of it
+ * and it exists for two reasons that are easy to forget separately:
+ *
+ * - A Participant row can **outlive the roster's knowledge of a Friend**. The
+ *   row is stored and the roster is read, so the two can disagree for a beat.
+ * - A Friend **mid-setup has no face to draw at all**, so every caller passes a
+ *   map already narrowed by `setUpOnly`.
+ *
+ * Either one would otherwise be an `undefined` React then tries to render.
+ *
+ * Generic over the Friend, so this module stays free of `@/` imports and
+ * testable under plain Node — the callers' map is `SetUpFriend`, and nothing
+ * here needs to know that.
+ */
+export const facesOf = <Friend,>(
+  hangout: Hangout,
+  byId: ReadonlyMap<string, Friend>
+): Friend[] =>
+  participantIds(hangout).flatMap((id) => {
+    const friend = byId.get(id)
+    return friend === undefined ? [] : [friend]
+  })
 
 /**
  * Happening right now — which the card draws in the destructive colour, and
@@ -193,7 +215,7 @@ export const runInColumn = (hangout: HangoutRange, slots: readonly Slot[]): Run 
  * recognising exactly this code and nothing else: any *other* error is a
  * failure to report, and this one is a Hangout that already exists.
  */
-export const EXCLUSION_VIOLATION = '23P01'
+const EXCLUSION_VIOLATION = '23P01'
 
 /** Whether a PostgREST error is the exclusion constraint rejecting an overlap. */
 export const isOverlapRejection = (error: { code?: string } | null | undefined): boolean =>

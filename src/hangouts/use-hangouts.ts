@@ -338,7 +338,7 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
       if (userId === null || inFlight.current) return
       inFlight.current = true
       setConfirming(candidate.id)
-      void settle(candidate, userId)
+      void performConfirm(candidate, userId)
         .then(({ hangout, participants }) => {
           /*
            * Folded in here rather than left to the Realtime echo. The echo is
@@ -385,8 +385,12 @@ type Landed = {
 /**
  * The round trip, outside the hook: one Hangout, its Participants, and the two
  * ways it can end other than working.
+ *
+ * Named for `useAvailability`'s `perform`, which is the same shape one table
+ * over — the async half of a write, lifted out of the hook so the synchronous
+ * half stays synchronous.
  */
-const settle = async (candidate: Candidate, userId: string): Promise<Landed> => {
+const performConfirm = async (candidate: Candidate, userId: string): Promise<Landed> => {
   const when = whenOf(candidate.start, candidate.end, GROUP_TIME_ZONE)
   const range = `${when.date}, ${when.range}`
 
@@ -402,7 +406,7 @@ const settle = async (candidate: Candidate, userId: string): Promise<Landed> => 
   if (error !== null) {
     return isOverlapRejection(error)
       ? await joinTheWinner(candidate, userId, range)
-      : failed(`Couldn't confirm ${range}`, error.message)
+      : reportFailure(`Couldn't confirm ${range}`, error.message)
   }
 
   const seeded = candidate.friendIds.map((friendId) => ({
@@ -419,17 +423,23 @@ const settle = async (candidate: Candidate, userId: string): Promise<Landed> => 
 
   if (failure !== null) {
     /*
-     * Undo step 1. A Hangout with no Participants is the state ticket 08 §4
-     * calls auto-cancel — and the trigger that enforces it is issue 10's, so
-     * until then the client is the only thing that can keep this from
-     * happening. It is also the honest shape: two statements outside a
-     * transaction means the compensation belongs to whoever issued them.
+     * Undo step 1 — **its own half-finished write**, not ticket 08 §4's
+     * auto-cancel rule. That rule is about a Hangout whose *last Participant*
+     * leaves or is dropped, and it belongs to the drop trigger (issue 10)
+     * because the trigger can empty a Hangout with nobody clicking anything.
+     * This is the narrower obligation that comes with issuing two statements
+     * outside a transaction: PostgREST cannot span them and this project has
+     * no server, so the compensation belongs to whoever issued them.
+     *
+     * Leaving it would be worse than a failed confirm. An empty Hangout holds
+     * its window against the exclusion constraint — so nobody can confirm that
+     * evening — and renders as a card with no faces on it.
      *
      * The cascade takes any participant rows that did land, so this needs no
      * second cleanup.
      */
     await supabase.from('hangout').delete().eq('id', hangout.id)
-    return failed(`Couldn't confirm ${range}`, failure.message)
+    return reportFailure(`Couldn't confirm ${range}`, failure.message)
   }
 
   return { hangout, participants: seeded.map((row) => ({ ...row, left_at: null })) }
@@ -440,9 +450,21 @@ const settle = async (candidate: Candidate, userId: string): Promise<Landed> => 
  *
  * **Re-read rather than looked up locally.** The winner was inserted moments
  * ago somewhere else, so the local store almost certainly does not have it yet
- * — the Realtime event and this rejection are in flight at the same time. The
- * exclusion constraint guarantees at most one row can overlap, which is why
- * `maybeSingle` is honest here rather than optimistic.
+ * — the Realtime event and this rejection are in flight at the same time.
+ *
+ * **`limit(1)`, not `maybeSingle` alone, and the difference is a bug that read
+ * as a guarantee.** The exclusion constraint forbids two Hangouts overlapping
+ * *each other*; it says nothing about how many may sit inside one Candidate's
+ * range. A 20:00–23:00 Candidate happily contains 20:00–21:00 and 21:30–22:00.
+ * The sidebar cannot normally offer such a Candidate — step 3 of the pipeline
+ * blanks a Hangout's Slots, so the window would already be cut in two — but the
+ * reachable case is precisely the one this function exists for: the store is
+ * stale, and the two Hangouts arrive after the render. A bare `maybeSingle`
+ * then answers `PGRST116` on two rows and falls through to the error this whole
+ * path exists to avoid.
+ *
+ * **The earliest** of them, which is the honest reading of "the Hangout that
+ * won": it is the one that took the start of the window the Friend clicked on.
  */
 const joinTheWinner = async (
   candidate: Candidate,
@@ -456,6 +478,8 @@ const joinTheWinner = async (
     // Candidate starts is not the one that beat us to it.
     .lt('starts_at', new Date(candidate.end).toISOString())
     .gt('ends_at', new Date(candidate.start).toISOString())
+    .order('starts_at')
+    .limit(1)
     .maybeSingle()
 
   if (error !== null || winner === null) {
@@ -465,7 +489,7 @@ const joinTheWinner = async (
      * rather than retried: the Candidate is still on screen and clicking again
      * is the right move, which is more than an automatic retry could promise.
      */
-    return failed(
+    return reportFailure(
       `Couldn't confirm ${range}`,
       error?.message ?? 'Something else was booked at that time, and is already gone.'
     )
@@ -479,7 +503,7 @@ const joinTheWinner = async (
     )
 
   if (joinError !== null) {
-    return failed(
+    return reportFailure(
       `Couldn't confirm ${range}`,
       `Somebody else booked that time first, and adding you to their plan failed: ${joinError.message}`
     )
@@ -516,7 +540,7 @@ const joinTheWinner = async (
  * was ever attempted. No **Retry** action, unlike a failed drag: a confirm is
  * one click on a card that is still in the sidebar, so the retry is the card.
  */
-const failed = (title: string, description: string): Landed => {
+const reportFailure = (title: string, description: string): Landed => {
   toast.add({ type: 'error', title, description, timeout: 0 })
   return { hangout: null, participants: [] }
 }

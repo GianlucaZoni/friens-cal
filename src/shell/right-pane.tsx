@@ -4,7 +4,7 @@ import { useCandidates } from '@/candidates/use-candidates'
 import { pinned } from '@/hangouts/hangout'
 import { PinnedHangouts } from '@/hangouts/hangout-card'
 import type { HangoutStore } from '@/hangouts/use-hangouts'
-import { setUpOnly, type RosterState } from '@/roster/use-roster'
+import type { RosterState, SetUpFriend } from '@/roster/use-roster'
 import { SidebarContent } from '@/shell/shell'
 import { useMemo } from 'react'
 
@@ -41,11 +41,19 @@ export const RightPane = ({
   roster,
   availability,
   hangouts,
+  friendsById,
   now,
 }: {
   roster: RosterState
   availability: AvailabilityStore
   hangouts: HangoutStore
+  /**
+   * The whole roster by id, Hidden included — **not** `list.friendsById`, which
+   * is built from `roster.visible` because that is the Candidate scan's query.
+   * A Hangout card draws a Hidden Friend's blob in full (ticket 01, ticket 16).
+   * Held in `AppShell`, because the grid reads the same map.
+   */
+  friendsById: ReadonlyMap<string, SetUpFriend>
   /** The start of the current Slot — the app's one clock, held in `AppShell`. */
   now: number
 }) => {
@@ -58,27 +66,12 @@ export const RightPane = ({
    * 20:00 Hangout at midnight on Saturday, twenty hours before it starts.
    */
   const upcoming = useMemo(() => pinned(hangouts.hangouts, now), [hangouts.hangouts, now])
-
-  /**
-   * The **whole** roster by id, Hidden included, and only Friends who have
-   * finished setup — the others have no face to draw.
-   *
-   * Not `list.friendsById`, which is built from `roster.visible` because that
-   * is the Candidate scan's query. A Hangout card has to draw a Hidden Friend's
-   * blob in full (ticket 01, ticket 16), so it needs the map the sidebar's
-   * filter has not touched.
-   */
-  const friendsById = useMemo(
-    () => new Map(setUpOnly(roster.friends).map((friend) => [friend.id, friend])),
-    [roster.friends]
-  )
+  const hasPinned = upcoming.length > 0
 
   return (
     <SidebarContent>
       <div className="flex flex-col gap-1.5 p-2">
-        {upcoming.length > 0 && (
-          <PinnedHangouts hangouts={upcoming} friendsById={friendsById} now={now} />
-        )}
+        {hasPinned && <PinnedHangouts hangouts={upcoming} friendsById={friendsById} now={now} />}
 
         {/*
           The rule, whenever there is a pinned region above it.
@@ -90,11 +83,11 @@ export const RightPane = ({
           below is never actually absent — an empty state is what it says
           instead of cards — and the one condition is the region above.
         */}
-        {upcoming.length > 0 && <hr className="my-0.5 border-border" />}
+        {hasPinned && <hr className="my-0.5 border-border" />}
 
         <CandidateList
           list={list}
-          hangoutsPinned={upcoming.length > 0}
+          hangoutsPinned={hasPinned}
           hiddenCount={roster.hidden.size}
           onShowAll={roster.showAll}
           onConfirm={hangouts.confirm}

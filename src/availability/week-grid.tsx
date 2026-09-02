@@ -7,7 +7,7 @@ import type { AvailabilityStore } from '@/availability/use-availability'
 import { draftCell, useDrawGesture, type DrawGesture } from '@/availability/use-draw-gesture'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { whenOf } from '@/candidates/when'
-import { isHappening, isPast, participantIds, runInColumn, type Hangout } from '@/hangouts/hangout'
+import { facesOf, isHappening, isPast, runInColumn, type Hangout } from '@/hangouts/hangout'
 import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
@@ -107,7 +107,7 @@ export const WeekGrid = ({
   availability,
   viewer,
   visible,
-  friends,
+  friendsById,
   hangouts,
   now,
   tools,
@@ -126,15 +126,16 @@ export const WeekGrid = ({
    */
   visible: RosterFriend[]
   /**
-   * The **whole** roster, Hidden Friends included — only a Hangout reads this.
+   * The **whole** roster by id, Hidden Friends included — only a Hangout reads
+   * this, and `AppShell` owns it because the right pane reads it too.
    *
    * A confirmed Hangout shows in full on every Friend's grid with every
    * Participant's blob, and hiding never hides one (ticket 01). Ticket 16
    * rejected even muting a Hidden Participant's face as *a partial hide through
-   * the back door*, so the two lists are genuinely different queries rather
-   * than one list used twice.
+   * the back door*, so this and `visible` are genuinely different queries
+   * rather than one list used twice.
    */
-  friends: RosterFriend[]
+  friendsById: ReadonlyMap<string, SetUpFriend>
   /** Every confirmed Hangout, Past ones included — they stay on the grid forever. */
   hangouts: readonly Hangout[]
   /** The start of the current Slot — the app's one clock, held in `AppShell`. */
@@ -165,19 +166,6 @@ export const WeekGrid = ({
    * appears the moment they finish, and nothing else in the product can make one.
    */
   const counted = useMemo(() => setUpOnly(visible), [visible])
-
-  /**
-   * Every Friend who has finished setup, by id — the Hangout blocks' faces.
-   *
-   * Built from `friends` rather than from `visible`, which is the whole
-   * difference between the two objects on this grid: the wash is a *query* and
-   * a Hangout is a *fact*. `setUpOnly` for the same reason `counted` uses it —
-   * a Friend mid-setup has no hue and no face to draw.
-   */
-  const friendsById = useMemo(
-    () => new Map(setUpOnly(friends).map((friend) => [friend.id, friend])),
-    [friends]
-  )
 
   /**
    * The element the gesture hit-tests against. Created here so the ref travels
@@ -819,10 +807,7 @@ const HangoutBlock = ({
 }) => {
   const happening = isHappening(hangout, now)
   const over = isPast(hangout, now)
-  const faces = participantIds(hangout).flatMap((id) => {
-    const friend = friendsById.get(id)
-    return friend === undefined ? [] : [friend]
-  })
+  const faces = facesOf(hangout, friendsById)
 
   const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
 
@@ -833,7 +818,9 @@ const HangoutBlock = ({
         hangout.title ?? 'Hangout',
         `${when.date}, ${when.range}`,
         happening ? 'happening now' : over ? 'over' : null,
-        faces.length === 0 ? 'nobody on it' : `with ${faces.map((f) => f.name).join(', ')}`,
+        faces.length === 0
+          ? 'nobody on it'
+          : `with ${faces.map((friend) => friend.name).join(', ')}`,
       ]
         .filter((part) => part !== null)
         .join(' · ')}

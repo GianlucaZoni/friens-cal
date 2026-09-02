@@ -71,12 +71,18 @@ create table if not exists public.hangout (
   -- with a :45 offset would break that**, and would need this rewritten rather
   -- than relaxed.
   --
-  -- `date_part(text, interval)` is IMMUTABLE, which a check constraint
-  -- requires; `date_part(text, timestamptz)` is only STABLE, because for a
+  -- The spelling is deliberate and fragile. `date_part(text, interval)` is
+  -- IMMUTABLE; `date_part(text, timestamptz)` is only STABLE, because for a
   -- timestamptz most fields depend on the session's TimeZone. Hence the
   -- subtraction: an interval from a fixed instant, whose total seconds are a
-  -- pure function of the value. Do not "simplify" it to
-  -- `extract(minute from starts_at)`.
+  -- pure function of the value.
+  --
+  -- Postgres does **not** refuse a STABLE function here — it enforces
+  -- immutability in index expressions, not in check constraints — which is
+  -- what makes the naive version dangerous rather than merely wrong. A check
+  -- written as `extract(minute from starts_at) in (0, 30)` would be accepted,
+  -- would pass for whoever created it, and would then admit or reject the same
+  -- row depending on the connection's `TimeZone`. Do not "simplify" it.
   -- --------------------------------------------------------------------
   constraint hangout_on_the_slot_grid check (
     date_part('epoch', starts_at - '1970-01-01 00:00:00+00'::timestamptz)::bigint % 1800 = 0
@@ -164,6 +170,31 @@ comment on table public.hangout_participant is
 -- ---------------------------------------------------------------------------
 create index if not exists hangout_participant_friend_id_idx
   on public.hangout_participant (friend_id);
+
+-- ---------------------------------------------------------------------------
+-- And the index on `hangout` that the exclusion constraint does not give us.
+--
+-- The constraint builds a **GiST index on an expression** —
+-- `tstzrange(starts_at, ends_at)` — which answers "does anything overlap this
+-- range" and nothing else. It cannot serve a plain comparison on either
+-- column, because neither column is in it.
+--
+-- Both reads in the client are plain comparisons on `ends_at`: the boot read
+-- is `ends_at >= floor` (a Hangout that started before the window and has not
+-- finished is the one case where filtering on `starts_at` would lose a row),
+-- and the losing confirm's lookup for the winner is `ends_at > candidate.start`
+-- crossed with `starts_at < candidate.end`. One index on `ends_at` is the
+-- selective half of both.
+--
+-- Not `starts_at` as well, and that is the deliberate half: the boot read
+-- *orders* by it, but only after the filter above has cut the table down to the
+-- plans that have not finished — and the exclusion constraint bounds that hard,
+-- since the calendar holds one plan at a time. Sorting a handful of rows is
+-- cheaper than a second index to maintain on every confirm. Small data today
+-- (ticket 07 §11); the query shape should still be deliberate.
+-- ---------------------------------------------------------------------------
+create index if not exists hangout_ends_at_idx
+  on public.hangout (ends_at);
 
 -- ---------------------------------------------------------------------------
 -- 3. `hangout` — LOCK 1 (grants) and LOCK 2 (RLS).

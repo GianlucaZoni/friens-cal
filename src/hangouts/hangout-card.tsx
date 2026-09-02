@@ -1,5 +1,5 @@
 import { whenOf } from '@/candidates/when'
-import { isHappening, participantIds, type Hangout } from '@/hangouts/hangout'
+import { facesOf, isHappening, type Hangout } from '@/hangouts/hangout'
 import { FriendBlob } from '@/identity/friend-blob'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
@@ -155,18 +155,3 @@ export const PinnedHangouts = ({
     ))}
   </ul>
 )
-
-/**
- * The Participants of a Hangout, as faces.
- *
- * `flatMap` rather than `map`, for `CandidateList`'s reason and one more of its
- * own: a Participant row can outlive the roster's knowledge of a Friend — the
- * row is stored, the roster is read — and a Friend mid-setup has no face to
- * draw at all. Either one would otherwise be an `undefined` React then tries to
- * render.
- */
-const facesOf = (hangout: Hangout, byId: ReadonlyMap<string, SetUpFriend>) =>
-  participantIds(hangout).flatMap((id) => {
-    const friend = byId.get(id)
-    return friend === undefined ? [] : [friend]
-  })

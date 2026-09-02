@@ -204,12 +204,14 @@ if (backwardsErr?.code !== CHECK_VIOLATION) {
 ok('a Hangout that ends before it starts is refused')
 
 /*
- * The 30-minute grid, and it is worth a check rather than a comment because it
- * is the constraint most likely to be written in a form Postgres rejects at
- * CREATE time: `date_part(text, timestamptz)` is only STABLE, and a check
- * constraint needs IMMUTABLE. If §1 of the SQL was "simplified" to
- * `extract(minute from starts_at)`, the whole file failed to run and this is
- * the check that says so.
+ * The 30-minute grid, and it is worth a check rather than a comment for a
+ * reason that is the opposite of the obvious one. Postgres does **not** enforce
+ * immutability in a check constraint, so §1's careful
+ * `date_part('epoch', ts - <literal>)` spelling could be "simplified" to
+ * `extract(minute from starts_at)` and the migration would still run — it would
+ * simply start answering differently depending on the connection's `TimeZone`.
+ * A constraint that is accepted and wrong is exactly what a behavioural check
+ * is for.
  */
 const { error: offGridErr } = await supabase
   .from('hangout')

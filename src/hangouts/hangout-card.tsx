@@ -1,5 +1,5 @@
 import { whenOf } from '@/candidates/when'
-import { facesOf, isHappening, type Hangout } from '@/hangouts/hangout'
+import { facesOf, isHappening, nameOf, type Hangout } from '@/hangouts/hangout'
 import { FriendBlob } from '@/identity/friend-blob'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
@@ -39,6 +39,11 @@ import { Pin } from 'lucide-react'
  * lifecycle. A card that only reads is the honest state of this slice, the same
  * call `CandidateCard` made in issue 08 and for the same reason.
  *
+ * **The name is the headline, and every Hangout has one.** `nameOf` supplies
+ * *"Hangout"* when no title is set, which is every Hangout issue 09 can create
+ * — naming one is the detail sheet's job (issue 10). Without the default the
+ * hierarchy would invert on exactly those cards.
+ *
  * **`edited` is not here yet either.** Ticket 08 §1 marks a retimed Hangout
  * permanently, as a small muted *word* after the title and never an icon (an
  * icon reads as a button). There is no column for it in issue 09's schema and
@@ -66,13 +71,13 @@ export const HangoutCard = ({
   const happening = isHappening(hangout, now)
 
   /*
-   * With no title there is no headline, so the time becomes one and the date
-   * drops to the second line. Nothing in issue 09 writes a title — confirming
-   * a Candidate names nothing — so this is the shape every card has today, and
-   * the hierarchy rule is what it becomes the moment a title exists.
+   * **The name is always the headline and the time is always the second line**
+   * — ticket 16's hierarchy, unconditionally, because `nameOf` means there is
+   * no such thing as a Hangout without a name. The earlier version promoted the
+   * time to the headline when the title was null, which inverted the hierarchy
+   * on every card issue 09 can produce.
    */
-  const headline = hangout.title ?? when.range
-  const second = hangout.title === null ? when.date : `${when.date} · ${when.range}`
+  const second = `${when.date} · ${when.range}`
 
   return (
     <li
@@ -96,7 +101,7 @@ export const HangoutCard = ({
             )}
           />
           <span className={cn('truncate text-[13px] font-medium', happening && 'text-destructive')}>
-            {headline}
+            {nameOf(hangout)}
           </span>
         </span>
         {happening && (

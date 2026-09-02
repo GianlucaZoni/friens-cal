@@ -195,6 +195,23 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   events would have broken your own second device. The cross-Friend force-write
   is the one thing **not** painted optimistically.
 
+- **Amendments raised while building, not planning** (issues 09 and 10 in
+  `.scratch/friens-cal-v1/`). Three resolved tickets gained appended
+  amendments once flat trust was live and visible:
+  [07](issues/07-data-model-and-schema.md) and
+  [08](issues/08-hangout-lifecycle.md) add **provenance** to `hangout` —
+  `created_by`, and `retimed_by` which *is* ticket 08 §1's "edited" mark rather
+  than a boolean beside it — explicitly as a record of who acted and **not** as
+  ownership: every policy stays `using (true)`, because provenance earns its
+  place *because* anybody may cancel anybody's plan and nobody is notified.
+  Both need `with check` or they record nothing. [16](issues/16-right-sidebar-cards.md)
+  gives its detail sheet its own content, **the Hangout's name** — issue 09
+  found every action ticket 16 had put in that sheet belonged to issue 10, which
+  is why confirm shipped as a bare tick — plus the `"Hangout"` default and the
+  name on the calendar marker. **Open for the human**: whether a *rename* counts
+  as an edit (ticket 07's `Needs the human`); recommended no, since the mark
+  exists to say "availability was written for you".
+
 ## Not yet specified
 
 - **Deployment.** Where the SPA is hosted, how env vars get there.

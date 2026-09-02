@@ -72,3 +72,72 @@ to land.
 ## Blocked by
 
 - [09 — Confirm a Candidate into a Hangout](./09-confirm-a-hangout.md)
+
+## Added after issue 09 shipped — the detail sheet, naming, and provenance
+
+Three things issue 09 either found missing or was told to hand over. They are
+**additions to the scope above, not replacements**; every acceptance criterion
+already listed still stands.
+
+### 1. The detail sheet is yours, and naming is what makes it worth building
+
+Ticket 16's final answer routes every card action through a **detail sheet** on
+touch and the same detail as a **popover** on desktop, making the hover tick an
+*accelerator* rather than the only route. Issue 09 built the tick and **not** the
+sheet, for a reason worth knowing before you start: every action ticket 16 put
+inside it was in this ticket, so there was nothing for the sheet to carry.
+
+Ticket 16's amendment fixes that by giving the sheet its own content — **the
+name** — so it is no longer a shell around this ticket's buttons.
+
+Issue 09's stand-in, to replace: on `@media (hover: none)` the confirm tick is
+**permanently visible** on a Candidate card rather than absent. That was ticket
+16's *earlier* decision, which its final answer revised, and it shipped because
+the sheet that supersedes it could not be built yet. Replacing it is part of
+building the sheet — do not leave both.
+
+### 2. An unnamed Hangout is called "Hangout", and the name is on the marker
+
+**Already built in issue 09** — `nameOf` in `src/hangouts/hangout.ts` is the one
+default, and the week grid's block and the pinned card both render it. Listed
+here because the sheet is what finally lets a Friend change it, and because the
+default is what keeps ticket 16's *"the title is the headline"* hierarchy
+unconditional. Do not reintroduce a null-title special case.
+
+### 3. Provenance: who confirmed it, and who moved it
+
+Ticket 07's and ticket 08's amendments add `created_by`, `retimed_by` and
+`retimed_at`. **`retimed_by` non-null IS ticket 08 §1's "edited" mark** — there
+is no separate boolean, so the two facts cannot contradict each other.
+
+**This is not ownership and must not become it.** Every policy stays
+`using (true)`; anyone may still retime or cancel anything (ticket 01). The
+columns exist *because* of that plus no notifications: they are the only thing
+that can answer "who moved this?" after the fact.
+
+**The `with check` is the whole feature.** A column recording who did something,
+which anybody may set to anybody, records nothing — so the insert policy needs
+`with check (created_by = (select auth.uid()))` and the update policy
+`with check (retimed_by = (select auth.uid()))`. `auth.uid()` reads the JWT
+claim rather than the role, so it is still the calling Friend inside the
+`security definer` retime RPC.
+
+**Open, and it is ticket 07's `Needs the human`:** whether a *rename* also counts
+as an edit. Recommended no — §1's mark exists to say "availability was written
+for you", and a rename writes none. Do not guess; the answer changes the column
+names.
+
+## Added acceptance criteria
+
+- [ ] A tap on a card (touch) and a click on a card body (desktop) both open the
+      same detail — sheet and popover respectively
+- [ ] The detail sets and clears a Hangout's name, and the grid marker and pinned
+      card follow
+- [ ] Issue 09's permanently-visible touch tick is **removed** when the sheet lands
+- [ ] `created_by` is written at confirmation and `retimed_by` / `retimed_at` at
+      retime, each defended by a `with check` on its own policy
+- [ ] A Friend cannot write somebody else's id into either provenance column
+- [ ] The detail shows `confirmed by …` and `retimed by …`, and renders correctly
+      when either is null
+- [ ] Provenance gates nothing: every Friend can still retime and cancel every
+      Hangout, including ones they did not confirm

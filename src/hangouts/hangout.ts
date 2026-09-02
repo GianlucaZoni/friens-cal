@@ -116,6 +116,33 @@ export const participantIds = (hangout: Hangout): string[] =>
   hangout.participants.filter(({ leftAt }) => leftAt === null).map(({ friendId }) => friendId)
 
 /**
+ * What a Hangout is called — its title, or **"Hangout"**.
+ *
+ * The default is not a placeholder. A Hangout is the one object in this product
+ * that was *written down* rather than derived, and it has to be nameable in a
+ * sentence — "cancel Hangout, Sat 20:00" — from the moment it exists, before
+ * anybody has opened the detail sheet to give it a better name. Until that
+ * sheet exists, **every** Hangout is called this.
+ *
+ * One function because three surfaces render it and they must agree: the pinned
+ * card's headline, the block on the grid, and that block's `aria-label`. It is
+ * also what keeps *"the title is the headline and the time is the second line"*
+ * (ticket 16) true unconditionally — an untitled Hangout used to promote its
+ * time to the headline, which quietly inverted the hierarchy on exactly the
+ * cards issue 09 can produce, i.e. all of them.
+ */
+export const nameOf = (hangout: Pick<Hangout, 'title'>): string => hangout.title ?? DEFAULT_NAME
+
+/**
+ * The word an unnamed Hangout goes by.
+ *
+ * `CONTEXT.md`'s own term for the object, deliberately — the fallback should
+ * read as the product's vocabulary rather than as a gap ("Untitled", "—") or as
+ * a nudge ("Name this…", which belongs on the control that does the naming).
+ */
+const DEFAULT_NAME = 'Hangout'
+
+/**
  * The Participants of a Hangout, resolved against a roster — its **faces**.
  *
  * One function for the three places that draw them (the pinned card, the grid

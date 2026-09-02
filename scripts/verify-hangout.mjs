@@ -380,6 +380,100 @@ if (somebodyElse) {
 }
 
 /* ---------------------------------------------------------------- *
+ * 7b. THE LOSING CONFIRM'S OWN LOOKUP, run against the real schema.
+ *
+ * The exclusion constraint is only half of ticket 08 §8. The other half is
+ * client-side — `joinTheWinner` in `use-hangouts.ts` — and a click cannot drive
+ * it from here: pointer events do not reach the app in the Browser pane this
+ * project is verified in (a known local limitation, recorded in issue 08's
+ * build notes). So the statements it issues are run here instead, in the same
+ * order and with the same options, against the same schema.
+ *
+ * Three things this pins, each of which was wrong at some point while the slice
+ * was being built:
+ * ---------------------------------------------------------------- */
+
+/*
+ * 1. The winner lookup finds the Hangout that beat us, over the range the
+ *    Candidate covered.
+ */
+const { data: found, error: findErr } = await supabase
+  .from('hangout')
+  .select('id, starts_at, ends_at')
+  .lt('starts_at', romeAt(2030, 1, 4, 23))
+  .gt('ends_at', romeAt(2030, 1, 4, 20))
+  .order('starts_at')
+  .limit(1)
+  .maybeSingle()
+if (findErr) die("the losing confirm's lookup for the winner failed", findErr)
+if (found?.id !== mine.id) die('the winner lookup found the wrong Hangout, or none')
+ok("the losing confirm's lookup finds the Hangout that won")
+
+/*
+ * 2. **The regression the review caught.** The exclusion constraint forbids two
+ *    Hangouts overlapping *each other* — it says nothing about how many may sit
+ *    inside one Candidate's range. `mine` (20:00–23:00) and `adjacent`
+ *    (23:00–01:00) are disjoint and legal, and a 20:00–01:00 Candidate overlaps
+ *    BOTH. A bare `maybeSingle()` answers PGRST116 on two rows and the client
+ *    falls through to the error AC 4 forbids; `.order().limit(1)` returns the
+ *    earliest, which is the honest reading of "the Hangout that won".
+ */
+const { data: earliest, error: manyErr } = await supabase
+  .from('hangout')
+  .select('id, starts_at')
+  .lt('starts_at', romeAt(2030, 1, 5, 1))
+  .gt('ends_at', romeAt(2030, 1, 4, 20))
+  .order('starts_at')
+  .limit(1)
+  .maybeSingle()
+if (manyErr) {
+  die(
+    'the winner lookup broke when TWO legal Hangouts sat inside one Candidate range — ' +
+      'this is the `maybeSingle()` bug, and the client now shows an error instead of joining',
+    manyErr
+  )
+}
+if (earliest?.id !== mine.id) die('the winner lookup did not return the EARLIEST overlapping Hangout')
+ok('two legal Hangouts in one Candidate range still yield one winner — the earliest')
+
+/*
+ * 3. **Left is sticky through the conversion**, which is why that upsert carries
+ *    `ignoreDuplicates`. A Friend who walked out of the winning Hangout must not
+ *    be walked back in by a button that was trying to do something else — ticket
+ *    08 §9 makes re-joining a deliberate act from the Hangout's own menu. With
+ *    `merge-duplicates` this would clear `left_at`, silently.
+ */
+const { error: leaveAgainErr } = await supabase
+  .from('hangout_participant')
+  .update({ left_at: leftAt })
+  .eq('hangout_id', mine.id)
+  .eq('friend_id', me)
+if (leaveAgainErr) die('could not set up the sticky-Left case', leaveAgainErr)
+
+const { error: convertErr } = await supabase
+  .from('hangout_participant')
+  .upsert(
+    { hangout_id: mine.id, friend_id: me },
+    { onConflict: 'hangout_id,friend_id', ignoreDuplicates: true }
+  )
+if (convertErr) die("the race conversion's participant upsert failed", convertErr)
+
+const { data: stillLeft, error: stickyErr } = await supabase
+  .from('hangout_participant')
+  .select('left_at')
+  .eq('hangout_id', mine.id)
+  .eq('friend_id', me)
+  .single()
+if (stickyErr) die('could not re-read the sticky-Left row', stickyErr)
+if (stillLeft.left_at === null) {
+  die(
+    'THE RACE CONVERSION RESURRECTED A FRIEND WHO HAD LEFT — `ignoreDuplicates` is not ' +
+      'set, so `left_at` was cleared by a button that was trying to confirm something else'
+  )
+}
+ok('the conversion leaves a Left Friend Left — `ignoreDuplicates`, not merge-duplicates')
+
+/* ---------------------------------------------------------------- *
  * 8. Realtime, on both tables.
  *
  * A table outside the `supabase_realtime` publication fails **silently**: the

@@ -22,6 +22,7 @@ import {
   hangoutsFrom,
   isHappening,
   isPast,
+  nameOf,
   isOverlapRejection,
   participantIds,
   pinned,
@@ -114,6 +115,21 @@ test('a Hangout with nobody on it folds to an empty list, not to undefined', () 
   const [pizza] = hangoutsFrom([PIZZA], [])
   assert.deepEqual(pizza.participants, [])
   assert.deepEqual(participantIds(pizza), [])
+})
+
+test('every Hangout has a name, and an unnamed one is called "Hangout"', () => {
+  const [pizza] = hangoutsFrom([PIZZA], [])
+  const [climbing] = hangoutsFrom([CLIMBING], [])
+
+  assert.equal(nameOf(pizza), 'Pizza')
+  /*
+   * Not a placeholder. Naming a Hangout is the detail sheet's job (issue 10),
+   * so **every** Hangout confirmed today lands here — and the card's hierarchy
+   * ("the name is the headline, the time is the second line") is only
+   * unconditional because this never returns null.
+   */
+  assert.equal(nameOf(climbing), 'Hangout')
+  assert.equal(nameOf({ title: '' }), '', 'an empty title is a title, not an absent one')
 })
 
 test('a Hangout is happening from its start until its end, and Past only after', () => {

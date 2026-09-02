@@ -206,3 +206,75 @@ constrained to the six **band interiors** —
 Friend store `1.0` and silently render as *pastel* instead of *ink*.
 
 A `check` constraint on the six values, or a small enum, either way.
+
+## Amendment — provenance columns on `hangout` (from issue 09)
+
+`hangout` gains three nullable columns:
+
+```
+hangout   created_by uuid null references friend (id) on delete set null,
+          retimed_by uuid null references friend (id) on delete set null,
+          retimed_at timestamptz null
+```
+
+**This does not reverse §8's flat trust, and the distinction is the whole
+amendment.** §8 says the policies on `hangout` are read/insert/update/delete by
+any authenticated Friend, and `05-hangout.sql` spells out *"there is no owner
+column because there is no owner"*. That sentence is about **permission**, and
+it stands: nothing below gates who may retime or cancel anything.
+
+These columns are **provenance** — who *did* act, recorded, gating nothing. They
+earn their place precisely *because* of flat trust rather than despite it:
+anyone may cancel or move anyone's Hangout, there are no notifications in v1
+(ticket 13), and ticket 08 §3 accepts that *"the other Friends learn of it by
+noticing an absence."* Provenance is the only thing that can answer *who moved
+this* after the fact. Ownership would answer *who is allowed to*, which is a
+question this product has deliberately refused to ask.
+
+### `retimed_by` **is** ticket 08 §1's "edited" mark
+
+Not a separate `edited boolean`. Non-null is the mark, so the two facts cannot
+disagree — a boolean beside a name is two columns that can contradict each
+other, and the contradiction would surface as a card claiming an edit by nobody.
+
+Named for retiming rather than for editing, because that is what ticket 08 §1's
+mark actually promises. Its reasoning: *"It is the only signal a Participant
+gets that slots were written for them."* A **rename does not write anybody's
+Availability**, so marking a renamed Hangout "edited" would spend that signal on
+something harmless and teach Friends to ignore it. → see *Needs the human*.
+
+### `with check`, or the columns are decorative
+
+**A column recording who did something, which anybody may set to anybody,
+records nothing.** With a table-wide update grant and `using (true)`, any Friend
+could write somebody else's id into either column. So:
+
+- the `insert` policy needs `with check (created_by = (select auth.uid()))`;
+- the `update` policy needs `with check (retimed_by = (select auth.uid()))`.
+
+This is ADR-0002's refinement — *"`with check` is load-bearing"* — applied to a
+second table for the same reason. `auth.uid()` reads the JWT claim rather than
+the role, so it is still the calling Friend inside the `security definer` retime
+RPC, and the RPC can set `retimed_by` honestly.
+
+### Nullable, and `on delete set null`
+
+**Nullable** because Hangouts confirmed before this migration have no author, and
+backfilling one would be inventing a fact. Every reader must render the missing
+case rather than assume it away.
+
+**`set null`, never `cascade`**: cascading would delete the *Hangout* when a
+Friend's row goes, and the plan still happened. Null then reads honestly as
+"confirmed by somebody no longer in the Group".
+
+## Needs the human
+
+1. **Does a rename count as "edited"?** Recommended above: no —
+   `retimed_by`/`retimed_at` mean *moved*, because ticket 08 §1's mark exists to
+   say "availability was written for you" and a rename writes none. The cost of
+   that recommendation: a renamed Hangout carries **no** provenance at all, so
+   "who called it that?" is unanswerable. The alternative is a second pair
+   (`renamed_by`/`renamed_at`), which is four provenance columns on a table with
+   five real ones. A single `edited_by` covering both was rejected for weakening
+   the one signal ticket 08 asked for — but it is the cheapest option and worth
+   overruling this on if the provenance matters more than the signal.

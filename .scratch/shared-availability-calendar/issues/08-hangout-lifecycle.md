@@ -168,3 +168,38 @@ It is distinct from the Hangout card's cancel dialog, which always affects
 
 No ticket owns it because the tickets either side of it are resolved; it is a
 build detail fully specified here, not an open decision.
+
+## Amendment — the "edited" mark names who, and the confirmer is recorded
+
+From issue 09, once flat trust was live and the consequence was visible.
+
+**§1 stands and gains a name.** A retimed Hangout is still marked permanently,
+still as a small muted *word* rather than an icon (ticket 16) — but the mark now
+carries **who moved it**, from `retimed_by` (ticket 07's provenance amendment).
+The same amendment records **who confirmed it**, in `created_by`.
+
+**Why this is not a reversal of "anyone may confirm, edit or cancel".** That
+rule is about permission and is untouched; every policy stays `using (true)`.
+These are records of what happened, and §3 is the argument for them: cancellation
+is a hard delete with no tombstone and no notification, so *"the other Friends
+learn of it by noticing an absence."* The same silence covers a retime. In a
+product where anybody may move anybody's plan and nobody is told, **the only
+thing that can answer "who moved this?" is a column that wrote it down.**
+
+Two transitions in the table above therefore gain an effect:
+
+| From | To | Trigger | Added |
+|---|---|---|---|
+| — | Hangout exists | Confirm a Candidate | writes `created_by = auth.uid()` |
+| Live | Live, retimed | Retime | writes `retimed_by = auth.uid()`, `retimed_at = now()` |
+
+Both need `with check` on their policies or they record nothing — see ticket 07's
+amendment, which is where the enforcement lives.
+
+**What it does not do:** it does not make the confirmer a Participant by any
+different route (they are seeded like everyone else, from the Candidate's Friend
+set), it does not survive cancellation (hard delete, §3), and it gates nothing.
+
+Open, and deliberately left in ticket 07 rather than answered here: whether a
+**rename** is also an "edit". Recommended no, because §1's mark exists to say
+*availability was written for you* and a rename writes none.

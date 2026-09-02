@@ -7,7 +7,14 @@ import type { AvailabilityStore } from '@/availability/use-availability'
 import { draftCell, useDrawGesture, type DrawGesture } from '@/availability/use-draw-gesture'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { whenOf } from '@/candidates/when'
-import { facesOf, isHappening, isPast, runInColumn, type Hangout } from '@/hangouts/hangout'
+import {
+  facesOf,
+  isHappening,
+  isPast,
+  nameOf,
+  runInColumn,
+  type Hangout,
+} from '@/hangouts/hangout'
 import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
@@ -815,7 +822,7 @@ const HangoutBlock = ({
     <div
       role="img"
       aria-label={[
-        hangout.title ?? 'Hangout',
+        nameOf(hangout),
         `${when.date}, ${when.range}`,
         happening ? 'happening now' : over ? 'over' : null,
         faces.length === 0
@@ -845,20 +852,24 @@ const HangoutBlock = ({
           )}
         />
         {/*
-          The title only. The time is the block's own position and height, said
-          twice already by the gutter it lines up with — and a titleless Hangout
-          (everything issue 09 can create) leaves the pin to carry it alone.
+          **The name, always** — `nameOf` falls back to "Hangout", so the marker
+          is never a bare pin. The alternative, drawn while the title column had
+          nothing writing to it, was a pin alone on every block: unreadable as
+          anything but decoration, and indistinguishable from the drag's own
+          outlines to somebody who had not been told.
+
+          The name only. The *time* is the block's own position and height,
+          already said by the gutter it lines up with, so spending nine pixels
+          of a 20px row on it would be saying the same thing three times.
         */}
-        {hangout.title !== null && (
-          <span
-            className={cn(
-              'truncate text-[9px] leading-[11px] font-medium',
-              happening ? 'text-destructive' : 'text-foreground/80'
-            )}
-          >
-            {hangout.title}
-          </span>
-        )}
+        <span
+          className={cn(
+            'truncate text-[9px] leading-[11px] font-medium',
+            happening ? 'text-destructive' : 'text-foreground/80'
+          )}
+        >
+          {nameOf(hangout)}
+        </span>
       </span>
 
       {run.length >= FACES_MIN_ROWS && (

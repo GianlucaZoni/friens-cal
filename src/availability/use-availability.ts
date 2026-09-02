@@ -1,10 +1,10 @@
 import { useSession } from '@/auth/use-session'
 import {
+  floorOfView,
   heldFrom,
   mergeSlots,
   slotKey,
   slotsOfDay,
-  startOfDayInZone,
   type FreeSlot,
   type SlotRow,
 } from '@/availability/slots'
@@ -15,6 +15,7 @@ import {
   type WriteFailure,
 } from '@/availability/write-model'
 import { toast } from '@/components/ui/toast-manager'
+import { PAGE_SIZE, readEveryPage } from '@/lib/paged-read'
 import { supabase } from '@/lib/supabase'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -71,25 +72,6 @@ export type AvailabilityStore = {
    */
   saving: boolean
 }
-
-/**
- * PostgREST's page size, and the reason this is not one `select`.
- *
- * Supabase caps every response at `db-max-rows`, 1000 by default, and it does
- * so **silently** — a truncated read is indistinguishable from a Friend who
- * drew less. Slot rows reach that fast: 1000 rows is 500 hours, so a Friend who
- * marks eight hours a day crosses it inside four months.
- *
- * **And the `friend_id` filter is now gone, so multiply that by the size of the
- * Group.** A nine-Friend group at eight hours a day crosses 1000 rows in under
- * three weeks. The paging stopped being theoretical with that one deleted line:
- * without it the grid would simply stop showing Availability past an arbitrary
- * date, with no error anywhere.
- *
- * So the first page IS the one query issue 05 asked for, and the loop below only
- * continues when a page comes back full.
- */
-const PAGE_SIZE = 1000
 
 /**
  * Everyone's Availability.
@@ -176,21 +158,10 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
   }, [])
 
   /**
-   * The earliest instant the view needs.
-   *
-   * Today, or the first day on screen if the viewer has navigated behind it.
-   * Taking the *minimum* rather than switching between them is what makes the
-   * boot query cover the current week's earlier days as well: they are already
-   * in the past by lunchtime, and fetching them as a separate strip a beat
-   * later would make Monday flicker in every Friday afternoon.
+   * The earliest instant the view needs — see `floorOfView`, which is shared
+   * with `useHangouts` precisely so the two reads cannot disagree about it.
    */
-  const wantedFrom = useMemo(() => {
-    const today = startOfDayInZone(new Date(), GROUP_TIME_ZONE).getTime()
-    const firstVisible = days[0]
-    return firstVisible === undefined
-      ? today
-      : Math.min(today, startOfDayInZone(firstVisible, GROUP_TIME_ZONE).getTime())
-  }, [days])
+  const wantedFrom = useMemo(() => floorOfView(days, GROUP_TIME_ZONE), [days])
 
   /**
    * How far back Postgres has already been asked. A ref, not state, because it
@@ -599,32 +570,4 @@ const announcingIfSlow = async (
     clearTimeout(timer)
     if (announced) setSlowWrites((count) => count - 1)
   }
-}
-
-/**
- * Every page of one range, concatenated.
- *
- * A `while` rather than recursion or `reduce`: the page count is not known
- * before the last short page arrives, so there is nothing to iterate over. The
- * repo's style rule forbids `for`, `for...of` and `for...in`; this is none of
- * them.
- */
-const readEveryPage = async (
-  page: (
-    index: number
-  ) => PromiseLike<{ data: SlotRow[] | null; error: { message: string } | null }>
-): Promise<{ data: SlotRow[]; error: { message: string } | null }> => {
-  const rows: SlotRow[] = []
-  let index = 0
-  let full = true
-
-  while (full) {
-    const { data, error } = await page(index)
-    if (error) return { data: rows, error }
-    rows.push(...(data ?? []))
-    full = (data?.length ?? 0) === PAGE_SIZE
-    index += 1
-  }
-
-  return { data: rows, error: null }
 }

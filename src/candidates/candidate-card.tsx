@@ -5,6 +5,7 @@ import { friendColour } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { Check, Loader2 } from 'lucide-react'
 
 /**
  * One Candidate card.
@@ -29,10 +30,34 @@ import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
  * With this Group's size a wrapped row is at most a handful of faces, so a cap
  * would never fire — and could not hide anyone as the Group grows.
  *
- * **No controls.** Ticket 16's final answer puts confirm behind a detail — a
- * hover tick and a click-to-open popover on desktop, a tap-opens-sheet on touch
- * — and all of it writes *other people's* Availability, which is issue 09's.
- * A card that only reads is the honest state of this slice.
+ * ## The tick
+ *
+ * Confirming is **the only way a Hangout is ever created** (ticket 01), and
+ * ticket 16 puts it on a tick and a 3-dots, *absolutely positioned over the
+ * card's right edge so nothing reflows on hover*. The 3-dots opens the
+ * force-write editor, which is issue 10's retime; the tick is here.
+ *
+ * **Revealed on `:hover` AND `:focus-within`** — never hover-only, on any
+ * pointer. The button is in the DOM and in the tab order at all times; only its
+ * opacity moves, so a keyboard reaches it by tabbing and a screen reader never
+ * lost it.
+ *
+ * **On a touch pointer it is simply always visible** (`hover-none:opacity-100`).
+ * Ticket 16's touch answer is a tap-opens-**detail-sheet**, on the grounds that
+ * a bare tap must read rather than write — and the sheet it describes carries
+ * `Join`, `Leave`, `Change the time…` and `Cancel`, every one of which is issue
+ * 10's. So this is that decision's predecessor, which ticket 16's own
+ * *Decisions so far* had (a control permanently visible in the card's corner)
+ * before the sheet subsumed it. **A visible tick is not a bare tap writing**:
+ * it is an explicit control, which is the property the rule was protecting. It
+ * is a stand-in, and the sheet replaces it when it has something to carry.
+ *
+ * **And confirming needs no dialog**, which is worth saying because the sibling
+ * action does. Retiming opens a Dialog that names the Friends whose calendars it
+ * will write to (ticket 08 §11, ticket 16) — because retiming *writes other
+ * people's Availability*. Confirming writes none: a Candidate is by definition a
+ * run in which every one of its Friends already holds Availability at every
+ * Slot. Nothing has to be warned about, so nothing is.
  */
 export const CandidateCard = ({
   candidate,
@@ -40,6 +65,9 @@ export const CandidateCard = ({
   glowing,
   fullHouse,
   container,
+  onConfirm,
+  pending,
+  busy,
 }: {
   candidate: Candidate
   /** The Friends in it, in roster order — same order as the stripe's segments. */
@@ -50,19 +78,73 @@ export const CandidateCard = ({
   fullHouse: boolean
   /** The Candidate this one sits inside, if any. */
   container: Candidate | null
+  /** Turn this Candidate into a Hangout. */
+  onConfirm: () => void
+  /** **This** card's confirm is in flight: spinner, and held visible. */
+  pending: boolean
+  /**
+   * **Some** card's confirm is in flight, so this one's tick is inert.
+   *
+   * Two flags rather than one, and the difference is what keeps the list quiet:
+   * the store allows one confirm at a time — two in flight would race each
+   * other through the exclusion constraint, and the loser would convert into a
+   * Join of a Hangout the same person had just created — but a single flag
+   * would light up **every** tick in the list while one of them worked.
+   */
+  busy: boolean
 }) => {
   const when = whenOf(candidate.start, candidate.end, GROUP_TIME_ZONE)
 
   return (
     <li
       className={cn(
-        'relative flex flex-col gap-1.5 overflow-hidden rounded-md border bg-card p-2.5 pl-3 text-card-foreground',
+        'group relative flex flex-col gap-1.5 overflow-hidden rounded-md border bg-card p-2.5 pl-3 text-card-foreground',
         // Variant A's "plus a soft shadow": the stripe carries the hue and this
         // carries the lift, so a glowing card sits above the list rather than
         // only being coloured in it.
         glowing && 'shadow-sm'
       )}
     >
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={busy}
+        /*
+          `absolute` so it costs no layout: ticket 16 puts the controls **over**
+          the card's right edge precisely so that a list of cards does not
+          reflow as the cursor crosses it. The header row below reserves the
+          width anyway (`pr-6`), because the corner it lands in is where the
+          `everyone` pill lives and two things in one corner is worse than a few
+          pixels of gutter.
+
+          Opacity rather than mounting, so the button is always focusable —
+          `group-focus-within` is what makes it reachable by keyboard, and the
+          `hover: none` query is what makes it reachable at all on a touch
+          pointer, where `:hover` never fires.
+        */
+        className={cn(
+          'absolute top-1.5 right-1.5 z-10 flex size-6 items-center justify-center rounded-sm',
+          'text-muted-foreground opacity-0 transition-opacity',
+          'group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100',
+          'hover:bg-accent hover:text-accent-foreground',
+          'focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none',
+          'disabled:pointer-events-none',
+          // Held visible only for the card actually working, so one confirm in
+          // flight does not light up six ticks.
+          pending && 'opacity-100'
+        )}
+        // The date and range, not "confirm" alone: the list is flat with no day
+        // headers, so a bare label would give a screen reader six identical
+        // buttons.
+        aria-label={`Confirm ${when.date}, ${when.range}`}
+      >
+        {pending ? (
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+        ) : (
+          <Check aria-hidden className="size-3.5" />
+        )}
+      </button>
+
       {/*
         The multi-colour border, as a left stripe — and **only when it glows**.
         Reserving colour for `2n > groupSize` is what makes the top of the list
@@ -76,7 +158,8 @@ export const CandidateCard = ({
         />
       )}
 
-      <div className="flex items-baseline justify-between gap-2">
+      {/* `pr-6` reserves the tick's corner — see the button above. */}
+      <div className="flex items-baseline justify-between gap-2 pr-6">
         {/* Every card states its own date: the list has no day headers. */}
         <span className="text-[11px] font-medium text-muted-foreground">{when.date}</span>
         {fullHouse && (

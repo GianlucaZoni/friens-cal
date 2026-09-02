@@ -70,6 +70,80 @@ export type Database = {
           },
         ]
       }
+      hangout: {
+        Row: {
+          id: string
+          starts_at: string
+          ends_at: string
+          title: string | null
+          created_at: string
+        }
+        /**
+         * `id` and `created_at` are optional: both have defaults, and confirming
+         * a Candidate supplies neither — `gen_random_uuid()` and `now()` are
+         * what make the insert one statement with nothing to invent client-side.
+         */
+        Insert: {
+          id?: string
+          starts_at: string
+          ends_at: string
+          title?: string | null
+          created_at?: string
+        }
+        /**
+         * The three columns issue 10's retime moves. `id` and `created_at` are
+         * absent because nothing should ever write them — the grant is
+         * table-wide rather than column-scoped here (05-hangout.sql §3), so
+         * this type is the only thing saying so.
+         */
+        Update: {
+          starts_at?: string
+          ends_at?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
+      hangout_participant: {
+        Row: {
+          hangout_id: string
+          friend_id: string
+          left_at: string | null
+        }
+        /**
+         * `left_at` is omitted at confirmation: a seeded Participant has not
+         * left, and null is the column's own default. Passing `null`
+         * explicitly would be the same row and a worse statement of intent.
+         */
+        Insert: {
+          hangout_id: string
+          friend_id: string
+          left_at?: string | null
+        }
+        /**
+         * `left_at` alone, because the **grant** is column-scoped to it
+         * (05-hangout.sql §4). `hangout_id` and `friend_id` are the key and
+         * cannot be written at all, so RLS never has to defend them.
+         */
+        Update: {
+          left_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'hangout_participant_hangout_id_fkey'
+            columns: ['hangout_id']
+            isOneToOne: false
+            referencedRelation: 'hangout'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'hangout_participant_friend_id_fkey'
+            columns: ['friend_id']
+            isOneToOne: false
+            referencedRelation: 'friend'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -104,3 +178,23 @@ export type FriendUpdate = Database['public']['Tables']['friend']['Update']
  * exist in the data at all.
  */
 export type Availability = Database['public']['Tables']['availability']['Row']
+
+/**
+ * A Hangout row, as Postgres holds it.
+ *
+ * **A range, where Availability is slot rows** — `starts_at`/`ends_at` rather
+ * than a row per half hour, because a Hangout has to outlive the Availability
+ * that produced it (ticket 07 §6). The epoch-millisecond form the app actually
+ * works in is `Hangout` in `@/hangouts/hangout`; this is the wire shape, and
+ * PostgREST renders both timestamps as `…+00:00` rather than `…Z`.
+ */
+export type HangoutRow = Database['public']['Tables']['hangout']['Row']
+
+/**
+ * One Friend on one Hangout — the **stored**, seeded list.
+ *
+ * Three states out of two facts: row with `left_at` null is a Participant, row
+ * with `left_at` set is Left (sticky forever), and no row at all is never
+ * joined or auto-dropped.
+ */
+export type HangoutParticipantRow = Database['public']['Tables']['hangout_participant']['Row']

@@ -6,6 +6,16 @@ import { closingLabel, runsOf, slotsOfDay, type Run, type Slot } from '@/availab
 import type { AvailabilityStore } from '@/availability/use-availability'
 import { draftCell, useDrawGesture, type DrawGesture } from '@/availability/use-draw-gesture'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
+import { whenOf } from '@/candidates/when'
+import {
+  facesOf,
+  isHappening,
+  isPast,
+  nameOf,
+  runInColumn,
+  type Hangout,
+} from '@/hangouts/hangout'
+import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import { setUpOnly, type RosterFriend, type SetUpFriend } from '@/roster/use-roster'
@@ -13,6 +23,7 @@ import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
 import { Fragment, useCallback, useMemo, useRef } from 'react'
 import { groupBy, maxBy } from 'lodash-es'
 import { format, isToday } from 'date-fns'
+import { Pin } from 'lucide-react'
 
 /**
  * Half an hour, in pixels. The hour is 40px, which is what the shell's lattice
@@ -103,6 +114,9 @@ export const WeekGrid = ({
   availability,
   viewer,
   visible,
+  friendsById,
+  hangouts,
+  now,
   tools,
 }: {
   days: Date[]
@@ -118,6 +132,21 @@ export const WeekGrid = ({
    * every Friend's rows.
    */
   visible: RosterFriend[]
+  /**
+   * The **whole** roster by id, Hidden Friends included — only a Hangout reads
+   * this, and `AppShell` owns it because the right pane reads it too.
+   *
+   * A confirmed Hangout shows in full on every Friend's grid with every
+   * Participant's blob, and hiding never hides one (ticket 01). Ticket 16
+   * rejected even muting a Hidden Participant's face as *a partial hide through
+   * the back door*, so this and `visible` are genuinely different queries
+   * rather than one list used twice.
+   */
+  friendsById: ReadonlyMap<string, SetUpFriend>
+  /** Every confirmed Hangout, Past ones included — they stay on the grid forever. */
+  hangouts: readonly Hangout[]
+  /** The start of the current Slot — the app's one clock, held in `AppShell`. */
+  now: number
   tools: DrawingTools
 }) => {
   const columns = useMemo(
@@ -247,6 +276,9 @@ export const WeekGrid = ({
                 isFree={availability.isFree}
                 viewer={viewer}
                 counted={counted}
+                hangouts={hangouts}
+                friendsById={friendsById}
+                now={now}
                 opensWithGutter={ownGutter}
                 drawing={drawing}
               />
@@ -341,6 +373,9 @@ const DayColumn = ({
   isFree,
   viewer,
   counted,
+  hangouts,
+  friendsById,
+  now,
   opensWithGutter,
   drawing,
 }: {
@@ -352,6 +387,11 @@ const DayColumn = ({
   viewer: Viewer | null
   /** The wash's query, already narrowed to Friends who have finished setup. */
   counted: SetUpFriend[]
+  /** Every Hangout in the app; this column takes the ones that reach it. */
+  hangouts: readonly Hangout[]
+  /** The whole roster by id, Hidden included — a Hangout's faces. */
+  friendsById: ReadonlyMap<string, SetUpFriend>
+  now: number
   /** Its own gutter is immediately to the left, and carries the day separator. */
   opensWithGutter: boolean
   drawing: DrawGesture
@@ -425,6 +465,25 @@ const DayColumn = ({
         ? []
         : runsOf(slots.length, (row) => draft.source.has(draftCell(index, row))),
     [draft, slots.length, index]
+  )
+
+  /**
+   * The Hangouts reaching this column, and where each one sits in it.
+   *
+   * Asked of **this column's own** slots array (`runInColumn`), never computed
+   * from the hour: a DST day holds 46 or 50 rows and the 25-hour Sunday holds
+   * 02:00 twice, so a global row index would address rows that do not exist on
+   * one column and miss two on another. A Hangout crossing midnight needs no
+   * case of its own either — it simply produces a run in each of the two
+   * columns it reaches.
+   */
+  const booked = useMemo(
+    () =>
+      hangouts.flatMap((hangout) => {
+        const run = runInColumn(hangout, slots)
+        return run === null ? [] : [{ hangout, run }]
+      }),
+    [hangouts, slots]
   )
 
   const popover = drawing.popover?.column === index ? drawing.popover.row : null
@@ -539,6 +598,31 @@ const DayColumn = ({
               {...boxOf(run)}
             />
           ))}
+
+      {/*
+        The Hangouts, on top of everything the grid derives.
+
+        **Last in the DOM, which is the stacking order here** (the wash, your
+        own outline, the draft and the source marker are absolutely positioned
+        siblings, so source order is z-order). A Hangout is the only thing in
+        this column that was *written down* rather than computed, and it is the
+        one thing every Friend sees identically — so it sits over the
+        composite rather than under it.
+
+        Its fill mutes the wash beneath it deliberately. Those Slots are spoken
+        for, so how many people happen to be free in them is no longer the
+        question — which is the same reason step 3 of the Candidate pipeline
+        blanks them out of the sidebar.
+      */}
+      {booked.map(({ hangout, run }) => (
+        <HangoutBlock
+          key={hangout.id}
+          hangout={hangout}
+          run={run}
+          friendsById={friendsById}
+          now={now}
+        />
+      ))}
 
       {popover === null || viewer === null ? null : (
         <SlotPopover
@@ -674,6 +758,140 @@ const DraftRun = ({
     </span>
   </div>
 )
+
+/**
+ * How tall a Hangout has to be before it can carry faces.
+ *
+ * Two rows, an hour, 40px. Below that the faces would be taller than the block
+ * and the pin is the whole of what fits — and a 30-minute Hangout is a real
+ * shape (the Candidate list ranks a 30-minute full house above a 2h30 window
+ * with five Friends, permanently, which ticket 16 flagged as *one thing to look
+ * at*).
+ */
+const FACES_MIN_ROWS = 2
+
+/**
+ * A confirmed Hangout, on the grid.
+ *
+ * **On everyone's grid, Participant or not** (ticket 01) — this is the one
+ * thing in the centre column that is identical on every Friend's screen. The
+ * wash is a query (`roster.visible`, per viewer) and your own outline is
+ * personal; a Hangout is a fact that was written down.
+ *
+ * **The border is the treatment, and there is no hue in it.** Colour on this
+ * grid is the viewer's own, and its *opacity* is spoken for by the count
+ * (ticket 15) — so a Hangout cannot borrow either without saying something
+ * about how many people are free. It gets weight instead: a solid border and a
+ * ring, over a fill opaque enough to quiet the wash underneath. That fill is
+ * deliberate rather than a compromise: those Slots are booked, so how many
+ * people happen to be free in them has stopped being the question — the same
+ * reasoning that has step 3 of the Candidate pipeline blank them out of the
+ * sidebar.
+ *
+ * **Three states, and each one is a decision from ticket 08 §6.** A Hangout is
+ * Live until its *end* — so one happening right now is not "past", it is the
+ * loudest thing on the grid, in the destructive colour. Afterwards it is
+ * **muted and stays forever**, because the Availability underneath it is never
+ * auto-deleted either and a grid that dropped the plan but kept the evidence
+ * would read as a bug.
+ *
+ * `pointer-events-none`, like every other block here: the gesture owns every
+ * pointer on this grid, and a drag begun on a Hangout must reach the column
+ * beneath it. Which is also why there are no controls on it — every action a
+ * Hangout has is issue 10's, and ticket 16 puts them on the sidebar card.
+ */
+const HangoutBlock = ({
+  hangout,
+  run,
+  friendsById,
+  now,
+}: {
+  hangout: Hangout
+  /** Its rows in **this** column — `runInColumn`, never derived from the hour. */
+  run: Run
+  friendsById: ReadonlyMap<string, SetUpFriend>
+  now: number
+}) => {
+  const happening = isHappening(hangout, now)
+  const over = isPast(hangout, now)
+  const faces = facesOf(hangout, friendsById)
+
+  const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+
+  return (
+    <div
+      role="img"
+      aria-label={[
+        nameOf(hangout),
+        `${when.date}, ${when.range}`,
+        happening ? 'happening now' : over ? 'over' : null,
+        faces.length === 0
+          ? 'nobody on it'
+          : `with ${faces.map((friend) => friend.name).join(', ')}`,
+      ]
+        .filter((part) => part !== null)
+        .join(' · ')}
+      className={cn(
+        'pointer-events-none absolute inset-x-[2px] overflow-hidden rounded-[3px] border bg-background/80 ring-1',
+        happening
+          ? 'border-destructive ring-destructive/25'
+          : over
+            ? // Muted, and still there. Uneditable is issue 10's; invisible was
+              // never on the table.
+              'border-foreground/20 bg-background/60 ring-transparent'
+            : 'border-foreground/45 ring-foreground/15'
+      )}
+      style={boxOf(run)}
+    >
+      <span className="flex items-center gap-0.5 px-0.5 pt-px">
+        <Pin
+          aria-hidden
+          className={cn(
+            'size-2.5 shrink-0',
+            happening ? 'text-destructive' : 'text-muted-foreground'
+          )}
+        />
+        {/*
+          **The name, always** — `nameOf` falls back to "Hangout", so the marker
+          is never a bare pin. The alternative, drawn while the title column had
+          nothing writing to it, was a pin alone on every block: unreadable as
+          anything but decoration, and indistinguishable from the drag's own
+          outlines to somebody who had not been told.
+
+          The name only. The *time* is the block's own position and height,
+          already said by the gutter it lines up with, so spending nine pixels
+          of a 20px row on it would be saying the same thing three times.
+        */}
+        <span
+          className={cn(
+            'truncate text-[9px] leading-[11px] font-medium',
+            happening ? 'text-destructive' : 'text-foreground/80'
+          )}
+        >
+          {nameOf(hangout)}
+        </span>
+      </span>
+
+      {run.length >= FACES_MIN_ROWS && (
+        <span className="flex flex-wrap gap-0.5 px-0.5 pt-0.5">
+          {faces.map((friend) => (
+            <FriendBlob
+              key={friend.id}
+              identity={friend.identity}
+              size="xs"
+              className={cn('size-4', over && 'opacity-60')}
+              /*
+                Unlabelled on purpose, unlike a sidebar card's: the block's own
+                `aria-label` already names every Participant, and a per-face
+                title would read the same list a second time.
+              */
+            />
+          ))}
+        </span>
+      )}
+    </div>
+  )
+}
 
 /**
  * The row where the clocks moved, named in place.

@@ -18,12 +18,21 @@ import { times } from 'lodash-es'
  * the cut line is the same `2 × friends > groupSize` the glow uses, so the list
  * opens with exactly the Candidates the product calls worth looking at. See
  * `splitAtGlow`, including the one case where the cut does not apply.
+ *
+ * **The confirm passes straight through.** Nothing in this list decides
+ * anything about it — which Candidate was clicked is the only thing a card
+ * knows that the store does not, and the store owns the rest. That is why this
+ * takes a `(candidate) => void` rather than a `(id) => void`: an id would make
+ * the store look the Candidate back up in a list it does not hold, and a
+ * Candidate has no identity to look up by (`CONTEXT.md`).
  */
 export const CandidateList = ({
   list,
   hangoutsPinned,
   hiddenCount,
   onShowAll,
+  onConfirm,
+  confirming,
 }: {
   list: List
   /**
@@ -32,12 +41,16 @@ export const CandidateList = ({
    * Ticket 16: hiding everybody shows *"Show more friends…"* directly beneath
    * Hangout cards displaying those same Friends' faces. Both behaviours are
    * settled and correct, and together they look broken — so the empty state
-   * rewords. Issue 09 owns the region; this is the flag it will set.
+   * rewords. The pane above sets this from the pinned region it just drew.
    */
   hangoutsPinned: boolean
   /** How many Friends the filter is holding back, so the action can say so. */
   hiddenCount: number
   onShowAll: () => void
+  /** Turn a Candidate into a Hangout — the only way one is ever created. */
+  onConfirm: (candidate: Candidate) => void
+  /** The Candidate whose confirm is in flight, by id, or null. */
+  confirming: string | null
 }) => {
   const [expanded, setExpanded] = useState(false)
 
@@ -71,6 +84,9 @@ export const CandidateList = ({
              * exactly the card that needs to say so.
              */
             container={containerOf(candidate, list.all)}
+            onConfirm={() => onConfirm(candidate)}
+            pending={confirming === candidate.id}
+            busy={confirming !== null}
           />
         ))}
       </ul>

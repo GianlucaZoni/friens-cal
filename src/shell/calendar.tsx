@@ -1,7 +1,8 @@
 import type { AvailabilityStore } from '@/availability/use-availability'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { WeekGrid, type Viewer } from '@/availability/week-grid'
-import type { RosterFriend } from '@/roster/use-roster'
+import type { Hangout } from '@/hangouts/hangout'
+import type { RosterFriend, SetUpFriend } from '@/roster/use-roster'
 import { WEEK_STARTS_ON, type CalendarViewState } from '@/shell/use-calendar-view'
 import {
   eachDayOfInterval,
@@ -19,13 +20,19 @@ import {
  * with the shell's two obligations kept: the grid scrolls inside the inset and
  * the page never does, and the column headers carry the day number.
  *
- * The month is still a lattice. Issue 11 builds it.
+ * The month is still a lattice. Issue 11 builds it — **and it owes a Hangout a
+ * cell treatment**: a confirmed Hangout shows on every Friend's calendar, and
+ * "every Friend's calendar" includes this view. The week grid's block does not
+ * carry over any more than its heatmap does (see `MonthLattice`).
  */
 export const Calendar = ({
   calendar,
   availability,
   viewer,
   visible,
+  friendsById,
+  hangouts,
+  now,
   tools,
 }: {
   calendar: CalendarViewState
@@ -33,6 +40,11 @@ export const Calendar = ({
   viewer: Viewer | null
   /** The Friends the viewer is trying to meet — the heatmap's query (issue 07). */
   visible: RosterFriend[]
+  /** The whole roster by id — a Hangout draws Hidden Participants in full. */
+  friendsById: ReadonlyMap<string, SetUpFriend>
+  hangouts: readonly Hangout[]
+  /** The start of the current Slot — the app's one clock. */
+  now: number
   tools: DrawingTools
 }) =>
   calendar.view === 'week' ? (
@@ -41,6 +53,9 @@ export const Calendar = ({
       availability={availability}
       viewer={viewer}
       visible={visible}
+      friendsById={friendsById}
+      hangouts={hangouts}
+      now={now}
       tools={tools}
     />
   ) : (

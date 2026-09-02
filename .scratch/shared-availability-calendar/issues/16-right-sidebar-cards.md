@@ -293,3 +293,81 @@ whoever picked a blue.
 Ticket 09's **count-beats-duration** ordering means a 30-minute full house
 permanently outranks a 2h30 window with five Friends. Settled and not reopened —
 but worth one look at the top of a real list before it ships.
+
+## Amendment — the detail sheet names the Hangout (from issue 09)
+
+The final `## Answer` above makes the detail sheet the primary route on touch and
+a popover on desktop, carrying "every action". Issue 09 found the gap in that:
+**every action it listed — Confirm, Join, Leave, Change the time…, Cancel — is
+issue 10's**, so there was nothing for the sheet to carry in the slice that built
+the cards, and confirm shipped as a bare tick with the sheet unbuilt.
+
+Naming gives the sheet its own reason to exist, independent of the lifecycle.
+
+### What the sheet holds
+
+- **The name, editable.** This is the sheet's own content, not a lifecycle
+  action, and it is the thing that makes the sheet worth opening on a Hangout
+  that is otherwise just a time.
+- The time, which opens the force-write **Dialog** — unchanged: a Dialog, not a
+  Popover, for the four reasons above. A sheet that *contains* a dialog is fine;
+  a popover that contains one is not.
+- The Participants, as faces with names.
+- **`confirmed by <Friend>`**, and **`retimed by <Friend>`** when set — ticket
+  07's and ticket 08's provenance amendments. Rendered as quiet lines, not as
+  chrome: they answer a question that only comes up after something surprising.
+  Both are nullable, so both lines simply do not appear when absent.
+- Join / Leave, and the destructive `Cancel this hangout…` behind the **singular**
+  warning dialog (see this ticket's own correction above — it names exactly one
+  Hangout, always).
+
+### An unnamed Hangout is called "Hangout"
+
+**Not a placeholder, and not empty.** `nameOf` in `hangouts/hangout.ts` supplies
+the word, so there is no such thing as a Hangout without a name, and the
+hierarchy this ticket settled — **the title is the headline and the time is the
+second line** — holds unconditionally.
+
+That mattered immediately. Issue 09 first built the card to promote the *time*
+to the headline when the title was null, which quietly inverted the hierarchy on
+every card that slice could produce — i.e. all of them, since nothing could set
+a title yet. A default that reads as the product's own vocabulary costs nothing
+and removes the special case rather than handling it.
+
+"Untitled" and an em dash were both rejected: they read as a gap the viewer
+should close. So was "Name this…", which is a nudge and belongs on the control
+that does the naming, inside the sheet.
+
+### The name shows on the calendar marker
+
+The block on the week grid carries **the name**, not a bare pin. Drawn as a pin
+alone (issue 09's first version, while nothing could set a title) it was
+unreadable as anything but decoration, and indistinguishable from the drag's own
+dashed outlines to anybody who had not been told what it was.
+
+The name **only** — the time is the block's own position and height, already
+said by the gutter it lines up with, and a 20px row cannot afford to say the
+same thing three times.
+
+**This is a new obligation on ticket 14 / issue 11's month view.** A confirmed
+Hangout shows on every Friend's calendar, and the month is a calendar. Ticket 14
+settled that month cells carry no numeral and that the week grid's heatmap does
+not carry over; it never had a Hangout to place, and now it does — at a cell size
+where a name may not fit at all.
+
+## Correction — the sheet's provenance lines, and what `edited` now means
+
+The amendment above names the provenance lines `confirmed by` and `retimed by`.
+Ticket 07's answer supersedes the second: the columns are `created_by`,
+`edited_by`, `edited_at`, and **a rename counts as an edit**.
+
+The sheet holds:
+
+- **`confirmed by <Friend>`** — from `created_by`.
+- **`edited by <Friend>`, with `edited_at`** — from the other two.
+
+And the card's small muted `edited` word (§1, unchanged in form) now means
+*something about this Hangout changed after it was confirmed*, not *it was
+moved*. Since the sheet is the only place that can say **what** changed, it is
+the sheet that carries the time and the editor; the badge is only the pointer to
+it. Both lines are nullable and simply do not render when absent.

@@ -1,17 +1,18 @@
 import { useSession } from '@/auth/use-session'
 import { useAvailability } from '@/availability/use-availability'
 import { useDrawingTools } from '@/availability/use-drawing-tools'
-import type { HangoutRange } from '@/candidates/candidates'
+import { useSlotClock } from '@/candidates/use-slot-clock'
 import { Toaster } from '@/components/ui/toast'
+import { useHangouts } from '@/hangouts/use-hangouts'
 import { identityOf } from '@/identity/friend-row'
-import { useRoster } from '@/roster/use-roster'
+import { setUpOnly, useRoster } from '@/roster/use-roster'
 import { Calendar } from '@/shell/calendar'
 import { LeftPane } from '@/shell/left-pane'
 import { OfflineBanner } from '@/shell/offline-banner'
 import { RightPane } from '@/shell/right-pane'
 import { AppShellProvider, ShellInset, ShellSidebar } from '@/shell/shell'
 import { TopBar } from '@/shell/top-bar'
-import { useCalendarView } from '@/shell/use-calendar-view'
+import { GROUP_TIME_ZONE, useCalendarView } from '@/shell/use-calendar-view'
 import { useMemo } from 'react'
 
 /**
@@ -25,42 +26,50 @@ import { useMemo } from 'react'
  * Below 768px both panes leave the flow and become one sheet at a time; see
  * `shell.tsx`, which owns that invariant.
  *
- * The four pieces of view state the whole app reads sit here, one hook each,
- * and travel by prop: where the calendar is pointed, which Friends are Hidden,
- * everyone's Availability, and what a drag on the grid means. The roster is here
- * rather than inside the left pane because Hidden is a query tool — issue 07's
- * heatmap is computed over `roster.visible` and issue 08's Candidate list will
- * be, and neither of them is in the sidebar. Availability is here for the same
- * reason twice over: issue 06 writes into it from the grid and issue 08 computes
- * Candidates from it in the right pane.
+ * The pieces of view state the whole app reads sit here, one hook each, and
+ * travel by prop: where the calendar is pointed, which Friends are Hidden,
+ * everyone's Availability, everyone's Hangouts, what a drag on the grid means,
+ * and what time it is. The roster is here rather than inside the left pane
+ * because Hidden is a query tool — issue 07's heatmap is computed over
+ * `roster.visible` and issue 08's Candidate list is too, and neither of them is
+ * in the sidebar. Availability is here for the same reason twice over: issue 06
+ * writes into it from the grid and issue 08 computes Candidates from it in the
+ * right pane. Hangouts are here because **three** things need them: the grid
+ * draws them for every Friend, the right pane pins them above the Candidates,
+ * and the Candidate pipeline blanks their Slots out of its own scan.
  *
- * The two derivations below are here because each needs **both** of those hooks,
- * and nowhere further down the tree holds both: the wash's query is the roster
- * crossed with the store, and so is silence.
+ * The derivations below are here because each is needed by more than one column
+ * and nowhere further down the tree holds every input: silence is the roster
+ * crossed with the store, and the Hangouts' faces are the roster read by two
+ * panes at once.
  *
  * The drawing tools are here because they are **split across two columns**:
  * ticket 01 put the "Drawing mode:" tabbar and the erase toggle in the left
  * pane, and the grid they govern is in the centre.
  */
-/**
- * There is no `hangout` table yet — issue 09 creates it, seeds its Participants
- * from a Candidate's Friend set, and pins the confirmed ones above the list.
- *
- * A module-level constant rather than a `[]` literal in the JSX, because it is
- * a dependency of the Candidate scan: a fresh array every render would re-run
- * the whole pipeline whenever anything in this shell re-rendered.
- *
- * Step 3 of the pipeline — *blank the Hangouts, for every Friend* — is
- * nonetheless built and tested against this shape rather than left as a hole
- * for issue 09 to discover.
- */
-const NO_HANGOUTS: readonly HangoutRange[] = []
-
 export const AppShell = () => {
   const calendar = useCalendarView()
   const roster = useRoster()
   const availability = useAvailability(calendar.days)
+  const hangouts = useHangouts(calendar.days)
   const tools = useDrawingTools()
+
+  /**
+   * The start of the Slot containing now — **the app's one clock**.
+   *
+   * Held here rather than inside `useCandidates`, which is where it used to
+   * live, because three things now depend on the same boundary and they have to
+   * agree about it: the Candidate list re-clips at the half hour (step 1 of the
+   * pipeline makes it stale with no data change at all), the pinned Hangout
+   * region unpins the moment a Hangout *ends*, and a Hangout happening right
+   * now is drawn in the destructive colour on the grid. Three `useSlotClock`s
+   * would be three timers that could each be a beat apart from the others.
+   *
+   * It is also why the clock is aligned to the boundary rather than ticking:
+   * every one of those three answers changes on the :00 and the :30 and nowhere
+   * in between.
+   */
+  const now = useSlotClock(GROUP_TIME_ZONE)
 
   /**
    * Whose Availability the grid draws, and the one colour it draws in.
@@ -94,6 +103,23 @@ export const AppShell = () => {
    * than `visible`, so a Hidden Friend's row still says whether they have said
    * anything — hiding is a query tool, not a reason to stop reporting.
    */
+  /**
+   * The **whole** roster by id, Hidden included — the Hangouts' faces.
+   *
+   * Here for the reason `silent` is here: two columns need it and neither can
+   * compute it for the other. The grid draws a Hangout's Participants on every
+   * Friend's calendar and the right pane draws them again on the pinned card,
+   * and both need the map the sidebar's filter has **not** touched — hiding
+   * never hides a Hangout (ticket 01), and ticket 16 rejected even muting a
+   * Hidden Participant's blob as a partial hide through the back door.
+   *
+   * `setUpOnly`, as everywhere: a Friend mid-setup has no hue and no face.
+   */
+  const friendsById = useMemo(
+    () => new Map(setUpOnly(roster.friends).map((friend) => [friend.id, friend])),
+    [roster.friends]
+  )
+
   const rosterIds = useMemo(() => roster.friends.map((friend) => friend.id), [roster.friends])
   /*
    * `silentAmong` is pulled off the store first, rather than reached through it
@@ -127,12 +153,27 @@ export const AppShell = () => {
                 calendar={calendar}
                 availability={availability}
                 viewer={viewer}
+                /*
+                  Two rosters, because the grid draws two different objects
+                  from them: the wash is `visible` (a query — who you are
+                  currently trying to meet) and a Hangout's faces come from
+                  `friendsById` (a fact — hiding never hides a Hangout).
+                */
                 visible={roster.visible}
+                friendsById={friendsById}
+                hangouts={hangouts.hangouts}
+                now={now}
                 tools={tools}
               />
             </ShellInset>
             <ShellSidebar side="right">
-              <RightPane roster={roster} availability={availability} hangouts={NO_HANGOUTS} />
+              <RightPane
+                roster={roster}
+                availability={availability}
+                hangouts={hangouts}
+                friendsById={friendsById}
+                now={now}
+              />
             </ShellSidebar>
           </div>
         </div>

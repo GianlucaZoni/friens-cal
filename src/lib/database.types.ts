@@ -77,11 +77,29 @@ export type Database = {
           ends_at: string
           title: string | null
           created_at: string
+          /**
+           * Who confirmed it, and who last changed it —
+           * `06-hangout-lifecycle.sql` §1. Provenance, not ownership: every
+           * policy on this table is still `using (true)`.
+           *
+           * All three are nullable and every reader has to render the missing
+           * case. `created_by` is null for the Hangouts confirmed before that
+           * migration, and for a Friend whose row is gone (`on delete set
+           * null`); `edited_by` non-null **is** ticket 08 §1's "edited" mark.
+           */
+          created_by: string | null
+          edited_by: string | null
+          edited_at: string | null
         }
         /**
          * `id` and `created_at` are optional: both have defaults, and confirming
          * a Candidate supplies neither — `gen_random_uuid()` and `now()` are
          * what make the insert one statement with nothing to invent client-side.
+         *
+         * `created_by` is **required**, unlike every other nullable column here.
+         * The insert policy is `with check (created_by = (select auth.uid()))`,
+         * so an insert that omits it is `42501` rather than a row with no
+         * author — and this type is what says so before the round trip.
          */
         Insert: {
           id?: string
@@ -89,17 +107,26 @@ export type Database = {
           ends_at: string
           title?: string | null
           created_at?: string
+          created_by: string
         }
         /**
-         * The three columns issue 10's retime moves. `id` and `created_at` are
-         * absent because nothing should ever write them — the grant is
-         * table-wide rather than column-scoped here (05-hangout.sql §3), so
-         * this type is the only thing saying so.
+         * What an edit may write. `id` and `created_at` are absent because
+         * nothing should ever write them — the grant is table-wide rather than
+         * column-scoped here (05-hangout.sql §3), so this type is the only
+         * thing saying so.
+         *
+         * `edited_by` is required for the same reason `created_by` is on the
+         * insert: the update policy's `with check` refuses an update that does
+         * not claim it. `created_by` is absent — an edit never re-authors a
+         * Hangout — and so is `edited_at`, which
+         * `06-hangout-lifecycle.sql` §2 stamps from a trigger so that
+         * provenance never carries a browser's clock.
          */
         Update: {
           starts_at?: string
           ends_at?: string
           title?: string | null
+          edited_by: string
         }
         Relationships: []
       }
@@ -146,7 +173,27 @@ export type Database = {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      /**
+       * ADR-0002's one narrow hole — `06-hangout-lifecycle.sql` §4.
+       *
+       * Moves a Hangout and extends every current Participant's Availability
+       * to cover the new range, in one statement. Three arguments rather than
+       * the ADR's original one, which its amendment records and argues: a
+       * retime needs the extension to reach the range the Hangout is arriving
+       * at, and the stored row only knows the one it is leaving.
+       *
+       * Returns the moved row, so the store folds the same shape it reads.
+       */
+      retime_hangout: {
+        Args: {
+          hangout_id: string
+          starts_at: string
+          ends_at: string
+        }
+        Returns: Database['public']['Tables']['hangout']['Row']
+      }
+    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }

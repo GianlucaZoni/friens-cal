@@ -4,7 +4,13 @@ import { withRetries } from '@/availability/write-model'
 import type { Candidate, HangoutRange } from '@/candidates/candidates'
 import { whenOf } from '@/candidates/when'
 import { toast } from '@/components/ui/toast-manager'
-import { hangoutsFrom, isOverlapRejection, rangesOf, type Hangout } from '@/hangouts/hangout'
+import {
+  hangoutsFrom,
+  isOverlapRejection,
+  rangesOf,
+  wouldAutoCancel,
+  type Hangout,
+} from '@/hangouts/hangout'
 import type { HangoutParticipantRow, HangoutRow } from '@/lib/database.types'
 import { PAGE_SIZE, readEveryPage } from '@/lib/paged-read'
 import { supabase } from '@/lib/supabase'
@@ -36,7 +42,75 @@ export type HangoutStore = {
   confirm: (candidate: Candidate) => void
   /** The Candidate whose confirm is in flight, by `Candidate['id']`. */
   confirming: string | null
+  /* ------------------------------------------------------------------ *
+   * The lifecycle, as five writes
+   *
+   * Every one of them resolves to **a message to show, or null** — the shape
+   * `useSaveAction` already consumes, which is what lets the detail and the
+   * retime dialog hold their own pending state and report the outcome *in
+   * place* rather than through a toast. Issue 10's last acceptance criterion
+   * asks for that explicitly about the retime, and it is the right shape for
+   * all five: each one is a control inside a surface that is still open when
+   * the answer arrives.
+   *
+   * **None of them is optimistic**, for the reason `confirm` is not (ticket 19's
+   * optimism was for a 60fps drag): each is one deliberate press whose whole
+   * point is whether the database agreed. What they do instead is fold the row
+   * they get back, so the surface does not sit unchanged waiting for a Realtime
+   * echo that is a round trip away.
+   * ------------------------------------------------------------------ */
+
+  /** Set or clear the title. A rename **is** an edit, and marks the Hangout. */
+  rename: (hangout: Hangout, title: string | null) => Promise<string | null>
+  /**
+   * Move it, and extend every current Participant to cover the new time —
+   * ADR-0002's one narrow hole, in one transaction.
+   */
+  retime: (hangout: Hangout, startsAt: number, endsAt: number) => Promise<string | null>
+  /** Hard delete, no tombstone, no undo (ticket 08 §3). */
+  cancel: (hangout: Hangout) => Promise<string | null>
+  /** Set your own `left_at`. Leaves your Availability untouched. */
+  leave: (hangout: Hangout) => Promise<string | null>
+  /**
+   * Become a Participant, and write the Availability to cover the Hangout —
+   * *"joining is a statement that you are free"* (`CONTEXT.md`).
+   *
+   * `missing` is the Slots the viewer does not hold, computed by the caller
+   * because the caller is what holds the Availability store. The same call is
+   * the re-Join of a Friend who Left.
+   */
+  join: (hangout: Hangout, missing: readonly number[]) => Promise<string | null>
 }
+
+/**
+ * Every column the store folds, as one string.
+ *
+ * Four reads and three writes ask for it, and a column missing from one of them
+ * is a Hangout whose provenance is silently null on whichever path fetched it —
+ * which looks exactly like a Hangout nobody has edited.
+ */
+const HANGOUT_COLUMNS =
+  'id, starts_at, ends_at, title, created_at, created_by, edited_by, edited_at'
+
+/** The three Participant columns, for the same reason. */
+const PARTICIPANT_COLUMNS = 'hangout_id, friend_id, left_at'
+
+/**
+ * The sibling case of ticket 08 §8, and it needs client copy because there is
+ * nothing left to read.
+ *
+ * A Hangout cancelled while somebody had its editor open is a **hard delete**
+ * (§3): no row, no tombstone, no error from Postgres to explain it. So the
+ * update matches nothing, or the RPC raises `P0002`, and this sentence is the
+ * only thing that can say what happened.
+ */
+const CANCELLED_ELSEWHERE = 'That hangout was cancelled while this was open.'
+
+/** Unreachable behind `RequireAuth`, and not worth a non-null assertion. */
+const SIGNED_OUT = 'You are signed out. Sign in again and try that once more.'
+
+/** Postgres's `no_data_found`, which is §4's "that Hangout is gone" raise. */
+const NO_DATA_FOUND = 'P0002'
 
 /** The store's two key spaces. A Hangout is its uuid; a Participant is the pair. */
 const participantKey = (hangoutId: string, friendId: string) => `${hangoutId}|${friendId}`
@@ -129,7 +203,7 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
     const hangoutPage = (index: number) =>
       supabase
         .from('hangout')
-        .select('id, starts_at, ends_at, title, created_at')
+        .select(HANGOUT_COLUMNS)
         // `ends_at`, not `starts_at`: a Hangout that began before the floor and
         // is still running is the one case where the two differ, and it is the
         // one the grid must not lose.
@@ -142,7 +216,7 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
     const participantPage = (index: number) =>
       supabase
         .from('hangout_participant')
-        .select('hangout_id, friend_id, left_at')
+        .select(PARTICIPANT_COLUMNS)
         .order('hangout_id')
         .range(index * PAGE_SIZE, index * PAGE_SIZE + PAGE_SIZE - 1)
 
@@ -361,11 +435,260 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
     [userId]
   )
 
+  /* ------------------------------------------------------------------ *
+   * The three folds the lifecycle needs, and nothing else does
+   *
+   * Named rather than inlined because five writes reach for them and the
+   * Realtime handlers already do the same three things. A cancel has to drop
+   * the Participants with the Hangout for the reason the DELETE handler does:
+   * `on delete cascade` has already removed them in Postgres and their own
+   * events may arrive in any order, so a cancelled plan would otherwise leave
+   * orphans behind.
+   * ------------------------------------------------------------------ */
+
+  const foldHangout = useCallback((row: HangoutRow) => {
+    setRows((current) => merged(current, [row], (it) => it.id))
+  }, [])
+
+  const forgetHangout = useCallback((hangoutId: string) => {
+    setRows((current) => without(current, [hangoutId]))
+    setPeople((current) => withoutHangout(current, hangoutId))
+  }, [])
+
+  const foldParticipant = useCallback((row: HangoutParticipantRow) => {
+    setPeople((current) =>
+      merged(current, [row], (it) => participantKey(it.hangout_id, it.friend_id))
+    )
+  }, [])
+
+  /**
+   * Rename — **and it is an edit**, which is the human's answer to ticket 07's
+   * `Needs the human` and the reason this is one statement rather than two
+   * paths.
+   *
+   * `edited_by` is sent by the client and enforced by the policy's
+   * `with check (edited_by = (select auth.uid()))`. `edited_at` is *not* sent:
+   * `06-hangout-lifecycle.sql` §2 stamps it from a trigger, so provenance never
+   * carries a browser's clock.
+   *
+   * `title` is nullable on purpose — clearing the field is a legal way to leave
+   * a Hangout unnamed, and `nameOf` is what makes that render as *"Hangout"*
+   * rather than as a gap. An empty string would be a different thing: a title
+   * that is present and blank.
+   */
+  const rename = useCallback(
+    async (hangout: Hangout, title: string | null): Promise<string | null> => {
+      if (userId === null) return SIGNED_OUT
+
+      const { data, error } = await supabase
+        .from('hangout')
+        .update({ title, edited_by: userId })
+        .eq('id', hangout.id)
+        .select(HANGOUT_COLUMNS)
+        .maybeSingle()
+
+      if (error !== null) return error.message
+      if (data === null) return CANCELLED_ELSEWHERE
+      foldHangout(data)
+      return null
+    },
+    [userId, foldHangout]
+  )
+
+  /**
+   * Retime — the one action in this product that writes other people's data.
+   *
+   * **One `rpc` call, because it has to be one transaction.** The move and the
+   * Availability extension cannot be two statements: PostgREST cannot span them
+   * (ADR-0001), and if the second failed the Hangout would sit at a time nobody
+   * covers with nothing to repair it — the drop trigger only fires on an
+   * `availability` delete. ADR-0002's amendment records why the function
+   * therefore takes the range as an argument.
+   *
+   * **It cannot drop anyone**, which is ticket 08 §2's consequence rather than a
+   * guarantee this code makes: the extension runs in the same statement as the
+   * move, so coverage is restored before anything could notice it was lost.
+   *
+   * Nothing about the *Availability* it writes is folded in here. Those rows
+   * belong to `useAvailability`, including the viewer's own, and they arrive on
+   * its Realtime channel — which is also the only way the other Friends' screens
+   * were ever going to hear about them.
+   */
+  const retime = useCallback(
+    async (hangout: Hangout, startsAt: number, endsAt: number): Promise<string | null> => {
+      if (userId === null) return SIGNED_OUT
+
+      const { data, error } = await supabase.rpc('retime_hangout', {
+        hangout_id: hangout.id,
+        starts_at: new Date(startsAt).toISOString(),
+        ends_at: new Date(endsAt).toISOString(),
+      })
+
+      if (error !== null) {
+        /*
+         * Two failures with copy of their own, and both are product rules
+         * rather than plumbing:
+         *
+         * - `23P01` is ticket 08 §7's collision. Force-writing a time that
+         *   overlaps an existing Hangout "must be rejected and surfaced in the
+         *   editor, not silently dropped" — which is the whole reason ticket 16
+         *   made this a Dialog rather than a Popover: the rejection needs
+         *   somewhere to land.
+         * - `P0002` is §4's raise for a Hangout that is no longer there.
+         */
+        if (isOverlapRejection(error)) {
+          return 'Something else is already booked at that time. Pick another slot.'
+        }
+        return error.code === NO_DATA_FOUND ? CANCELLED_ELSEWHERE : error.message
+      }
+
+      if (data === null) return CANCELLED_ELSEWHERE
+      foldHangout(data)
+      return null
+    },
+    [userId, foldHangout]
+  )
+
+  /**
+   * Cancel — a **hard delete**, and there is nothing else to it.
+   *
+   * No tombstone and no undo (ticket 08 §3): the row and its Participants go,
+   * the title is unrecoverable, and the other Friends find out by noticing an
+   * absence. A tombstone with undo was recommended and the human chose this with
+   * the trade-off in front of them, which is why the warning dialog in front of
+   * it is not optional.
+   *
+   * A delete matching **no rows is a success**, not a case to report. Somebody
+   * else cancelling it first is the outcome this call was asking for; the only
+   * thing to do is forget it locally, which is what the Realtime DELETE would
+   * have done a round trip later.
+   */
+  const cancel = useCallback(
+    async (hangout: Hangout): Promise<string | null> => {
+      const { error } = await supabase.from('hangout').delete().eq('id', hangout.id)
+      if (error !== null) return error.message
+      forgetHangout(hangout.id)
+      return null
+    },
+    [forgetHangout]
+  )
+
+  /**
+   * Leave — your own `left_at`, and **your Availability is untouched**.
+   *
+   * That is the whole distinction from a drop (ticket 08's transition table):
+   * a drop is the consequence of erasing Availability, and a Leave is a
+   * statement about the plan while the Availability underneath it stands.
+   *
+   * The timestamp comes from this client rather than from `now()`, which
+   * PostgREST cannot express in an update payload. Nothing renders it — it is
+   * read as a boolean (`stateOf`) — and the column-scoped grant means only the
+   * Friend themselves can write it, so a wrong clock costs nothing here in a
+   * way it would have cost `edited_at`.
+   *
+   * **If they were the last Participant the Hangout is gone**, from
+   * `06-hangout-lifecycle.sql`'s second trigger. Predicted here rather than
+   * waited for, using the same `wouldAutoCancel` the dialog used to say so:
+   * `RETURNING` runs before the statement trigger, so the row we get back is a
+   * Left Participant on a Hangout that no longer exists, and folding it in
+   * would draw exactly that for a round trip.
+   */
+  const leave = useCallback(
+    async (hangout: Hangout): Promise<string | null> => {
+      if (userId === null) return SIGNED_OUT
+
+      const { data, error } = await supabase
+        .from('hangout_participant')
+        .update({ left_at: new Date().toISOString() })
+        .eq('hangout_id', hangout.id)
+        .eq('friend_id', userId)
+        .select(PARTICIPANT_COLUMNS)
+        .maybeSingle()
+
+      if (error !== null) return error.message
+      if (data === null) return 'You are not on that hangout any more.'
+
+      if (wouldAutoCancel(hangout, userId, Date.now())) forgetHangout(hangout.id)
+      else foldParticipant(data)
+      return null
+    },
+    [userId, foldParticipant, forgetHangout]
+  )
+
+  /**
+   * Join, and re-Join, which are the same three statements.
+   *
+   * **Availability first.** `CONTEXT.md`: joining "also writes the Availability
+   * to cover it — joining is a statement that you are free". The order is the
+   * safe one: a Participant row without the Availability under it is precisely
+   * the state the drop rule exists to prevent, and nothing would repair it —
+   * the trigger fires on a delete, and there would not have been one. The
+   * reverse failure leaves the viewer holding Availability they meant to state
+   * anyway.
+   *
+   * **Then a row, then `left_at = null`.** Two statements rather than a
+   * merge-duplicates upsert, which the column-scoped `update (left_at)` grant
+   * would refuse (it would try to write the key columns too). Both are
+   * idempotent, so this is one path for all three starting states instead of a
+   * branch on possibly-stale client state — and `ignoreDuplicates` on the
+   * insert is what keeps it from being the thing issue 09 forbade, a button
+   * clearing somebody's Left as a side effect: the clear here is the *point*,
+   * asked for by name from the detail.
+   *
+   * Nothing writes `edited_by`. Joining changes the Participant list, not the
+   * Hangout — ticket 08 §1's mark is about the plan having moved or been
+   * renamed, and a card marked `edited` because somebody joined would spend the
+   * signal on the one transition that is already visible as a new face.
+   */
+  const join = useCallback(
+    async (hangout: Hangout, missing: readonly number[]): Promise<string | null> => {
+      if (userId === null) return SIGNED_OUT
+
+      if (missing.length > 0) {
+        const { error: drawError } = await supabase.from('availability').upsert(
+          missing.map((slotStart) => ({
+            friend_id: userId,
+            slot_start: new Date(slotStart).toISOString(),
+          })),
+          { onConflict: 'friend_id,slot_start', ignoreDuplicates: true }
+        )
+        if (drawError !== null) return drawError.message
+      }
+
+      const { error: seatError } = await supabase
+        .from('hangout_participant')
+        .upsert(
+          { hangout_id: hangout.id, friend_id: userId },
+          { onConflict: 'hangout_id,friend_id', ignoreDuplicates: true }
+        )
+      if (seatError !== null) return seatError.message
+
+      const { data, error } = await supabase
+        .from('hangout_participant')
+        .update({ left_at: null })
+        .eq('hangout_id', hangout.id)
+        .eq('friend_id', userId)
+        .select(PARTICIPANT_COLUMNS)
+        .maybeSingle()
+
+      if (error !== null) return error.message
+      if (data === null) return CANCELLED_ELSEWHERE
+      foldParticipant(data)
+      return null
+    },
+    [userId, foldParticipant]
+  )
+
   return {
     hangouts,
     ranges,
     confirm,
     confirming,
+    rename,
+    retime,
+    cancel,
+    leave,
+    join,
     // Derived, never assigned from inside the effect — the shape issue 04 hit
     // with the mini calendar and solved the same way.
     status: failed
@@ -399,8 +722,23 @@ const performConfirm = async (candidate: Candidate, userId: string): Promise<Lan
     .insert({
       starts_at: new Date(candidate.start).toISOString(),
       ends_at: new Date(candidate.end).toISOString(),
+      /*
+       * **Not optional, and the policy is why.**
+       * `06-hangout-lifecycle.sql` §1 makes the insert policy
+       * `with check (created_by = (select auth.uid()))`, so an insert that
+       * omitted this would fail with `42501` — every confirm in the app, from
+       * the moment that migration ran. A column recording who did something,
+       * which anybody may set to anybody, records nothing; the `with check` is
+       * what makes it provenance, and this is the line it checks.
+       *
+       * It records **who confirmed**, and gates nothing. The confirmer is
+       * seeded as a Participant by exactly the same route as everybody else,
+       * from the Candidate's Friend set, and every policy on this table is
+       * still `using (true)`.
+       */
+      created_by: userId,
     })
-    .select('id, starts_at, ends_at, title, created_at')
+    .select(HANGOUT_COLUMNS)
     .single()
 
   if (error !== null) {
@@ -473,7 +811,7 @@ const joinTheWinner = async (
 ): Promise<Landed> => {
   const { data: winner, error } = await supabase
     .from('hangout')
-    .select('id, starts_at, ends_at, title, created_at')
+    .select(HANGOUT_COLUMNS)
     // Half-open, matching `tstzrange`'s `[)`: a plan ending exactly where this
     // Candidate starts is not the one that beat us to it.
     .lt('starts_at', new Date(candidate.end).toISOString())

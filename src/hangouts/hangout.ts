@@ -17,9 +17,9 @@
  * this under plain Node (`yarn test`). The relative imports carry their
  * extensions because Node's own resolver needs them.
  */
-import { type Run, type Slot } from '../availability/slots.ts'
+import { SLOT_MS, type Run, type Slot } from '../availability/slots.ts'
 import { type HangoutRange } from '../candidates/candidates.ts'
-import { groupBy } from 'lodash-es'
+import { groupBy, times } from 'lodash-es'
 
 /**
  * A Friend on a Hangout — the row, not the state.
@@ -42,11 +42,29 @@ export type Hangout = {
   startsAt: number
   endsAt: number
   /**
-   * Nullable, and nothing in issue 09 writes it: confirming a Candidate is the
-   * only way a Hangout is created and it names nothing. The card promotes the
-   * time to the headline when this is absent.
+   * Nullable, and the detail sheet is what writes it (issue 10). Never read
+   * raw — `nameOf` is the one default, so there is no such thing as a Hangout
+   * without a name and no null case for a card to handle.
    */
   title: string | null
+  /**
+   * Who confirmed it, and who last changed it —
+   * `06-hangout-lifecycle.sql` §1's provenance columns.
+   *
+   * **Not ownership, and it must not become it.** Every policy on `hangout` is
+   * still `using (true)`; anyone may retime, rename or cancel anything (ticket
+   * 01). These exist *because* of that plus no notifications: they are the only
+   * thing that can answer "who moved this?" after the fact.
+   *
+   * `editedBy` non-null **is** ticket 08 §1's "edited" mark — see `isEdited`.
+   * All three are null for a Hangout nobody has changed, and `createdBy` is
+   * also null for one confirmed before that migration or whose Friend row is
+   * gone.
+   */
+  createdBy: string | null
+  editedBy: string | null
+  /** Epoch ms, stamped by the database rather than by whoever's clock. */
+  editedAt: number | null
   /** Every row, Left included — the states are told apart by their readers. */
   participants: readonly Participant[]
 }
@@ -57,6 +75,9 @@ type HangoutWire = {
   starts_at: string
   ends_at: string
   title: string | null
+  created_by: string | null
+  edited_by: string | null
+  edited_at: string | null
 }
 
 type ParticipantWire = {
@@ -96,6 +117,9 @@ export const hangoutsFrom = (
       startsAt: new Date(row.starts_at).getTime(),
       endsAt: new Date(row.ends_at).getTime(),
       title: row.title,
+      createdBy: row.created_by,
+      editedBy: row.edited_by,
+      editedAt: row.edited_at === null ? null : new Date(row.edited_at).getTime(),
       participants: (byHangout[row.id] ?? []).map((on) => ({
         friendId: on.friend_id,
         leftAt: on.left_at === null ? null : new Date(on.left_at).getTime(),
@@ -160,10 +184,7 @@ const DEFAULT_NAME = 'Hangout'
  * testable under plain Node — the callers' map is `SetUpFriend`, and nothing
  * here needs to know that.
  */
-export const facesOf = <Friend,>(
-  hangout: Hangout,
-  byId: ReadonlyMap<string, Friend>
-): Friend[] =>
+export const facesOf = <Friend>(hangout: Hangout, byId: ReadonlyMap<string, Friend>): Friend[] =>
   participantIds(hangout).flatMap((id) => {
     const friend = byId.get(id)
     return friend === undefined ? [] : [friend]
@@ -247,3 +268,153 @@ const EXCLUSION_VIOLATION = '23P01'
 /** Whether a PostgREST error is the exclusion constraint rejecting an overlap. */
 export const isOverlapRejection = (error: { code?: string } | null | undefined): boolean =>
   error?.code === EXCLUSION_VIOLATION
+
+/**
+ * Whether ticket 08 §1's **`edited`** mark applies.
+ *
+ * `editedBy` non-null *is* the mark — there is no boolean beside it, so the two
+ * facts cannot contradict each other and a card can never claim an edit by
+ * nobody.
+ *
+ * **What it means changed with the human's answer to ticket 07's
+ * `Needs the human`**, and the honest reading is the narrower one: *something
+ * about this Hangout changed after it was confirmed*, not *it has been moved*.
+ * §1 justified the mark as "the only signal a Participant gets that slots were
+ * written for them", and a **rename** writes nobody's Availability — so the
+ * badge cannot promise that any more. That signal lives in the retime dialog
+ * instead (ticket 08 §11), in front of the person doing the writing, which is
+ * where it was always stronger. A badge can only ever say *something changed*,
+ * and the detail is the only thing that can say what.
+ */
+export const isEdited = (hangout: Pick<Hangout, 'editedBy'>): boolean => hangout.editedBy !== null
+
+/**
+ * Every Slot a Hangout covers, as the instants `availability` rows are keyed
+ * on.
+ *
+ * **This is what "does this Friend cover the Hangout?" means, and there is
+ * exactly one definition of it in the product.** Ticket 07 §6: a Hangout is a
+ * range where Availability is slot rows, so coverage is *exact slot-set
+ * containment* rather than a range intersection — which is the whole reason
+ * `05-hangout.sql` constrains both bounds to the 30-minute grid.
+ *
+ * **It has to agree with the drop trigger, exactly.**
+ * `06-hangout-lifecycle.sql` §3 spells the same expression as a
+ * `generate_series` from `starts_at` to `ends_at - 30 minutes`, and ticket 08
+ * §10's dialog names the Hangouts a pending erase will drop you from *before*
+ * the delete. If the two definitions drift, that dialog lies about what you are
+ * about to lose — which ticket 07 §7 calls worse than no dialog at all, since it
+ * is "the only thing standing between a mis-click and silently leaving a plan".
+ *
+ * Half-open, `[)`, matching `tstzrange`'s default: a Hangout ending at 22:00
+ * does not want the 22:00 Slot.
+ */
+export const slotStartsOf = (hangout: HangoutRange): number[] => {
+  const count = Math.round((hangout.endsAt - hangout.startsAt) / SLOT_MS)
+  return times(Math.max(count, 0), (step) => hangout.startsAt + step * SLOT_MS)
+}
+
+/** Whether a Friend holds Availability at every Slot of a Hangout. */
+export const covers = (hangout: HangoutRange, holds: (slotStart: number) => boolean): boolean =>
+  slotStartsOf(hangout).every(holds)
+
+/** The Slots of a Hangout a Friend does not hold — what a Join has to write. */
+export const missingSlots = (
+  hangout: HangoutRange,
+  holds: (slotStart: number) => boolean
+): number[] => slotStartsOf(hangout).filter((slotStart) => !holds(slotStart))
+
+/**
+ * A Friend's three states toward a Hangout, out of two facts (ticket 07 §2).
+ *
+ * `left` is **sticky**: the way back is deliberate, from the detail, and no
+ * prompt will ever offer it (ticket 08 §9). `not-involved` is the only one
+ * eligible for "Join?" — which is why Leaving stores a row rather than deleting
+ * one, since a deleted row is indistinguishable from never having joined.
+ */
+export type FriendState = 'not-involved' | 'participant' | 'left'
+
+export const stateOf = (hangout: Hangout, friendId: string): FriendState => {
+  const row = hangout.participants.find((on) => on.friendId === friendId)
+  return row === undefined ? 'not-involved' : row.leftAt === null ? 'participant' : 'left'
+}
+
+/**
+ * Whether **"Join?"** belongs on this Hangout for this Friend.
+ *
+ * Ticket 08 §5: *on any overlap, however small*. One Slot in common is enough,
+ * because Join writes whatever is missing to cover the whole range — so a
+ * partial overlap is a Friend who is plainly interested in that evening rather
+ * than a near miss.
+ *
+ * **Never for a Friend who Left**, and never on a Past Hangout. The first is
+ * ticket 08 §9 — the tool does not *suggest* rejoining something you walked out
+ * of, though the door is not locked — and the second is §6's freeze.
+ */
+export const mayJoin = (
+  hangout: Hangout,
+  friendId: string,
+  holds: (slotStart: number) => boolean,
+  at: number
+): boolean =>
+  !isPast(hangout, at) &&
+  stateOf(hangout, friendId) === 'not-involved' &&
+  slotStartsOf(hangout).some(holds)
+
+/**
+ * The Hangouts a pending erase would **drop this Friend from** — ticket 08
+ * §10's dialog, which names every one of them rather than counting them.
+ *
+ * ## It predicts the trigger, so it is written as the trigger
+ *
+ * Three conditions, in the order `06-hangout-lifecycle.sql` §3 applies them:
+ *
+ * 1. **The erase actually removes a row inside the range.** The trigger's scan
+ *    is narrowed by its transition table to the pairs where a deleted Slot fell
+ *    inside a Hangout, and that restriction is load-bearing rather than an
+ *    optimisation: a Participant who *already* did not cover their Hangout is
+ *    left alone until they erase inside it. `holds` is checked here as well as
+ *    `erasing`, because a selection can include Slots the viewer does not hold
+ *    — the delta is filtered before the write (`useAvailability`'s `stroke`),
+ *    and nothing the store will not delete may appear in this dialog.
+ * 2. **They are a Participant**, not Left and not absent. Left outranks
+ *    Availability permanently, so erasing underneath it changes nothing.
+ * 3. **Coverage fails afterwards** — exact containment against the store minus
+ *    the erase, which is `slotStartsOf`'s contract.
+ *
+ * Past Hangouts are **not** excluded, and that is the strict rule holding
+ * rather than an oversight: ticket 07 §7 makes any loss of coverage a drop,
+ * without qualification, and the trigger has no clock in it. What ticket 08 §6
+ * does exempt is the *auto-cancel* — see `wouldAutoCancel`.
+ */
+export const droppedBy = (
+  hangouts: readonly Hangout[],
+  friendId: string,
+  erasing: ReadonlySet<number>,
+  holds: (slotStart: number) => boolean
+): Hangout[] =>
+  hangouts.filter((hangout) => {
+    const slots = slotStartsOf(hangout)
+    if (!slots.some((slotStart) => erasing.has(slotStart) && holds(slotStart))) return false
+    if (stateOf(hangout, friendId) !== 'participant') return false
+    return !slots.every((slotStart) => holds(slotStart) && !erasing.has(slotStart))
+  })
+
+/**
+ * Whether this Friend leaving or being dropped **cancels the Hangout outright**
+ * — ticket 08 §4's auto-cancel, as the client predicts it.
+ *
+ * They have to be the last one on it. Said in the dialogs rather than left to
+ * be discovered: cancellation is a hard delete with no tombstone and no undo
+ * (ticket 08 §3), and *"you are the only one on it"* is the difference between
+ * leaving a plan and deleting it for everybody.
+ *
+ * **Past Hangouts are exempt**, matching `cancel_empty_hangouts`: ticket 08 §6
+ * makes a Past Hangout uneditable — no join, no retime, no cancel — and an
+ * auto-cancel is a cancel. So a Past Hangout can end up with nobody on it,
+ * which is the honest picture rather than an erased plan.
+ */
+export const wouldAutoCancel = (hangout: Hangout, friendId: string, at: number): boolean => {
+  const on = participantIds(hangout)
+  return !isPast(hangout, at) && on.length === 1 && on[0] === friendId
+}

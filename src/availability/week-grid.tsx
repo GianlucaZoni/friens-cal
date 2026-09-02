@@ -7,14 +7,9 @@ import type { AvailabilityStore } from '@/availability/use-availability'
 import { draftCell, useDrawGesture, type DrawGesture } from '@/availability/use-draw-gesture'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { whenOf } from '@/candidates/when'
-import {
-  facesOf,
-  isHappening,
-  isPast,
-  nameOf,
-  runInColumn,
-  type Hangout,
-} from '@/hangouts/hangout'
+import { DropDialog } from '@/hangouts/drop-dialog'
+import { facesOf, isHappening, isPast, nameOf, runInColumn, type Hangout } from '@/hangouts/hangout'
+import { useEraseGuard } from '@/hangouts/use-erase-guard'
 import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
@@ -180,7 +175,30 @@ export const WeekGrid = ({
    * `eslint-plugin-react-hooks` will believe is not a read during render.
    */
   const body = useRef<HTMLDivElement | null>(null)
-  const drawing = useDrawGesture({ columns, tools, availability, viewer, body })
+
+  /**
+   * Ticket 08 §10's confirmation, in front of both erase paths.
+   *
+   * Held here rather than in the gesture because the prediction needs the
+   * Hangouts and the viewer, and because the dialog is a **grid** dialog — it is
+   * the erase that costs a plan, and the sidebar's cancel is a different
+   * question about a different object. The gesture only needs a function to
+   * call.
+   */
+  const eraseGuard = useEraseGuard({
+    hangouts,
+    availability,
+    friendId: viewer?.id ?? null,
+  })
+
+  const drawing = useDrawGesture({
+    columns,
+    tools,
+    availability,
+    requestErase: eraseGuard.requestErase,
+    viewer,
+    body,
+  })
 
   /**
    * The day length most of the week shares — its modal row count, not its
@@ -286,6 +304,22 @@ export const WeekGrid = ({
           ))}
         </div>
       </div>
+
+      {/*
+        Outside the scroller, because it is a modal about the whole gesture
+        rather than about a column — and mounted only while there is something
+        to ask, so its state is the guard's and there is no open/closed flag to
+        keep in step.
+      */}
+      {eraseGuard.pending !== null && viewer !== null && (
+        <DropDialog
+          dropping={eraseGuard.pending.dropping}
+          viewerId={viewer.id}
+          now={now}
+          onConfirm={eraseGuard.confirm}
+          onDismiss={eraseGuard.dismiss}
+        />
+      )}
     </div>
   )
 }

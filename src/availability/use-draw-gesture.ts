@@ -123,12 +123,28 @@ export const useDrawGesture = ({
   columns,
   tools,
   availability,
+  requestErase,
   viewer,
   body,
 }: {
   columns: readonly GridColumn[]
   tools: DrawingTools
   availability: AvailabilityStore
+  /**
+   * How an erase leaves this hook — `useEraseGuard`'s gate rather than
+   * `availability.erase` directly.
+   *
+   * Both erase paths go through it (the drag, and `Erase block` from the
+   * popover), because ticket 08 §10's confirmation is about the *delete* and
+   * not about which gesture asked for it. The gate calls straight through when
+   * no Hangout is at stake, so the ordinary erase still lands the moment the
+   * gesture ends.
+   *
+   * A parameter rather than something this hook decides: the prediction needs
+   * every Hangout and the viewer's id, neither of which is a gesture's business
+   * — and the dialog it raises belongs to the grid, which is what renders it.
+   */
+  requestErase: (instants: readonly Date[]) => void
   viewer: Viewer | null
   /**
    * The columns container. Hit-testing goes through its `[data-column]`
@@ -402,12 +418,12 @@ export const useDrawGesture = ({
     if (!current.moved) pending.current = current.anchor
     else if (current.kind !== 'read' && current.selection.length > 0) {
       const instants = instantsOf(current.selection)
-      if (current.kind === 'erase') availability.erase(instants)
+      if (current.kind === 'erase') requestErase(instants)
       else availability.draw(instants)
     }
 
     abort()
-  }, [instantsOf, availability, abort])
+  }, [instantsOf, availability, requestErase, abort])
 
   /**
    * And the click opens it.
@@ -459,13 +475,19 @@ export const useDrawGesture = ({
       },
       [availability, instantsOf, closePopover]
     ),
-    /** Whole-block erase, which the erase drag gives only by dragging its length. */
+    /**
+     * Whole-block erase, which the erase drag gives only by dragging its length.
+     *
+     * Through the same gate as the drag: this is the path most likely to remove
+     * the whole of the Availability holding somebody on a plan, since it takes
+     * the entire run rather than whatever the pointer covered.
+     */
     eraseRun: useCallback(
       (address: SlotAddress) => {
-        availability.erase(instantsOf(runUnder(address)))
+        requestErase(instantsOf(runUnder(address)))
         closePopover()
       },
-      [availability, instantsOf, runUnder, closePopover]
+      [requestErase, instantsOf, runUnder, closePopover]
     ),
     /** Arm a copy of the run under this Slot; the next press drops it. */
     armDuplicateAt: useCallback(

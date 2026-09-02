@@ -11,6 +11,14 @@
  * check below is one of issue 09's database acceptance criteria, so a clean run
  * is the evidence that the database half of the slice is done.
  *
+ * **Every authenticated insert carries `created_by`, as of issue 10.**
+ * `06-hangout-lifecycle.sql` §1 makes the insert policy
+ * `with check (created_by = (select auth.uid()))`, so an insert that omits it is
+ * refused with `42501` — and two of the probes below would then report the
+ * wrong refusal (a permission error where they are testing a check
+ * constraint). The anonymous insert in §1 deliberately still omits it: it is
+ * refused by the grant, before any policy is consulted.
+ *
  * ## What only a script can prove
  *
  * Three of these are the reason this file exists rather than a paragraph
@@ -197,7 +205,7 @@ ok('a Friend reads `hangout_participant` unfiltered')
  * ---------------------------------------------------------------- */
 const { error: backwardsErr } = await supabase
   .from('hangout')
-  .insert({ starts_at: romeAt(2030, 1, 2, 22), ends_at: romeAt(2030, 1, 2, 20) })
+  .insert({ starts_at: romeAt(2030, 1, 2, 22), ends_at: romeAt(2030, 1, 2, 20), created_by: me })
 if (backwardsErr?.code !== CHECK_VIOLATION) {
   die('a Hangout that ends before it starts was accepted', backwardsErr ?? undefined)
 }
@@ -215,7 +223,11 @@ ok('a Hangout that ends before it starts is refused')
  */
 const { error: offGridErr } = await supabase
   .from('hangout')
-  .insert({ starts_at: romeAt(2030, 1, 3, 20, 17), ends_at: romeAt(2030, 1, 3, 22) })
+  .insert({
+    starts_at: romeAt(2030, 1, 3, 20, 17),
+    ends_at: romeAt(2030, 1, 3, 22),
+    created_by: me,
+  })
 if (offGridErr?.code !== CHECK_VIOLATION) {
   die(
     'a Hangout starting at :17 was accepted — coverage is now a fuzzy comparison',
@@ -238,7 +250,12 @@ const somebodyElse = roster.find((friend) => friend.id !== me) ?? null
 
 const { data: mine, error: createErr } = await supabase
   .from('hangout')
-  .insert({ starts_at: romeAt(2030, 1, 4, 20), ends_at: romeAt(2030, 1, 4, 23), title: 'Probe' })
+  .insert({
+    starts_at: romeAt(2030, 1, 4, 20),
+    ends_at: romeAt(2030, 1, 4, 23),
+    title: 'Probe',
+    created_by: me,
+  })
   .select('id, starts_at, ends_at, title, created_at')
   .single()
 if (createErr) die('creating a Hangout failed', createErr)
@@ -277,7 +294,7 @@ ok('seeding the same Participants twice is a no-op — the confirm retry is free
  * ---------------------------------------------------------------- */
 const { error: overlapErr } = await supabase
   .from('hangout')
-  .insert({ starts_at: romeAt(2030, 1, 4, 22), ends_at: romeAt(2030, 1, 5, 1) })
+  .insert({ starts_at: romeAt(2030, 1, 4, 22), ends_at: romeAt(2030, 1, 5, 1), created_by: me })
 if (overlapErr?.code !== EXCLUSION_VIOLATION) {
   die(
     'AN OVERLAPPING HANGOUT WAS ACCEPTED — `btree_gist` or the constraint is missing, ' +
@@ -294,7 +311,7 @@ note('  which is also the confirm race: the loser converts into a Join, client-s
  */
 const { data: adjacent, error: adjacentErr } = await supabase
   .from('hangout')
-  .insert({ starts_at: romeAt(2030, 1, 4, 23), ends_at: romeAt(2030, 1, 5, 1) })
+  .insert({ starts_at: romeAt(2030, 1, 4, 23), ends_at: romeAt(2030, 1, 5, 1), created_by: me })
   .select('id')
   .single()
 if (adjacentErr) {
@@ -512,7 +529,7 @@ ok('the `verify-hangout` channel is SUBSCRIBED')
 
 const { data: broadcast, error: broadcastErr } = await supabase
   .from('hangout')
-  .insert({ starts_at: romeAt(2030, 2, 1, 20), ends_at: romeAt(2030, 2, 1, 21) })
+  .insert({ starts_at: romeAt(2030, 2, 1, 20), ends_at: romeAt(2030, 2, 1, 21), created_by: me })
   .select('id')
   .single()
 if (broadcastErr) die('creating the Realtime probe Hangout failed', broadcastErr)
@@ -639,7 +656,7 @@ if (already.length > 0) {
   } else {
     const { data: demo, error: demoErr } = await supabase
       .from('hangout')
-      .insert({ starts_at: DEMO_FROM, ends_at: DEMO_TO, title: 'Coffee' })
+      .insert({ starts_at: DEMO_FROM, ends_at: DEMO_TO, title: 'Coffee', created_by: me })
       .select('id')
       .single()
     if (demoErr) die('creating the demo Hangout failed', demoErr)

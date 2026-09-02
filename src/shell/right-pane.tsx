@@ -1,3 +1,4 @@
+import { useSession } from '@/auth/use-session'
 import type { AvailabilityStore } from '@/availability/use-availability'
 import { CandidateList } from '@/candidates/candidate-list'
 import { useCandidates } from '@/candidates/use-candidates'
@@ -58,6 +59,43 @@ export const RightPane = ({
   now: number
 }) => {
   const list = useCandidates({ roster, availability, hangouts, now })
+  const { state } = useSession()
+  const viewerId = state.status === 'signed-in' ? state.user.id : null
+
+  /**
+   * Every Friend's **name** by id, including the ones mid-setup.
+   *
+   * A second map beside `friendsById`, and the two really are different
+   * queries: a face needs a finished identity (`setUpOnly`) and a provenance
+   * line needs only a name. A Hangout confirmed by somebody who has not
+   * finished setup would otherwise read as *confirmed by someone else*, which
+   * is the fallback for a genuine race and not for a real Friend.
+   *
+   * Built here rather than in `AppShell` because the detail is the only reader
+   * — unlike `friendsById`, which the grid needs too.
+   */
+  const namesById = useMemo(
+    () => new Map(roster.friends.map((friend) => [friend.id, friend.name])),
+    [roster.friends]
+  )
+
+  /**
+   * The five lifecycle writes, as one object.
+   *
+   * `useMemo` because it is a prop on every card in the pinned region and the
+   * store hands back a fresh literal each render — the same reason `AppShell`
+   * pulls `silent` off the store rather than reaching through it.
+   */
+  const controls = useMemo(
+    () => ({
+      rename: hangouts.rename,
+      retime: hangouts.retime,
+      cancel: hangouts.cancel,
+      leave: hangouts.leave,
+      join: hangouts.join,
+    }),
+    [hangouts.rename, hangouts.retime, hangouts.cancel, hangouts.leave, hangouts.join]
+  )
 
   /*
    * `now` rather than `Date.now()`, so this unpins on the same tick the
@@ -66,12 +104,30 @@ export const RightPane = ({
    * 20:00 Hangout at midnight on Saturday, twenty hours before it starts.
    */
   const upcoming = useMemo(() => pinned(hangouts.hangouts, now), [hangouts.hangouts, now])
-  const hasPinned = upcoming.length > 0
+  /*
+   * `viewerId` is part of the condition rather than defaulted away: without a
+   * signed-in Friend there is no "am I on this", no Join and no Leave, and
+   * every control in the detail would be about nobody. `RequireAuth` stands
+   * between here and the route, so this is the type being honest rather than a
+   * state anybody reaches — and it has to gate the **divider** too, or the rule
+   * would sit above the Candidates with nothing over it.
+   */
+  const hasPinned = upcoming.length > 0 && viewerId !== null
 
   return (
     <SidebarContent>
       <div className="flex flex-col gap-1.5 p-2">
-        {hasPinned && <PinnedHangouts hangouts={upcoming} friendsById={friendsById} now={now} />}
+        {hasPinned && viewerId !== null && (
+          <PinnedHangouts
+            hangouts={upcoming}
+            friendsById={friendsById}
+            namesById={namesById}
+            viewerId={viewerId}
+            now={now}
+            isFree={availability.isFree}
+            controls={controls}
+          />
+        )}
 
         {/*
           The rule, whenever there is a pinned region above it.

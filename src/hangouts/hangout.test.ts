@@ -19,15 +19,23 @@
  */
 import { slotsOfDay } from '../availability/slots.ts'
 import {
+  covers,
+  droppedBy,
   hangoutsFrom,
+  isEdited,
   isHappening,
   isPast,
+  mayJoin,
+  missingSlots,
   nameOf,
   isOverlapRejection,
   participantIds,
   pinned,
   rangesOf,
   runInColumn,
+  slotStartsOf,
+  stateOf,
+  wouldAutoCancel,
 } from './hangout.ts'
 import { TZDate } from '@date-fns/tz'
 import assert from 'node:assert/strict'
@@ -53,6 +61,15 @@ const PIZZA = {
   ends_at: '2027-09-04T21:00:00+00:00',
   title: 'Pizza',
   created_at: '2027-09-01T10:00:00+00:00',
+  /*
+   * Null on all three, which is the **pre-migration** Hangout: the provenance
+   * columns arrived in `06-hangout-lifecycle.sql` and backfilling an author
+   * would have been inventing a fact (ticket 07). Every reader has to render
+   * this case, so the default fixture is it.
+   */
+  created_by: null,
+  edited_by: null,
+  edited_at: null,
 }
 
 const CLIMBING = {
@@ -61,7 +78,14 @@ const CLIMBING = {
   ends_at: '2027-09-05T10:00:00+00:00',
   title: null,
   created_at: '2027-09-01T10:00:00+00:00',
+  created_by: null,
+  edited_by: null,
+  edited_at: null,
 }
+
+/** When a Friend Left, and when somebody edited — both as PostgREST spells them. */
+const LEFT = '2027-09-02T09:00:00+00:00'
+const EDITED = '2027-09-03T09:00:00+00:00'
 
 const on = (hangoutId: string, friendId: string, leftAt: string | null = null) => ({
   hangout_id: hangoutId,
@@ -239,4 +263,201 @@ test('only `23P01` is the confirm race; everything else is a failure to report',
   assert.equal(isOverlapRejection({ code: '42501' }), false, 'permission denied is not this')
   assert.equal(isOverlapRejection(null), false)
   assert.equal(isOverlapRejection(undefined), false)
+})
+
+/* ------------------------------------------------------------------ *
+ * Issue 10 — the lifecycle
+ * ------------------------------------------------------------------ */
+
+test('`editedBy` non-null IS the "edited" mark — there is no second flag to disagree', () => {
+  const [fresh] = hangoutsFrom([PIZZA], [])
+  const [moved] = hangoutsFrom([{ ...PIZZA, edited_by: SARA, edited_at: EDITED }], [])
+
+  assert.equal(isEdited(fresh), false)
+  assert.equal(isEdited(moved), true)
+  assert.equal(moved.editedAt, at(3, 11), 'the stamp goes through Date, like every other bound')
+})
+
+test('the pre-migration Hangout has no provenance, and reads as null rather than as nobody', () => {
+  // Ticket 07: nullable "because Hangouts confirmed before this migration have
+  // no author, and backfilling one would be inventing a fact". The detail
+  // renders no line at all for these, which is why null has to survive the fold.
+  const [pizza] = hangoutsFrom([PIZZA], [])
+  assert.equal(pizza.createdBy, null)
+  assert.equal(pizza.editedBy, null)
+  assert.equal(pizza.editedAt, null)
+})
+
+test('a Hangout covers exactly its own Slots, half-open', () => {
+  const [pizza] = hangoutsFrom([PIZZA], [])
+
+  // 20:00–23:00 is six half hours, and 23:00 itself is NOT one of them —
+  // `tstzrange`'s `[)`, which is what lets two plans sit back to back.
+  assert.equal(slotStartsOf(pizza).length, 6)
+  assert.equal(slotStartsOf(pizza)[0], at(4, 20))
+  assert.equal(slotStartsOf(pizza)[5], at(4, 22, 30))
+  assert.equal(
+    slotStartsOf(pizza).includes(at(4, 23)),
+    false,
+    'the closing bound is not a Slot the Hangout covers'
+  )
+})
+
+test('coverage across the 25-hour Sunday counts the repeated hour', () => {
+  /*
+   * The autumn Sunday holds 02:00 twice, so 01:00–04:00 in Rome is FOUR hours
+   * of real time and eight Slots rather than six. This is the case a client
+   * predicate built on wall-clock arithmetic gets wrong and the trigger's
+   * `generate_series` over real half hours gets right — and if the two
+   * disagreed, ticket 08 §10's dialog would lie about what an erase costs.
+   */
+  const overnight = {
+    ...PIZZA,
+    starts_at: new TZDate(2027, 9, 31, 1, ROME).toISOString(),
+    ends_at: new TZDate(2027, 9, 31, 4, ROME).toISOString(),
+  }
+  const [hangout] = hangoutsFrom([overnight], [])
+
+  assert.equal(slotStartsOf(hangout).length, 8)
+})
+
+test('`covers` is every Slot, and `missingSlots` is what a Join has to write', () => {
+  const [pizza] = hangoutsFrom([PIZZA], [])
+  const slots = slotStartsOf(pizza)
+
+  assert.equal(
+    covers(pizza, () => true),
+    true
+  )
+  assert.equal(
+    covers(pizza, (slot) => slot !== slots[3]),
+    false,
+    'one hole anywhere is a loss of coverage — the drop rule is strict (ticket 07 §7)'
+  )
+  assert.deepEqual(
+    missingSlots(pizza, (slot) => slot !== slots[3]),
+    [slots[3]]
+  )
+  assert.deepEqual(
+    missingSlots(pizza, () => false),
+    slots,
+    'nothing held is the whole range'
+  )
+})
+
+test('three states out of two facts: no row, row, row with `left_at`', () => {
+  const [pizza] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO), on(PIZZA.id, SARA, LEFT)])
+
+  assert.equal(stateOf(pizza, MARCO), 'participant')
+  assert.equal(stateOf(pizza, SARA), 'left')
+  assert.equal(stateOf(pizza, LUCA), 'not-involved')
+})
+
+test('"Join?" shows on ANY overlap, never for a Friend who Left, never on a Past one', () => {
+  const [pizza] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO), on(PIZZA.id, SARA, LEFT)])
+  const slots = slotStartsOf(pizza)
+  const beforeIt = at(4, 19)
+  const oneSlot = (slot: number) => slot === slots[0]
+
+  // Ticket 08 §5: however small. One Slot in common is enough, because Join
+  // writes whatever is missing to cover the whole range.
+  assert.equal(mayJoin(pizza, LUCA, oneSlot, beforeIt), true)
+  assert.equal(
+    mayJoin(pizza, LUCA, () => false, beforeIt),
+    false,
+    'no overlap, no offer'
+  )
+
+  // §9: the tool never suggests rejoining something you walked out of.
+  assert.equal(
+    mayJoin(pizza, SARA, () => true, beforeIt),
+    false
+  )
+  // And a Participant is already on it.
+  assert.equal(
+    mayJoin(pizza, MARCO, () => true, beforeIt),
+    false
+  )
+  // §6: Past freezes join as well as retime and cancel.
+  assert.equal(
+    mayJoin(pizza, LUCA, () => true, at(5, 0)),
+    false
+  )
+})
+
+test('the drop dialog names a Hangout only when the erase actually breaks its coverage', () => {
+  const [pizza] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO)])
+  const slots = slotStartsOf(pizza)
+  const holdsEverything = () => true
+
+  assert.deepEqual(
+    droppedBy([pizza], MARCO, new Set([slots[2]]), holdsEverything).map((it) => it.id),
+    [PIZZA.id]
+  )
+
+  /*
+   * Erasing Availability that lies OUTSIDE the range touches nothing. The
+   * trigger's transition table narrows its scan to pairs where a deleted Slot
+   * fell inside a Hangout, so a client that reported this one would be naming
+   * a drop the database is never going to perform.
+   */
+  assert.deepEqual(droppedBy([pizza], MARCO, new Set([at(4, 19)]), holdsEverything), [])
+})
+
+test('the drop dialog ignores Slots the viewer does not hold, and Friends who are not on it', () => {
+  const [pizza] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO), on(PIZZA.id, SARA, LEFT)])
+  const slots = slotStartsOf(pizza)
+
+  /*
+   * A selection can include Slots the viewer never held — `useAvailability`'s
+   * `stroke` filters the delta before writing, so nothing the store will not
+   * actually delete may appear in this dialog.
+   */
+  assert.deepEqual(
+    droppedBy([pizza], MARCO, new Set([slots[2]]), () => false),
+    []
+  )
+
+  // Left outranks Availability permanently, so erasing underneath it changes
+  // nothing — and the trigger's own scan is `left_at is null`.
+  assert.deepEqual(
+    droppedBy([pizza], SARA, new Set([slots[2]]), () => true),
+    []
+  )
+  // And somebody with no row at all cannot be dropped from it.
+  assert.deepEqual(
+    droppedBy([pizza], LUCA, new Set([slots[2]]), () => true),
+    []
+  )
+})
+
+test('a partial erase inside the range still drops you — the rule is strict', () => {
+  // Ticket 07 §7: *any* loss of coverage. Erasing one half hour out of six is
+  // not "mostly still free", it is a Hangout you no longer cover.
+  const [pizza] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO)])
+  const slots = slotStartsOf(pizza)
+
+  assert.equal(droppedBy([pizza], MARCO, new Set([slots[5]]), () => true).length, 1)
+})
+
+test('the last Participant leaving cancels it — unless it is already Past', () => {
+  const [alone] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO)])
+  const [two] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO), on(PIZZA.id, SARA)])
+  const [withALeaver] = hangoutsFrom([PIZZA], [on(PIZZA.id, MARCO), on(PIZZA.id, SARA, LEFT)])
+
+  assert.equal(wouldAutoCancel(alone, MARCO, at(4, 19)), true)
+  assert.equal(wouldAutoCancel(two, MARCO, at(4, 19)), false)
+  assert.equal(
+    wouldAutoCancel(withALeaver, MARCO, at(4, 19)),
+    true,
+    'a Friend who Left is not a Participant, so the last one standing is alone'
+  )
+
+  /*
+   * Ticket 08 §6 makes a Past Hangout uneditable — *no join, no retime, no
+   * cancel* — and an auto-cancel is a cancel. So tidying up last month's
+   * Availability cannot erase last month's plans; the drop still happens and
+   * the Hangout is simply left with nobody on it, which is honest.
+   */
+  assert.equal(wouldAutoCancel(alone, MARCO, at(5, 0)), false)
 })

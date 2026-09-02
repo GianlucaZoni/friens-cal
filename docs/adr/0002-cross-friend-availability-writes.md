@@ -59,3 +59,47 @@ Extensions are **not reverted** when a Hangout is cancelled or retimed shorter.
   `with check`, not only `using` — otherwise a Friend can update their own row
   and reassign `friend_id`, opening a second cross-Friend write path that
   bypasses this ADR entirely.
+
+## Amendment (2026-09-02, from issue 10) — the RPC takes three arguments
+
+**Superseding the first refinement above.** The function is
+`retime_hangout(hangout_id, starts_at, ends_at)`, not `extend(hangout_id)`, and
+it performs the move as well as the extension.
+
+The refinement's one-argument rule was written to keep the hole narrow by
+deriving everything from the stored row. Implementing it exposed a
+chicken-and-egg that one argument cannot resolve: a retime needs the
+Participants extended to the **new** range, and until the row has moved the
+stored row only knows the old one.
+
+- **RPC then update** extends everyone to the range the Hangout is *leaving* —
+  the one range they already covered by definition.
+- **Update then RPC** is two statements outside a transaction, which PostgREST
+  cannot span and this project has no server for (ADR-0001). If the second
+  fails, the Hangout has moved to a time nobody covers, and **the drop trigger
+  cannot repair it** — that trigger fires on an `availability` delete, and no
+  Availability was deleted. Compensating client-side, the way issue 09 does for
+  a failed Participant seed, does not work either: the `update` back can itself
+  be refused by the exclusion constraint if somebody took the old window in
+  between.
+
+So both happen in one statement, in one transaction, and the range is an
+argument because the caller is what chooses it.
+
+**This is not the `(friend_id, start, end)` signature this ADR rejected.** That
+one is "write any Friend's calendar, anywhere", behind a safer-looking name.
+This one still derives **who** from the stored row — the Participants of that
+Hangout whose `left_at` is null — and by the time it returns, the range it wrote
+*is* the Hangout's own range, because the same statement put it there. The
+invariant the narrow hole bought is intact: nothing this function writes is
+Availability that no Hangout covers.
+
+What the extra arguments do cost, recorded rather than glossed: the function is
+no longer *only* an extension, so "the RPC" and "the retime" are now the same
+object. A future second reason to extend somebody's Availability cannot reuse
+it, and should not be given a range argument on this precedent — it should
+derive its own, or this ADR needs revisiting properly.
+
+The remaining refinements stand unchanged: `search_path = ''`, explicit
+revoke-then-grant, insert-only, and `with check` on the `availability` update
+policy.

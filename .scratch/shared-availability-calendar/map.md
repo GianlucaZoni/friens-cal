@@ -216,6 +216,29 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   enforced by the policy that has to exist anyway. §1's "slots were written for
   you" signal moves to §11's retime dialog, where it was always stronger.
 
+- **The Hangout lifecycle is built, and it moved one resolved ADR** (issue 10 in
+  `.scratch/friens-cal-v1/`). [ADR-0002](../../docs/adr/0002-cross-friend-availability-writes.md)
+  gains an amendment: the cross-Friend RPC takes **three** arguments, not the
+  one its own refinement called "the entire reason the hole is narrow". A retime
+  needs the Participants extended to the range the Hangout is *arriving* at, and
+  the stored row only knows the one it is leaving — so the move and the extension
+  are one statement in one transaction, because two statements outside one leave
+  a plan at a time nobody covers with nothing to repair it. Still narrow: **who**
+  is derived from the stored row, and the range written *is* the Hangout's own
+  range by the time it returns.
+
+  Three further things the tickets did not decide, resolved while building:
+  **`created_by` is immutable** from a `before update` trigger, closing the one
+  hole ticket 07's two `with check`s leave between them (an update can sign
+  itself honestly *and* reassign authorship, and no policy can compare the old
+  row to the new); **`edited_at` is stamped by the database**, so provenance
+  never carries a browser's clock; and **the auto-cancel exempts Past
+  Hangouts** while the drop stays strict — derived from ticket 08 §6, since an
+  auto-cancel is a cancel, and otherwise tidying up old Availability would erase
+  old plans against ticket 01. Ticket 08 §10's plural drop dialog is written *as*
+  the trigger it predicts, `generate_series` on both sides, because a dialog that
+  named the wrong Hangouts would be believed.
+
 ## Not yet specified
 
 - **Deployment.** Where the SPA is hosted, how env vars get there.

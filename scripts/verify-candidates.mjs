@@ -33,9 +33,9 @@
  * deletes nothing — the pipeline is a derivation, so there is nothing to write
  * to test it.
  */
-import { TZDate } from '@date-fns/tz'
-import { scanCandidates, glows, isFullHouse } from '../src/candidates/candidates.ts'
 import { heldFrom, mergeSlots } from '../src/availability/slots.ts'
+import { scanCandidates, glows, isFullHouse } from '../src/candidates/candidates.ts'
+import { TZDate } from '@date-fns/tz'
 import { createClient } from '@supabase/supabase-js'
 
 /** The one group time zone (`GROUP_TIME_ZONE`), restated as the other scripts do. */
@@ -187,9 +187,30 @@ check(
   staircase !== undefined && staircase.end === at(6, '23:00'),
   'the overlap starts at 19:00 even though the first Friend started at 18:00'
 )
+/*
+ * Not "every set-up Friend" — that was the first version of this check and it
+ * went red the moment a third Friend joined without drawing anything, which is
+ * a fact about the Group rather than about the pipeline. The invariant that
+ * does hold: a Candidate's Friend set is *exactly* the Friends who hold a row
+ * at every one of its Slots.
+ */
+const holdsThroughout = (friendId, candidate) =>
+  Array.from(
+    { length: (candidate.end - candidate.start) / (30 * 60_000) },
+    (_, index) => candidate.start + index * 30 * 60_000
+  ).every((instant) => store.has(`${friendId}|${instant}`))
+
 check(
-  "Monday's Candidate holds every set-up Friend",
-  staircase !== undefined && staircase.friendIds.length === groupSize
+  "every Candidate's Friend set is exactly who is free throughout it",
+  candidates.every(
+    (candidate) =>
+      candidate.friendIds.length >= 2 &&
+      candidate.friendIds.every((friendId) => holdsThroughout(friendId, candidate)) &&
+      visible
+        .filter((friendId) => !candidate.friendIds.includes(friendId))
+        .every((friendId) => !holdsThroughout(friendId, candidate))
+  ),
+  'the sweep and the extension agree with the rows'
 )
 check(
   "Wednesday's full house is 20:00–22:00",
@@ -207,7 +228,6 @@ check(
 const friday = candidates.filter(
   (candidate) => candidate.start >= at(10, '00:00') && candidate.start < at(11, '00:00')
 )
-
 
 check(
   "Friday's accidental overlap is one Candidate, 10:00–11:00",
@@ -240,7 +260,8 @@ check(
     return (
       previous === undefined ||
       previous.friendIds.length > candidate.friendIds.length ||
-      (previous.friendIds.length === candidate.friendIds.length && previous.start <= candidate.start)
+      (previous.friendIds.length === candidate.friendIds.length &&
+        previous.start <= candidate.start)
     )
   })
 )
@@ -251,14 +272,55 @@ check(
 
 console.log(`\n3. The glow and the pill, at groupSize ${groupSize}`)
 
+/*
+ * Asserted as the RULE, not as this Group's current outcome. The Group grew
+ * from two Friends to three while this slice was being built, and the first
+ * version of these checks — "every card glows and every card carries the pill",
+ * which is exactly what a Group of two produces — would have gone red on a
+ * change that was not a regression in anything.
+ */
 check(
-  'every Candidate glows in a group this size',
-  candidates.every((candidate) => glows(candidate, groupSize)),
-  `2n > ${groupSize} — ticket 09's degenerate case, and it self-corrects as the Group grows`
+  `the glow fires exactly when 2n > ${groupSize}`,
+  candidates.every(
+    (candidate) => glows(candidate, groupSize) === 2 * candidate.friendIds.length > groupSize
+  )
 )
 check(
-  'every Candidate is a full house, so every card carries the pill',
-  candidates.every((candidate) => isFullHouse(candidate, groupSize))
+  'the pill appears exactly on a true full house',
+  candidates.every(
+    (candidate) => isFullHouse(candidate, groupSize) === candidate.friendIds.length >= groupSize
+  )
+)
+
+console.log(
+  `     ${candidates.filter((candidate) => glows(candidate, groupSize)).length} of ${candidates.length} glow · ` +
+    `${candidates.filter((candidate) => isFullHouse(candidate, groupSize)).length} carry the pill`
+)
+
+/*
+ * The rule ticket 09 chose the denominator for: hiding is a query tool, so it
+ * can only ever SUPPRESS a glow. The same rows with one Friend filtered out
+ * must not lift anything over the bar.
+ */
+const filtered = scanCandidates({
+  slots: unpacked,
+  visible: visible.slice(0, -1),
+  hangouts: [],
+  from: WINDOW_FROM,
+})
+
+check(
+  'hiding a Friend manufactures no glow and no pill',
+  filtered.candidates.every(
+    (candidate) =>
+      candidate.friendIds.length <= groupSize &&
+      (!glows(candidate, groupSize) ||
+        candidates.some(
+          (before) =>
+            before.friendIds.length >= candidate.friendIds.length && glows(before, groupSize)
+        ))
+  ),
+  'the denominator is the whole Group, Hidden included'
 )
 
 /* ================================================================== *

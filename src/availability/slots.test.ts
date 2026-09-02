@@ -17,7 +17,16 @@
  * would name an instant, and the runner's own zone would decide which calendar
  * day it landed on.
  */
-import { SLOT_MS, mergeSlots, runsOf, slotKey, slotsOfDay, startOfDayInZone } from './slots.ts'
+import {
+  SLOT_MS,
+  heldFrom,
+  mergeSlots,
+  runsOf,
+  slotContaining,
+  slotKey,
+  slotsOfDay,
+  startOfDayInZone,
+} from './slots.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -245,4 +254,82 @@ test('merging leaves the set it was given alone', () => {
   mergeSlots(before, [{ friend_id: 'b', slot_start: '2026-09-01T08:00:00Z' }])
 
   assert.equal(before.size, 1)
+})
+
+/* ================================================================== *
+ * The Candidate scan's horizon
+ * ================================================================== */
+
+const KATHMANDU = 'Asia/Kathmandu'
+
+test('an instant inside a slot floors to the start of that slot', () => {
+  const nearlyTen = new Date(Date.UTC(2026, 8, 1, 7, 42, 17, 500))
+
+  // 09:42 Rome (UTC+2) → the 09:30 slot.
+  assert.equal(slotContaining(nearlyTen, ROME).toISOString(), '2026-09-01T07:30:00.000Z')
+})
+
+test('an instant exactly on a boundary is its own slot', () => {
+  const onTheHalf = new Date(Date.UTC(2026, 8, 1, 7, 30))
+
+  assert.equal(slotContaining(onTheHalf, ROME).getTime(), onTheHalf.getTime())
+})
+
+test('the horizon is read off the wall clock, so a quarter-hour zone lands on its own lattice', () => {
+  // Kathmandu is UTC+05:45, so its slots begin at :00 and :30 *local* — which
+  // is :15 and :45 UTC. Dividing the epoch would put the horizon between two
+  // rows, and a Candidate clipped there would start at a time no row begins at.
+  const instant = new Date(Date.UTC(2026, 8, 1, 7, 20))
+
+  assert.equal(slotContaining(instant, KATHMANDU).toISOString(), '2026-09-01T07:15:00.000Z')
+})
+
+test('the horizon is a real slot start on the day the clocks go back', () => {
+  // 02:30 Rome happens twice; whichever one this instant is in, the answer has
+  // to be one of the day's own slot starts rather than an hour either side.
+  const inTheRepeatedHour = new Date(Date.UTC(2026, 9, 25, 0, 47))
+  const starts = new Set(slotsOfDay(CLOCKS_BACK, ROME).map((slot) => slot.start.getTime()))
+
+  assert.ok(starts.has(slotContaining(inTheRepeatedHour, ROME).getTime()))
+})
+
+/* ================================================================== *
+ * Unpacking the store for the Candidate scan
+ * ================================================================== */
+
+const EVENING = Date.UTC(2026, 8, 1, 18)
+
+test('the store unpacks into one entry per Friend per slot', () => {
+  const store = mergeSlots(new Set(), [
+    { friend_id: 'marco', slot_start: new Date(EVENING).toISOString() },
+    { friend_id: 'sara', slot_start: new Date(EVENING).toISOString() },
+    { friend_id: 'marco', slot_start: new Date(EVENING + SLOT_MS).toISOString() },
+  ])
+
+  assert.deepEqual(
+    heldFrom(store, EVENING)
+      .map(({ friendId, start }) => `${friendId}@${(start - EVENING) / SLOT_MS}`)
+      .sort(),
+    ['marco@0', 'marco@1', 'sara@0']
+  )
+})
+
+test('slots before the horizon are not unpacked', () => {
+  // The store holds the past too — it is what the grid draws when the viewer
+  // navigates backwards — and the sidebar is "today forward" (ticket 09 §1).
+  const store = mergeSlots(new Set(), [
+    { friend_id: 'marco', slot_start: new Date(EVENING - SLOT_MS).toISOString() },
+    { friend_id: 'marco', slot_start: new Date(EVENING).toISOString() },
+  ])
+
+  assert.deepEqual(heldFrom(store, EVENING), [{ friendId: 'marco', start: EVENING }])
+})
+
+test('a uuid survives the round trip through the key', () => {
+  const id = '3f2b8c14-9d5e-4a71-b0c3-6e8f1a2d4b90'
+  const store = mergeSlots(new Set(), [
+    { friend_id: id, slot_start: new Date(EVENING).toISOString() },
+  ])
+
+  assert.deepEqual(heldFrom(store, 0), [{ friendId: id, start: EVENING }])
 })

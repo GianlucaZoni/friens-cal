@@ -1,6 +1,7 @@
 import { useSession } from '@/auth/use-session'
 import { useAvailability } from '@/availability/use-availability'
 import { useDrawingTools } from '@/availability/use-drawing-tools'
+import type { HangoutRange } from '@/candidates/candidates'
 import { Toaster } from '@/components/ui/toast'
 import { identityOf } from '@/identity/friend-row'
 import { useRoster } from '@/roster/use-roster'
@@ -41,6 +42,20 @@ import { useMemo } from 'react'
  * ticket 01 put the "Drawing mode:" tabbar and the erase toggle in the left
  * pane, and the grid they govern is in the centre.
  */
+/**
+ * There is no `hangout` table yet — issue 09 creates it, seeds its Participants
+ * from a Candidate's Friend set, and pins the confirmed ones above the list.
+ *
+ * A module-level constant rather than a `[]` literal in the JSX, because it is
+ * a dependency of the Candidate scan: a fresh array every render would re-run
+ * the whole pipeline whenever anything in this shell re-rendered.
+ *
+ * Step 3 of the pipeline — *blank the Hangouts, for every Friend* — is
+ * nonetheless built and tested against this shape rather than left as a hole
+ * for issue 09 to discover.
+ */
+const NO_HANGOUTS: readonly HangoutRange[] = []
+
 export const AppShell = () => {
   const calendar = useCalendarView()
   const roster = useRoster()
@@ -117,7 +132,7 @@ export const AppShell = () => {
               />
             </ShellInset>
             <ShellSidebar side="right">
-              <RightPane />
+              <RightPane roster={roster} availability={availability} hangouts={NO_HANGOUTS} />
             </ShellSidebar>
           </div>
         </div>

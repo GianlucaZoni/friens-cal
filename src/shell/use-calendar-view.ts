@@ -1,3 +1,4 @@
+import { monthLattice } from '@/availability/month'
 import { useCallback, useMemo, useState } from 'react'
 import {
   addDays,
@@ -68,6 +69,31 @@ export const useCalendarView = () => {
     return Array.from({ length: 7 }, (_, index) => addDays(first, index))
   }, [anchor])
 
+  /** The anchor's month, padded out to whole weeks — the month grid's cells. */
+  const monthDays = useMemo(() => monthLattice(anchor, WEEK_STARTS_ON), [anchor])
+
+  /**
+   * **Every day the view on screen actually draws** — and therefore the range
+   * the stores are read over.
+   *
+   * Not the same thing as `days`, and the difference was a hole rather than a
+   * subtlety. `useAvailability` and `useHangouts` both take their floor from
+   * `floorOfView`, which reads the **first** day it is handed; handing them the
+   * anchor's *week* while the month grid drew from `startOfWeek(startOfMonth())`
+   * meant up to five weeks of cells rendered from a range Postgres had never
+   * been asked for — with `status` already `ready`, because the floor it was
+   * asked for had arrived. A month of Availability nobody had fetched is
+   * indistinguishable from a month nobody drew anything in, which is precisely
+   * the confusion the load state exists to prevent.
+   *
+   * Forward navigation was never affected: the boot read is unbounded above
+   * (ticket 07 §10), so only going *back* could open the hole.
+   *
+   * Both views' arrays go through here rather than each grid deriving its own,
+   * so the cells drawn and the rows fetched cannot disagree by construction.
+   */
+  const shownDays = view === 'week' ? days : monthDays
+
   // Prev/next step by whatever the view is showing — a week, or a month.
   const step = useCallback(
     (direction: -1 | 1) =>
@@ -94,6 +120,8 @@ export const useCalendarView = () => {
     setView,
     anchor,
     days,
+    monthDays,
+    shownDays,
     label: rangeLabel(view, anchor, days),
     goPrevious,
     goNext,

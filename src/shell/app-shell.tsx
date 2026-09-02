@@ -50,8 +50,19 @@ import { useMemo } from 'react'
 export const AppShell = () => {
   const calendar = useCalendarView()
   const roster = useRoster()
-  const availability = useAvailability(calendar.days)
-  const hangouts = useHangouts(calendar.days)
+  /*
+   * `shownDays`, not `days` — **every day the view on screen draws**, which in
+   * month view starts up to five weeks before the anchor's Monday.
+   *
+   * Both stores take their floor from `floorOfView`, which reads the first day
+   * it is handed, and both were handed the anchor's *week*. So the month grid
+   * drew cells from a range Postgres had never been asked for, with `status`
+   * already `ready` — a month of unfetched Availability is indistinguishable
+   * from a month nobody drew anything in. See `shownDays`, which is where the
+   * two views' ranges are reconciled so the cells and the rows cannot disagree.
+   */
+  const availability = useAvailability(calendar.shownDays)
+  const hangouts = useHangouts(calendar.shownDays)
   const tools = useDrawingTools()
 
   /**

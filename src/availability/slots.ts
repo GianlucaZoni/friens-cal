@@ -74,6 +74,30 @@ export const startOfDayInZone = (day: Date, timeZone: string): Date =>
   civilMidnight(day.getFullYear(), day.getMonth(), day.getDate(), timeZone)
 
 /**
+ * The earliest instant the view needs — the floor every boot read is taken
+ * from.
+ *
+ * Today, or the first day on screen if the viewer has navigated behind it.
+ * Taking the **minimum** rather than switching between them is what makes the
+ * boot query cover the current week's earlier days as well: they are already in
+ * the past by lunchtime, and fetching them as a separate strip a beat later
+ * would make Monday flicker in every Friday afternoon.
+ *
+ * One function because **two stores have to agree on it**. `useAvailability`
+ * reads Slots from here forward and `useHangouts` reads Hangouts ending after
+ * it; a floor that drifted between them would put a Hangout on a week whose
+ * Availability had not been fetched, or the reverse, and either one reads as a
+ * rendering bug rather than as a read that has not landed.
+ */
+export const floorOfView = (days: readonly Date[], timeZone: string): number => {
+  const today = startOfDayInZone(new Date(), timeZone).getTime()
+  const firstVisible = days[0]
+  return firstVisible === undefined
+    ? today
+    : Math.min(today, startOfDayInZone(firstVisible, timeZone).getTime())
+}
+
+/**
  * `TZDate` mirrors the `Date` constructor, month-and-day overflow included, so
  * `date + 1` on the 31st rolls into the next month without any arithmetic here.
  * The plain `Date` on the way out is deliberate: a `TZDate` reports zone-local

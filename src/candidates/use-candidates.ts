@@ -5,11 +5,9 @@ import {
   splitAtGlow,
   type Candidate,
   type EmptyReason,
-  type HangoutRange,
 } from '@/candidates/candidates'
-import { useSlotClock } from '@/candidates/use-slot-clock'
+import type { HangoutStore } from '@/hangouts/use-hangouts'
 import { setUpOnly, type RosterState, type SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
 import { useMemo } from 'react'
 
 export type CandidateList = {
@@ -48,10 +46,16 @@ export type CandidateList = {
  * - **Availability** — `heldFrom`'s identity is keyed on the store's slot set,
  *   so an optimistic paint and a Realtime insert both land here.
  * - **Eye toggles** — `roster.visible` is rebuilt when `hidden` moves.
- * - **Hangouts** — a prop, and issue 09 owns where it comes from.
- * - **Time** — `useSlotClock`, which also covers **focus**. It is the only one
- *   of the five with nothing to hang off, because step 1 of the pipeline makes
- *   the list stale with no data change whatsoever.
+ * - **Hangouts** — `hangouts.ranges`, whose identity moves when the store does
+ *   (`useHangouts`), so a confirm on this screen and somebody else's arriving
+ *   over Realtime both land here.
+ * - **Time** — `now`, which is `useSlotClock` held one level up in `AppShell`.
+ *   It is the only one of the five with nothing to hang off, because step 1 of
+ *   the pipeline makes the list stale with no data change whatsoever. It is a
+ *   prop rather than a hook call in here because the **pinned Hangout region
+ *   unpins on the same boundary this list re-clips on** (issue 09): two
+ *   independent timers would be two things that have to agree about what time
+ *   it is, and one clock in the shell is the cheaper promise.
  *
  * ## Who is counted, and who is not
  *
@@ -68,14 +72,14 @@ export const useCandidates = ({
   roster,
   availability,
   hangouts,
+  now,
 }: {
   roster: RosterState
   availability: AvailabilityStore
-  /** Confirmed Hangouts, from now forward. Issue 09 fills this in. */
-  hangouts: readonly HangoutRange[]
+  hangouts: HangoutStore
+  /** The start of the Slot containing now — the pipeline's **horizon**. */
+  now: number
 }): CandidateList => {
-  const horizon = useSlotClock(GROUP_TIME_ZONE)
-
   /*
    * Pulled off the store rather than reached through it inside the memos below.
    * The store is a fresh object literal every render, so depending on it would
@@ -83,6 +87,7 @@ export const useCandidates = ({
    * shape `app-shell.tsx` already names for `silent`.
    */
   const { heldFrom, status } = availability
+  const { ranges, status: hangoutStatus } = hangouts
 
   const countable = useMemo(() => setUpOnly(roster.visible), [roster.visible])
   const visibleIds = useMemo(() => countable.map((friend) => friend.id), [countable])
@@ -91,12 +96,12 @@ export const useCandidates = ({
   const scan = useMemo(
     () =>
       scanCandidates({
-        slots: heldFrom(horizon),
+        slots: heldFrom(now),
         visible: visibleIds,
-        hangouts,
-        from: horizon,
+        hangouts: ranges,
+        from: now,
       }),
-    [heldFrom, horizon, visibleIds, hangouts]
+    [heldFrom, now, visibleIds, ranges]
   )
 
   const { shown, tail } = useMemo(() => splitAtGlow(scan.candidates, groupSize), [scan, groupSize])
@@ -119,6 +124,13 @@ export const useCandidates = ({
     empty: status === 'ready' ? emptyReason(visibleIds.length, scan) : null,
     friendsById,
     groupSize,
-    loading: status === 'loading',
+    /*
+     * **Both reads**, and the Hangout half is not belt-and-braces: step 3 of
+     * the pipeline blanks a Hangout's Slots, so a list rendered before the
+     * Hangouts land would offer a window that is already booked — and offering
+     * a booked window is worse than offering nothing, because somebody would
+     * confirm it and lose the race for no reason.
+     */
+    loading: status === 'loading' || hangoutStatus === 'loading',
   }
 }

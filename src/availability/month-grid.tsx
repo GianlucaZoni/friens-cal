@@ -3,11 +3,11 @@ import { DayPanel } from '@/availability/day-panel'
 import { heatFraction, heatOpacity } from '@/availability/heat'
 import { LoadState } from '@/availability/load-state'
 import { DAYS_IN_WEEK, monthWeeks, peakOf, wholeDay } from '@/availability/month'
-import { segmentsOf } from '@/availability/segments'
+import { segmentsOf, type Segment } from '@/availability/segments'
 import { runsOf, slotsOfDay, type Run, type Slot } from '@/availability/slots'
 import type { AvailabilityStore } from '@/availability/use-availability'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
-import { useMonthGesture } from '@/availability/use-month-gesture'
+import { useMonthGesture, type MonthGesture } from '@/availability/use-month-gesture'
 import type { Viewer } from '@/availability/week-grid'
 import { DropDialog } from '@/hangouts/drop-dialog'
 import { isHappening, isPast, nameOf, runInColumn, type Hangout } from '@/hangouts/hangout'
@@ -57,6 +57,35 @@ import { PinIcon } from 'lucide-react'
  * a count per half hour, the month paints the day's largest one. See `peakOf`
  * for why that is one sentence rather than two, and for why a Hangout day is the
  * *darkest* cell of the month rather than the emptiest.
+ *
+ * ## What ticket 15 removed from the grid, and what this puts back
+ *
+ * Ticket 15's live answer is unqualified: *"**Per-Friend colour no longer
+ * appears in the grid at all.** … the grid answers *how many*, and **who** is
+ * answered only by hovering."* This cell puts eight faces on 35 days, so the
+ * divergence has to be deliberate and it has to be sayable.
+ *
+ * **What ticket 15 removed was colour as an *encoding*, and that is still gone
+ * from both grids.** Its finding was that a coloured composite *under-reports
+ * the count* — eight translucent gradients average into mud, and two Friends
+ * four degrees apart read as one Friend rather than as two similar colours. The
+ * fix was to stop asking hue to carry a number. Here, hue still carries no
+ * number: the wash is one colour, the viewer's, and the thing that varies with
+ * the count is its opacity, exactly as in the week.
+ *
+ * **What the avatars carry is identity, and they carry it by shape first.** A
+ * blobatar is a face, not a swatch — which is why ticket 14's `## Decisions` says
+ * *"avatars (not abstract dots)"* and why its `### Contradicts settled
+ * decisions` rejects **a dot row** specifically: a dot would be colour standing
+ * in for a person, which is the thing ticket 15 killed, and at 6px it collapses
+ * into exactly the h262/h268 collision. An avatar above the legibility floor
+ * does not, because the shape disambiguates (ticket 11) — so the floor is not a
+ * polish detail here, it is the whole of what keeps this from being the dot row.
+ *
+ * So the two grids do **not** disagree about what colour encodes. Both say
+ * *opacity of the viewer's hue is how many*. The month additionally says *these
+ * faces were around*, which the week answers in its popover instead — a
+ * difference in where identity is shown, not in what colour means.
  *
  * ## Why the ring, and why it merges
  *
@@ -317,7 +346,8 @@ export const MonthGrid = ({
                   selected={isSameDay(day, anchor)}
                   mine={mine(first + column)}
                   now={now}
-                  drawing={drawing}
+                  onPointerDown={drawing.onPointerDown}
+                  onClick={drawing.onClick}
                 />
               ))}
 
@@ -383,14 +413,26 @@ export const MonthGrid = ({
   )
 }
 
+/**
+ * A Hangout reaching one day, and the wall clock it opens at **on that day**.
+ *
+ * Its own name because three things read it — the chip, the panel and the
+ * cell's `aria-label` — and because the pair is the whole of what a month cell
+ * knows about a Hangout: not when it starts, but when it starts *here*.
+ */
+type BookedHere = { hangout: Hangout; from: string }
+
 /** Everything one cell draws, swept once in `MonthGrid`. */
 type MonthCellData = {
   day: Date
   slots: Slot[]
-  segments: ReturnType<typeof segmentsOf>
+  segments: Segment[]
+  /** The most Friends free at once — what the wash carries. */
   peak: number
+  /** Who holds any Availability today, in roster order — what the avatars draw. */
   free: SetUpFriend[]
-  booked: { hangout: Hangout; from: string }[]
+  booked: BookedHere[]
+  /** How many of the day's Slots are the viewer's own — the panel's tri-state. */
   held: number
 }
 
@@ -404,11 +446,35 @@ type MonthCellData = {
  * sidebar, the panel and a Hangout card, and false in a grid cell at group size,
  * so this is the line the cell is not allowed to cross.
  *
- * It is why overflow **wraps** rather than shrinking or collapsing to `+N`: the
- * prototype measured a row of nine at 6px, `+N` at four faces and a number, and
- * wrapping at a legible 16px. Fixing the size and wrapping is what makes adding
- * a Friend cost a row of pixels instead of costing legibility — at 78px, five
- * fit across, so eight Friends is two rows.
+ * It is why overflow **wraps** rather than shrinking or collapsing to `+N`:
+ * the prototype measured a row of nine at 6px and `+N` at four faces plus a
+ * number, which shows less than half the group and still asks the reader to
+ * count. Fixing the size and wrapping makes another Friend cost a row of pixels
+ * instead of costing legibility.
+ *
+ * ## Why exactly the floor, and not more
+ *
+ * 12px sits *on* the threshold, which looks like the wrong side of it to be on —
+ * and the prototype's own `wrap` strategy reached a comfortable 16px. Both sizes
+ * were measured here in a **78×80 cell carrying a Hangout chip**, which is the
+ * tightest thing the grid can render:
+ *
+ * | | 3 | 5 | 8 | 9 |
+ * | --- | --- | --- | --- | --- |
+ * | **12px** | 1 row | 1 row of 5 | 2 rows | 2 rows, **nothing clipped** |
+ * | **16px** | 1 row | 2 rows | 3 rows, **2 faces lost** | 3 rows, 3 lost |
+ *
+ * So 16px buys a third more mark and pays for it by *dropping people from the
+ * cell* — `+N` without the N, which is worse than the thing wrapping was chosen
+ * over. The prototype said as much about its own measurement: three rows of
+ * three at 16px consumes the body box exactly, *"zero room left for the
+ * own-Availability marker, a Hangout, or anything else"*. It reached 16px by
+ * spending the whole cell, and this cell has a mandatory chip in it.
+ *
+ * 12px is therefore the largest size at which the whole group still fits — nine
+ * Friends, the top of the stated range, in two rows of five with the chip intact.
+ * Anything below it is the failure the floor names; anything above it starts
+ * losing faces.
  */
 const AVATAR = 'size-3'
 
@@ -429,7 +495,8 @@ const MonthCell = ({
   selected,
   mine,
   now,
-  drawing,
+  onPointerDown,
+  onClick,
 }: {
   /** Its position in the lattice, which is the identity the gesture addresses it by. */
   index: number
@@ -443,7 +510,15 @@ const MonthCell = ({
   selected: boolean
   mine: boolean
   now: number
-  drawing: ReturnType<typeof useMonthGesture>
+  /*
+   * The gesture's two handlers, not the gesture. Destructured by the caller for
+   * the reason `isFree` and `draft` are above it: the hook returns a fresh object
+   * literal every render, so a cell that took the whole of it would name a
+   * dependency that always changes — and this file argues that convention twice
+   * before it gets here.
+   */
+  onPointerDown: MonthGesture['onPointerDown']
+  onClick: MonthGesture['onClick']
 }) => {
   const { day, peak, free, booked } = cell
   const today = isToday(day)
@@ -452,15 +527,15 @@ const MonthCell = ({
     <button
       type="button"
       data-month-day={index}
-      onPointerDown={(event) => drawing.onPointerDown(event, index)}
-      onClick={() => drawing.onClick(index)}
+      onPointerDown={(event) => onPointerDown(event, index)}
+      onClick={() => onClick(index)}
       /*
         The whole cell in one sentence, because none of the five channels is
         readable by a screen reader on its own: a wash is a colour, an avatar is
         a picture and a chip is a pin. This is the only thing that says what the
         cell says.
       */
-      aria-label={labelOf({ day, peak, free, booked, mine, today, selected, now })}
+      aria-label={labelOf(cell, { mine, today, selected, now })}
       className={cn(
         'relative flex min-w-0 flex-1 basis-0 flex-col overflow-hidden border-l p-1 text-left first:border-l-0',
         /*
@@ -636,10 +711,21 @@ const HangoutChip = ({
  */
 const SPAN_INSET_PX = 3
 
-/** Where a run of days sits in its week row, as a share of the row. */
+/**
+ * A number of columns as a share of the row — the one place the overlays'
+ * geometry is spelled.
+ *
+ * Every overlay in this file is positioned as a percentage of the week row it
+ * sits in, which is what makes `basis-0 flex-1` on the rows load-bearing rather
+ * than tidying: the cells are exactly a seventh each, so a share of the row is a
+ * count of days.
+ */
+const columns = (count: number): string => `${((count / DAYS_IN_WEEK) * 100).toFixed(4)}%`
+
+/** Where a run of days sits in its week row, inset clear of the cell edges. */
 const spanOf = (run: Run) => ({
-  left: `calc(${((run.start / DAYS_IN_WEEK) * 100).toFixed(4)}% + ${SPAN_INSET_PX}px)`,
-  width: `calc(${((run.length / DAYS_IN_WEEK) * 100).toFixed(4)}% - ${SPAN_INSET_PX * 2}px)`,
+  left: `calc(${columns(run.start)} + ${SPAN_INSET_PX}px)`,
+  width: `calc(${columns(run.length)} - ${SPAN_INSET_PX * 2}px)`,
 })
 
 /**
@@ -744,10 +830,7 @@ const OpenDay = ({
         <span
           aria-hidden
           className="pointer-events-none absolute inset-y-0"
-          style={{
-            left: `${((column / DAYS_IN_WEEK) * 100).toFixed(4)}%`,
-            width: `${(100 / DAYS_IN_WEEK).toFixed(4)}%`,
-          }}
+          style={{ left: columns(column), width: columns(1) }}
         />
       }
       peak={peak}
@@ -779,25 +862,10 @@ const OpenDay = ({
  * good the day is, who is around, whether you are in it, what is already booked,
  * and where you are.
  */
-const labelOf = ({
-  day,
-  peak,
-  free,
-  booked,
-  mine,
-  today,
-  selected,
-  now,
-}: {
-  day: Date
-  peak: number
-  free: SetUpFriend[]
-  booked: { hangout: Hangout; from: string }[]
-  mine: boolean
-  today: boolean
-  selected: boolean
-  now: number
-}): string =>
+const labelOf = (
+  { day, peak, free, booked }: MonthCellData,
+  { mine, today, selected, now }: { mine: boolean; today: boolean; selected: boolean; now: number }
+): string =>
   [
     format(day, 'EEEE d MMMM'),
     peak === 0

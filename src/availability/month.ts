@@ -96,8 +96,14 @@ export const DAYS_IN_WEEK = 7
  * not merely wrong on screen, it is an off-grid bound that
  * `hangout_on_the_slot_grid` answers with `23514`.
  *
- * A whole-day stroke is therefore the largest single write in the product: 50
- * rows in one statement on the worst day of the year.
+ * A whole-day stroke is the largest write in the product, and by more than a
+ * day's worth: `useMonthGesture` gathers a drag's days through here and hands
+ * the lot to `availability.draw` in **one** call, so a week is ~336 rows and a
+ * drag across the whole lattice is ~2000 — in one statement, in one transaction,
+ * because PostgREST puts a multi-row write in one. That is the property that
+ * makes it safe (partial failure is not reachable), and it is also why the erase
+ * side of the same gesture must go through ticket 08 §10's gate rather than
+ * straight to `availability.erase`.
  */
 export const wholeDay = (day: Date, timeZone: string): Date[] =>
   slotsOfDay(day, timeZone).map((slot) => slot.start)

@@ -11,8 +11,9 @@
  * It carries `@/` imports and has no test of its own — the claim worth testing is
  * the sweep's, and that lives in `segments.test.ts`.
  */
+import { windowOf } from '@/availability/day-answer'
 import type { Segment } from '@/availability/segments'
-import { closingLabel, type Slot } from '@/availability/slots'
+import type { Slot } from '@/availability/slots'
 import type { SetUpFriend } from '@/roster/use-roster'
 
 /**
@@ -71,16 +72,13 @@ export const answerAt = (
   const segment = segments.find((candidate) => row >= candidate.start && row < candidate.end)
   if (segment === undefined) return { free: [], span: null }
 
-  return {
-    // Filtered from `counted` rather than mapped from `friendIds`, so the list
-    // arrives in roster order and cannot contain a hole — `segmentsOf` returns
-    // the ids in the order it was handed them, which is that order.
-    free: counted.filter((friend) => segment.friendIds.includes(friend.id)),
-    span: {
-      from: slots[segment.start].label,
-      // `closingLabel`, so a segment that runs to the end of the day reads
-      // `23:30–24:00` rather than as a range that runs backwards.
-      to: closingLabel(slots[segment.end]?.label),
-    },
-  }
+  /*
+   * `windowOf`, shared with the month's day panel: a `SlotAnswer` *is* the
+   * window containing the clicked Slot, reshaped. The rules that make a segment
+   * readable — roster order, and `closingLabel` for a span running to midnight —
+   * are the kind that get fixed in one place and left wrong in the other, so
+   * there is one body and two entry points rather than two copies.
+   */
+  const { from, to, free } = windowOf(segment, counted, slots)
+  return { free, span: { from, to } }
 }

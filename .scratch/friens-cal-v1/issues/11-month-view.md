@@ -289,3 +289,104 @@ nothing to prove and something to cost.
 - **35 or 42 tab stops.** Every cell is a real button, which is what gives the
   month a keyboard route the week grid has never had. A roving `tabindex` over
   the `grid`/`gridcell` roles would be the next step and no ticket asks for one.
+
+## Review pass
+
+Both axes of `/code-review` against `main`. Four findings acted on, three
+answered, one tested and **rejected**.
+
+### Acted on
+
+1. **A false claim in a doc comment, and it was the load-bearing kind.**
+   `month.ts` said *"a whole-day stroke is therefore the largest single write in
+   the product: 50 rows in one statement"*. It is not: `finish` flatMaps a drag's
+   whole span into **one** `availability.draw`, so a week is ~336 rows and a
+   drag across the lattice ~2000. Corrected, and the correction is worth more
+   than the number — one statement in one transaction is what makes partial
+   failure unreachable, and it is the size of that statement that makes the
+   erase side's gate load-bearing rather than polite. `use-month-gesture.ts`'s
+   `requestErase` note said "48 Slots against every Hangout that day", using the
+   literal 48 its own module forbids and under-counting a multi-day drag.
+2. **`## What to build` in *this ticket* is now false where it says a Hangout day
+   "renders peak 0 — the emptiest cell of the month".** The amendment had landed
+   on ticket 14 only. The house convention is append-only and the later section
+   wins, so that paragraph stays where it is — but it is the ticket's *contract*
+   text, a reader hits it first, and "the later section wins" is a weak defence
+   against a sentence that reads as a requirement. **Superseded by decision 1
+   above**: the wash is raw Availability, a Hangout day is the darkest cell, and
+   the chip is mandatory for the opposite reason.
+3. **Ticket 15's consequence is retired here, and nothing said so.** Its live
+   answer is unqualified — *"per-Friend colour no longer appears in the grid at
+   all"* — and this cell puts eight faces on 35 days. The reconciliation was
+   reasoned and then not written down, which is the same as not having it.
+   `month-grid.tsx` now carries it: what ticket 15 removed was colour as an
+   **encoding**, and that is still gone from both grids (hue carries no number
+   anywhere; opacity does). What the avatars carry is identity by **shape**
+   first, which is why `## Decisions` says *"avatars (not abstract dots)"* and
+   why a dot row is the thing its own `### Contradicts settled decisions`
+   rejects — a dot is colour standing in for a person, and at 6px it collapses
+   into exactly the h262/h268 collision. So the two grids do not disagree about
+   what colour encodes; they differ about *where identity is shown*, and the
+   ~12px floor is the whole of what keeps this from being the dot row.
+4. **One body, two entry points.** `windowsOf` and `slot-answer.ts`'s `answerAt`
+   held the segment→window mapping twice, comment included. `windowOf` is now
+   the shared unit and `answerAt` is built from it — a `SlotAnswer` *is* the
+   window containing the clicked Slot. The `closingLabel` half is exactly the
+   kind of rule that gets fixed in one copy and left wrong in the other. Also:
+   one spelling of a column's share of a row (`columns()`), `BookedHere` and
+   `Segment[]` named rather than spelled inline, `labelOf(cell, …)` taking the
+   cell it is about, and `MonthCell` taking the gesture's two handlers rather
+   than the whole object — which is the destructure-first convention the same
+   file argues for twice above it.
+
+### Tested and rejected
+
+**"`AVATAR` is exactly 12px, the measured failure threshold; the prototype's
+wrap measurement was 16px."** A fair reading, and following it makes the cell
+worse. Both sizes were measured in a **78×80 cell carrying a Hangout chip** —
+the tightest the grid renders:
+
+| | 3 | 5 | 8 | 9 |
+| --- | --- | --- | --- | --- |
+| **12px** | 1 row | 1 row of 5 | 2 rows | 2 rows, **nothing clipped** |
+| **16px** | 1 row | 2 rows | 3 rows, **2 faces lost** | 3 rows, 3 lost |
+
+16px buys a third more mark and pays by dropping people from the cell — `+N`
+without the N, which is worse than what wrapping was chosen over. The prototype
+said so about its own number: three rows of three at 16px consumes the body box
+exactly, *"zero room left for the own-Availability marker, a Hangout, or anything
+else"*. It reached 16px by spending the whole cell, and this cell has a mandatory
+chip in it. 12px is the largest size at which the **whole group** still fits.
+The measurement is now in `AVATAR`'s comment so the next reader does not have to
+re-run it.
+
+That also corrects this ticket's own `### Left behind`, which said faces are
+clipped "at eight Friends in a cell shorter than ~80px". They are not: at 12px
+nothing is clipped at nine, and the row's `min-h-20` **is** 80px, so clipping
+needs a group of eleven or more. The degradation order still stands (faces give
+way before the chip) — it is just not reachable at the stated group size.
+
+### Answered, not changed
+
+- **"Nothing in month view can select a day", against the criterion *"today pill
+  and selected-day treatment"*.** True, and it is decision 3: the selection *is*
+  the anchor, so the treatment marks the anchor and a click no longer moves it.
+  What is drawn satisfies the criterion; what the criterion assumed — a
+  selection separate from the anchor — is state this app does not have and that
+  ticket 12 decided against having.
+- **Scope beyond the ten criteria: `I'm free all day`, `Erase this day`, and
+  `Show this week`.** Named as added rather than presented as required. The two
+  writes are ticket 01's standing correction (a gesture may be the accelerator,
+  it may not be the only route) applied to a gesture that is mouse-and-pen only,
+  so without them the month is readable on a phone and unwritable on one — and
+  the erase is what made issue 10's gate verifiable from this view at all.
+  `Show this week` is the counterpart of decision 3, which the ticket forced by
+  asking for a selected-day treatment with no mechanism to select. All three are
+  reversible and none of them is on the critical path of an acceptance criterion.
+- **`'draw' | 'erase' | 'read'` branched at three sites** was flagged as possible
+  Repeated Switches. Left alone: the three ask different questions — which kind
+  a press starts, whether a move does anything, and what a release commits — and
+  a map keyed by kind would put three unrelated answers behind one lookup.
+
+`npx tsc -b` clean, `yarn test` 186 passing, `yarn lint` unchanged at the 9
+pre-existing errors.

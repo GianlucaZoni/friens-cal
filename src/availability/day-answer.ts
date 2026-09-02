@@ -38,19 +38,35 @@ export type DayWindow = {
  * that did not belong to a stated day would be meaningless twice a year. It is
  * the same rule `segmentsOf`, `runInColumn` and `wholeDay` are all held to.
  *
- * The Friends are filtered out of `counted` rather than mapped from `friendIds`,
- * so each list arrives in roster order and cannot contain a hole — the same
- * reason `answerAt` does it that way.
+ * Each window comes from `windowOf` below, which `answerAt` shares.
  */
 export const windowsOf = (
   segments: readonly Segment[],
   counted: readonly SetUpFriend[],
   slots: readonly Slot[]
-): DayWindow[] =>
-  segments.map((segment) => ({
-    from: slots[segment.start].label,
-    // `closingLabel`, so a window running to the end of the day reads
-    // `23:30–24:00` rather than as a range that runs backwards.
-    to: closingLabel(slots[segment.end]?.label),
-    free: counted.filter((friend) => segment.friendIds.includes(friend.id)),
-  }))
+): DayWindow[] => segments.map((segment) => windowOf(segment, counted, slots))
+
+/**
+ * **One** segment, resolved — the unit both answers are made of.
+ *
+ * `slot-answer.ts` builds `answerAt` out of this rather than spelling the same
+ * three lines again: a `SlotAnswer` *is* the window containing the Slot that was
+ * clicked, in the shape the week's popover wants. Two entry points, because a
+ * Slot and a day are genuinely different questions; one body, because the way a
+ * segment becomes *"these Friends, from here to here"* is one rule and the
+ * `closingLabel` half of it is the kind that gets fixed in one place and left
+ * wrong in the other.
+ */
+export const windowOf = (
+  segment: Segment,
+  counted: readonly SetUpFriend[],
+  slots: readonly Slot[]
+): DayWindow => ({
+  from: slots[segment.start].label,
+  // `closingLabel`, so a window running to the end of the day reads
+  // `23:30–24:00` rather than as a range that runs backwards.
+  to: closingLabel(slots[segment.end]?.label),
+  // Filtered from `counted` rather than mapped from `friendIds`, so the list
+  // arrives in roster order and cannot contain a hole.
+  free: counted.filter((friend) => segment.friendIds.includes(friend.id)),
+})

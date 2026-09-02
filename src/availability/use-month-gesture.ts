@@ -114,10 +114,11 @@ export const useMonthGesture = ({
    * `availability.erase` directly.
    *
    * **Not optional, and the month is where it matters most.** A whole-day erase
-   * is the worst case ticket 08 §10 exists for: 48 Slots against every Hangout
-   * that day, all at once, from one drag. Calling `availability.erase` from here
-   * would drop the viewer from those plans silently, with no undo and no route
-   * back — adding Availability never re-adds you (`CONTEXT.md`).
+   * is the worst case ticket 08 §10 exists for: every Slot of a day measured
+   * against every Hangout on it — and a drag does that for each day it crossed,
+   * in one call. Calling `availability.erase` from here would drop the viewer
+   * from all of those plans silently, with no undo and no route back — adding
+   * Availability never re-adds you (`CONTEXT.md`).
    */
   requestErase: (instants: readonly Date[]) => void
   viewer: Viewer | null

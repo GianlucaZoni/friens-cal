@@ -1,30 +1,50 @@
+import type { AvailabilityStore } from '@/availability/use-availability'
+import { CandidateList } from '@/candidates/candidate-list'
+import type { HangoutRange } from '@/candidates/candidates'
+import { useCandidates } from '@/candidates/use-candidates'
+import type { RosterState } from '@/roster/use-roster'
 import { SidebarContent } from '@/shell/shell'
 
 /**
- * The right pane: pinned Hangouts above a flat list of Candidates.
+ * The right pane: the Candidate list, and — once issue 09 exists — pinned
+ * Hangouts above it.
  *
- * A stub. Issue 08 computes the Candidates and issue 09 confirms them into
- * Hangouts; the card anatomy is theirs. What the shell owes them is the shape
- * that is here — a bordered region for pinned Hangouts above the Candidate
- * list, with the two scrolling as one region rather than two.
+ * **Neither region gets a heading, and the divider exists only when both
+ * regions do** (ticket 16). The stub this replaced carried "Pinned Hangouts"
+ * and "Candidates" labels above two bordered regions, which is more chrome than
+ * a 17rem column supports and, with no Hangouts in the database yet, would
+ * label an empty box. So: no Hangouts → no rule and no heading, the Candidates
+ * start at the top. Issue 09 adds the region, the rule and the pin glyph that
+ * tells the two objects apart — *a Candidate and a Hangout look alike on screen
+ * and are entirely different things* (`CONTEXT.md`).
  *
- * A Candidate and a Hangout look alike on screen and are entirely different
- * things (CONTEXT.md): one is a live derivation, the other a fact that was
- * written down. Hence two regions rather than one list with a badge.
+ * The two hooks arrive as props and the derivation happens **here** rather than
+ * in `AppShell`: this is the only reader, and unlike `silent` — which the shell
+ * computes because the *left* pane needs something only the store can answer —
+ * nothing above needs a Candidate.
  */
-export const RightPane = () => (
-  <SidebarContent>
-    <div className="flex flex-col gap-1.5 border-b p-2">
-      <SectionLabel>Pinned Hangouts</SectionLabel>
-    </div>
-    <div className="flex flex-col gap-1.5 p-2">
-      <SectionLabel>Candidates</SectionLabel>
-    </div>
-  </SidebarContent>
-)
+export const RightPane = ({
+  roster,
+  availability,
+  hangouts,
+}: {
+  roster: RosterState
+  availability: AvailabilityStore
+  /** Confirmed Hangouts from now forward. Empty until issue 09. */
+  hangouts: readonly HangoutRange[]
+}) => {
+  const list = useCandidates({ roster, availability, hangouts })
 
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <span className="px-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-    {children}
-  </span>
-)
+  return (
+    <SidebarContent>
+      <div className="flex flex-col gap-1.5 p-2">
+        <CandidateList
+          list={list}
+          hangoutsPinned={hangouts.length > 0}
+          hiddenCount={roster.hidden.size}
+          onShowAll={roster.showAll}
+        />
+      </div>
+    </SidebarContent>
+  )
+}

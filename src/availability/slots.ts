@@ -183,6 +183,67 @@ export const mergeSlots = (
 }
 
 /**
+ * One Friend's Availability for one Slot, as a Candidate scan reads it.
+ *
+ * Milliseconds rather than a `Date`, because the scan is arithmetic on a
+ * continuous lattice — a horizon comparison, a `+ SLOT_MS` adjacency test and a
+ * sort — and every one of those on a `Date` is a `getTime()` at the call site.
+ */
+export type FreeSlot = {
+  friendId: string
+  /** The instant the Slot begins, in epoch milliseconds. */
+  start: number
+}
+
+/**
+ * Every Slot anybody holds from this instant forward, unpacked out of the
+ * store's key set.
+ *
+ * **Why the set is scanned and parsed rather than probed.** `isFree` answers
+ * "is this Friend free *here*", which is the whole of what the grid needs: the
+ * grid knows its own ~350 instants and asks about each one. The Candidate scan
+ * does not know its instants — it runs over *everything from now forward*,
+ * which is unbounded above (`use-availability.ts` fetches it that way), so the
+ * only thing that can say which Slots exist is the set itself. A probe would
+ * need the answer it is trying to find.
+ *
+ * Splitting on the **last** `|` rather than the first: the key is
+ * `friendId|milliseconds`, the id is a uuid, and putting the separator search
+ * at the numeric end means a Friend id that ever grew a `|` would break the
+ * parse loudly here instead of silently mis-attributing a Slot.
+ */
+export const heldFrom = (keys: ReadonlySet<string>, from: number): FreeSlot[] =>
+  [...keys].flatMap((key) => {
+    const separator = key.lastIndexOf('|')
+    const start = Number(key.slice(separator + 1))
+    return start < from ? [] : [{ friendId: key.slice(0, separator), start }]
+  })
+
+/**
+ * The Slot containing this instant — the Candidate scan's **horizon**
+ * (ticket 09 step 1), and the thing its timer is aligned to.
+ *
+ * Floors to the half hour *in the group's zone*, by reading the wall clock's
+ * minutes rather than by dividing the epoch. For Rome the two agree — every
+ * offset it has ever had is a whole number of hours, so its lattice is the
+ * epoch's — but a zone at `+05:45` sits a quarter hour off it, and a horizon
+ * that landed between two Slots would clip a Candidate to a time no row begins
+ * at. Reading the minutes is right in every zone and costs one `TZDate`.
+ *
+ * DST needs no special case for the same reason: the offset applies to the
+ * instant handed in, so the answer is always the wall clock as it actually
+ * reads at that moment.
+ */
+export const slotContaining = (instant: Date, timeZone: string): Date => {
+  const local = new TZDate(instant.getTime(), timeZone)
+  const intoSlot =
+    (local.getMinutes() % SLOT_MINUTES) * 60_000 +
+    local.getSeconds() * 1000 +
+    local.getMilliseconds()
+  return new Date(instant.getTime() - intoSlot)
+}
+
+/**
  * The wall clock the end of a day reads as.
  *
  * `23:30–00:00` reads as a range that runs backwards, so the closing edge of a

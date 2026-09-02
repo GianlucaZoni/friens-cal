@@ -1,9 +1,11 @@
 import { useSession } from '@/auth/use-session'
 import {
+  heldFrom,
   mergeSlots,
   slotKey,
   slotsOfDay,
   startOfDayInZone,
+  type FreeSlot,
   type SlotRow,
 } from '@/availability/slots'
 import {
@@ -36,6 +38,16 @@ export type AvailabilityStore = {
    * that a Friend who has said nothing does not read as a Friend who is busy.
    */
   silent: (friendIds: readonly string[]) => ReadonlySet<string>
+  /**
+   * Every Slot **anybody** holds from this instant forward — the Candidate
+   * scan's one input (issue 08).
+   *
+   * The only reader that cannot use `isFree`: the scan's horizon is unbounded
+   * above, so nothing outside this store knows which instants to ask about.
+   * See `heldFrom` in `slots.ts` for why that makes it a scan of the key set
+   * rather than a probe.
+   */
+  heldFrom: (from: number) => FreeSlot[]
   /** `loading` while the range the view is pointed at is still in flight. */
   status: 'loading' | 'ready' | 'error'
   /**
@@ -358,6 +370,16 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
   )
 
   /**
+   * The Candidate scan's input, unpacked out of the key set (issue 08).
+   *
+   * Keyed on `slots` rather than on `held.current` so a Realtime insert or an
+   * optimistic paint re-runs the scan: `slots` is the render mirror and the ref
+   * is not, and the whole of "the sidebar keeps up with everybody else" is that
+   * this callback's identity changes when the set does.
+   */
+  const heldSlotsFrom = useCallback((from: number) => heldFrom(slots, from), [slots])
+
+  /**
    * Of these Friends, the ones holding **no** Availability anywhere in the
    * current view — CONTEXT.md's *silence*.
    *
@@ -479,6 +501,7 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
   return {
     isFree,
     silent,
+    heldFrom: heldSlotsFrom,
     draw,
     erase,
     saving: slowWrites > 0,

@@ -50,6 +50,16 @@ export type RosterState = {
   /** Ids. Ephemeral — see below. */
   hidden: ReadonlySet<string>
   toggleHidden: (id: string) => void
+  /**
+   * Clear the filter in one go.
+   *
+   * Here because a *filter* should be liftable from wherever it is being felt,
+   * and the place it is felt is the other pane: issue 08's first empty state is
+   * "Show more friends to see when you can meet" and it carries the action that
+   * makes that sentence actionable. The eye toggles are the only other way back
+   * and they are one Friend at a time.
+   */
+  showAll: () => void
   /** `friends` minus the Hidden ones: who the viewer is currently trying to meet. */
   visible: RosterFriend[]
 }
@@ -181,11 +191,19 @@ export const useRoster = (): RosterState => {
 
   const toggleHidden = useCallback((id: string) => setHidden((current) => toggled(current, id)), [])
 
+  /*
+   * A fresh empty Set rather than a reused constant: `hidden` is React state
+   * and every other writer here hands back a new one, so a shared instance
+   * would be the only object in this hook whose identity outlived a render.
+   */
+  const showAll = useCallback(() => setHidden(new Set()), [])
+
   return {
     friends,
     status: failed ? 'error' : rows === null ? 'loading' : 'ready',
     hidden,
     toggleHidden,
+    showAll,
     visible,
   }
 }

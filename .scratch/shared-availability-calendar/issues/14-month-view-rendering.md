@@ -234,3 +234,49 @@ Ticket 09's blanking still means a Hangout day would read as **peak 0 — the
 emptiest cell of the month — over its own best day**. The Hangout chip is what
 prevents that, which is why it is mandatory rather than decorative. Recorded as
 an amendment on ticket 09.
+
+## Amendment — `### Carried forward` is wrong, and the chip is mandatory anyway
+
+Recorded while building issue 11, which is the first thing to compute the wash
+rather than describe it.
+
+**The claim.** *"Ticket 09's blanking still means a Hangout day would read as
+peak 0 — the emptiest cell of the month — over its own best day."*
+
+**It does not.** Blanking is **step 3 of the Candidate pipeline** and lives in
+`scanCandidates` (`candidates.ts`); nothing else in the app renders from its
+output. The week grid's wash is raw `isFree` over the Availability store —
+`segmentsOf` blanks nothing, and `HangoutBlock` merely paints `bg-background/80`
+over the top of it. The prototype fed a blanked stream through a peak numeral
+because its own synthetic data was built that way, and the arithmetic it
+reported is correct *for that input*. It is not the input the product has.
+
+**So the month wash is raw Availability too, deliberately**, and a Hangout day is
+the **darkest** cell of the month rather than the emptiest. Both readings were
+defensible — *how busy is this day* against *how good is this day for a NEW
+plan* — and raw wins on one argument: it is the only choice under which the two
+grids can be explained in one sentence.
+
+> Opacity is how many of the Friends you are trying to meet are free **at
+> once** — the week says it half hour by half hour, the month says it for the
+> day's best half hour.
+
+Under blanking the month would have needed *"…except where a Hangout already
+covers it, where it is zero"* while the week needed *"…including where a Hangout
+covers it, which is painted over"* — two rules for one channel, one keystroke
+apart, which is exactly the failure Q6 named about coverage versus count. It also
+means the month shares `heat.ts` outright: one ramp, one denominator, one pair of
+per-theme numbers, and `heatFraction`'s existing degenerate case already renders
+`peak == 1` as the faintest wash, which is what `## Decisions` asked for.
+
+**The chip stays mandatory — for the opposite reason.** Under blanking it
+stopped the cell reading as *empty*. Under raw Availability it stops the cell
+*overselling*: the darkest day of the month is the one a reader aims at first,
+and without the chip nothing says its best window is already spoken for. Either
+way the wash alone lies about a Hangout day, and either way the chip is the only
+thing that stops it. The conclusion `## Decisions` reached is unchanged; only its
+justification moves.
+
+`month.ts`'s module comment carries this, because that is where somebody about
+to "fix" the inconsistency with the Candidate list will be standing, and
+`heat.ts` now points at it from the week's side.

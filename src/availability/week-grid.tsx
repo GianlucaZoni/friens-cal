@@ -1,4 +1,5 @@
 import { heatFraction, heatOpacity } from '@/availability/heat'
+import { LoadState } from '@/availability/load-state'
 import { bandsOf, segmentsOf, type Band } from '@/availability/segments'
 import { answerAt } from '@/availability/slot-answer'
 import { SlotPopover } from '@/availability/slot-popover'
@@ -227,7 +228,7 @@ export const WeekGrid = ({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 border-b">
         {/* The gutter's width, so the columns line up with their headers. */}
-        <LoadState status={availability.status} />
+        <LoadState status={availability.status} className={cn(GUTTER_W, 'shrink-0')} />
         {laidOut.map(({ day, ownGutter }) => (
           <Fragment key={day.toISOString()}>
             {/* Reserves the width of that day's own gutter, so its date stays
@@ -319,44 +320,6 @@ export const WeekGrid = ({
           onConfirm={eraseGuard.confirm}
           onDismiss={eraseGuard.dismiss}
         />
-      )}
-    </div>
-  )
-}
-
-/**
- * The corner above the gutter, which is the only place a load state can go
- * without pushing the seven columns out of line with their headers.
- *
- * `loading` covers a backwards navigation as well as the first read: a past
- * week whose rows have not arrived looks exactly like a week nobody drew
- * anything in, and this is the only thing that tells them apart.
- *
- * It does **not** show an outstanding write, though the store offers one. Ticket
- * 19 asked for that in "a channel the grid does not already own", and the top
- * bar's `Saving…` is it; putting it here as well would give one dot two
- * meanings and add a second channel to a decision that asked for one.
- */
-const LoadState = ({ status }: { status: AvailabilityStore['status'] }) => {
-  const message = status === 'error' ? 'Could not load Availability' : 'Loading Availability'
-
-  return (
-    <div
-      className="flex w-10 shrink-0 items-center justify-center"
-      role="status"
-      aria-live="polite"
-    >
-      {status === 'ready' ? null : (
-        <>
-          <span
-            title={message}
-            className={cn(
-              'size-1.5 rounded-full',
-              status === 'error' ? 'bg-destructive' : 'animate-pulse bg-muted-foreground/50'
-            )}
-          />
-          <span className="sr-only">{message}</span>
-        </>
       )}
     </div>
   )

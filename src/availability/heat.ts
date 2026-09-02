@@ -8,6 +8,17 @@
  * the single spelling of a Friend's colour and stays that way; this module owns
  * only the *strength*.
  *
+ * **Both grids spend it, and they are one measurement rather than two.** Issue
+ * 11's month cell paints this same ramp over the same denominator, reduced to
+ * the day's **largest** count instead of a count per half hour (`peakOf` in
+ * `month.ts`, which carries the argument). So there is one sentence for the pair
+ * — *how many of the Friends you are trying to meet are free at once, the week
+ * half hour by half hour and the month at the day's best half hour* — and a
+ * change to the shape of this ramp, or to what feeds it, moves both views. In
+ * particular: **the count is raw Availability in both**, never the Candidate
+ * pipeline's Hangout-blanked stream, and `month.ts` is where the temptation to
+ * diverge is written down.
+ *
  * Its own module rather than a corner of `week-grid.tsx` because two things here
  * are decisions with reasons, and a component is a bad place to keep either: the
  * shape of the ramp (below), and the fact that it is tuned **twice**.

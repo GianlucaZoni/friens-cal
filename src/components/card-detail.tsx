@@ -15,7 +15,9 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { useHoverPointer } from '@/hooks/use-hover-pointer'
-import type { ReactElement, ReactNode } from 'react'
+import type { ComponentProps, ReactElement, ReactNode } from 'react'
+
+type PopoverContentProps = ComponentProps<typeof PopoverContent>
 
 /**
  * A sidebar card's detail: **a Sheet on touch, the same detail as a Popover on
@@ -51,6 +53,26 @@ import type { ReactElement, ReactNode } from 'react'
  * that contains one is not."* The retime is a **Dialog** either way, and on
  * desktop it opens over this popover rather than inside it — which is why the
  * caller closes the detail as it opens the editor rather than nesting the two.
+ *
+ * ## Why it takes a placement and a `nativeButton`
+ *
+ * Issue 11's month view opens the same detail from a **grid cell** rather than
+ * from a sidebar card, and two of the three things this component decides stop
+ * being right there:
+ *
+ * - The placement. `side="left"` is tuned for a pane on the right edge of the
+ *   window; a month cell has a week row under it, which is where ticket 14 put
+ *   the day panel (*"it opens below the whole week row"* — the panel is three
+ *   month columns wide, so there is no direction beside a cell that is safe).
+ * - The trigger. A month cell's detail is anchored to a **position** rather than
+ *   opened by a control, exactly as `SlotPopover` is: the grid's own click
+ *   decides, and the anchor is a zero-weight box sitting on the row. Base UI
+ *   assumes a trigger is a real `<button>` and warns about the semantics a
+ *   `<span>` drops, so the honest answer is to tell it this one is not a button
+ *   rather than to make it one nobody can reach.
+ *
+ * Both default to what every sidebar card already gets, so nothing that was
+ * written against this component has to say anything.
  */
 export const CardDetail = ({
   trigger,
@@ -58,6 +80,9 @@ export const CardDetail = ({
   description,
   open,
   onOpenChange,
+  side = 'left',
+  align = 'start',
+  nativeButton,
   children,
 }: {
   /**
@@ -73,6 +98,11 @@ export const CardDetail = ({
   description: ReactNode
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Where the popover goes. The Sheet ignores it — it always comes up. */
+  side?: PopoverContentProps['side']
+  align?: PopoverContentProps['align']
+  /** `false` where the trigger is an anchor rather than a control. */
+  nativeButton?: boolean
   children: ReactNode
 }) => {
   const hovers = useHoverPointer()
@@ -80,7 +110,7 @@ export const CardDetail = ({
   if (!hovers) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetTrigger render={trigger} />
+        <SheetTrigger nativeButton={nativeButton} render={trigger} />
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{title}</SheetTitle>
@@ -94,14 +124,15 @@ export const CardDetail = ({
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger render={trigger} />
+      <PopoverTrigger nativeButton={nativeButton} render={trigger} />
       {/*
-        `side="left"` because this pane is on the right edge of the window and a
-        popover to its right has nowhere to go. `align="start"` keeps its top
-        edge on the card's, so a long detail grows downwards rather than
-        recentring over the list.
+        The default `side="left"` is because a sidebar card's pane is on the
+        right edge of the window and a popover to its right has nowhere to go;
+        `align="start"` keeps its top edge on the card's, so a long detail grows
+        downwards rather than recentring over the list. A month cell overrides
+        both — see the note above.
       */}
-      <PopoverContent side="left" align="start" className="w-72">
+      <PopoverContent side={side} align={align} className="w-72">
         <PopoverHeader>
           <PopoverTitle>{title}</PopoverTitle>
           <PopoverDescription>{description}</PopoverDescription>

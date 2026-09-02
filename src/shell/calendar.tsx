@@ -1,29 +1,31 @@
+import { MonthGrid } from '@/availability/month-grid'
 import type { AvailabilityStore } from '@/availability/use-availability'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { WeekGrid, type Viewer } from '@/availability/week-grid'
 import type { Hangout } from '@/hangouts/hangout'
 import type { RosterFriend, SetUpFriend } from '@/roster/use-roster'
-import { WEEK_STARTS_ON, type CalendarViewState } from '@/shell/use-calendar-view'
-import {
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  format,
-  startOfMonth,
-  startOfWeek,
-} from 'date-fns'
+import type { CalendarViewState } from '@/shell/use-calendar-view'
+import { useCallback } from 'react'
 
 /**
  * The centre column, and which of the two views is in it.
  *
- * The week is real as of issue 05 and lives in `@/availability/week-grid` —
- * with the shell's two obligations kept: the grid scrolls inside the inset and
- * the page never does, and the column headers carry the day number.
+ * Both are real as of issue 11, and they are **two visual languages over one
+ * store** rather than one grid at two zoom levels. Ticket 05 prototyped the
+ * week's composite at month-cell size and it reads as a corrupted thumbnail, so
+ * the month has its own cell (`month-grid.tsx`) — but the measurement under both
+ * washes is the same one, and `heat.ts` is the single ramp they share. The one
+ * sentence that covers the pair:
  *
- * The month is still a lattice. Issue 11 builds it — **and it owes a Hangout a
- * cell treatment**: a confirmed Hangout shows on every Friend's calendar, and
- * "every Friend's calendar" includes this view. The week grid's block does not
- * carry over any more than its heatmap does (see `MonthLattice`).
+ * > opacity is how many of the Friends you are trying to meet are free **at
+ * > once** — the week says it half hour by half hour, the month says it for the
+ * > day's best half hour.
+ *
+ * Everything the month needs was already arriving here for the week, which is
+ * why this file barely grew: the wash is `availability` and `visible`, the
+ * Hangouts' faces are `friendsById`, the three time-dependent answers are `now`,
+ * and what a drag means is `tools`. The one thing that is new is the route from
+ * a month cell into a week — see `onShowWeek`.
  */
 export const Calendar = ({
   calendar,
@@ -46,8 +48,28 @@ export const Calendar = ({
   /** The start of the current Slot — the app's one clock. */
   now: number
   tools: DrawingTools
-}) =>
-  calendar.view === 'week' ? (
+}) => {
+  const { goToDate, setView } = calendar
+
+  /**
+   * Drill into a day: move the anchor to it **and** switch to the week.
+   *
+   * The two together, from one press, which is what makes it safe for a month
+   * click to leave the anchor alone. There is no selected-day state in this app —
+   * the selection *is* the anchor — so a cell click that moved it would re-label
+   * the bar and change the week you return to as a side effect of reading a day.
+   * A month click therefore only inspects, and this is the deliberate act that
+   * navigates. See `MonthGrid`.
+   */
+  const onShowWeek = useCallback(
+    (day: Date) => {
+      goToDate(day)
+      setView('week')
+    },
+    [goToDate, setView]
+  )
+
+  return calendar.view === 'week' ? (
     <WeekGrid
       days={calendar.days}
       availability={availability}
@@ -59,44 +81,22 @@ export const Calendar = ({
       tools={tools}
     />
   ) : (
-    <MonthLattice anchor={calendar.anchor} />
-  )
-
-/**
- * Month cells carry **no numeral** (ticket 14) — the wash carries peak
- * concurrency and the avatars carry who. So the stub is a bare lattice: it
- * marks no cell in any way, because every way of marking one is issue 11's to
- * spend, and a wash on the out-of-month days would spend the wash first.
- *
- * **The week grid's heatmap does not carry here**, and reusing it would be the
- * obvious mistake: prototype 05's Q4 found the composite reads as "a corrupted
- * thumbnail" at month-cell size, where the time axis is illegible and the
- * stripes read as UI noise. Month wants discrete blobatar dots or a peak
- * numeral, and picking between them is ticket 14's.
- */
-const MonthLattice = ({ anchor }: { anchor: Date }) => {
-  const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(anchor), { weekStartsOn: WEEK_STARTS_ON }),
-    end: endOfWeek(endOfMonth(anchor), { weekStartsOn: WEEK_STARTS_ON }),
-  })
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 border-b">
-        {days.slice(0, 7).map((day) => (
-          <div
-            key={day.toISOString()}
-            className="flex-1 border-l py-1.5 text-center text-[11px] font-medium text-muted-foreground first:border-l-0"
-          >
-            {format(day, 'EEE')}
-          </div>
-        ))}
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 overflow-auto">
-        {days.map((day) => (
-          <div key={day.toISOString()} className="min-h-20 border-b border-l first:border-l-0" />
-        ))}
-      </div>
-    </div>
+    <MonthGrid
+      /*
+        `monthDays` rather than `days`, and it is the same array `AppShell`
+        handed the two stores as `shownDays` — so a cell cannot be drawn from a
+        range Postgres was never asked for.
+      */
+      days={calendar.monthDays}
+      anchor={calendar.anchor}
+      availability={availability}
+      viewer={viewer}
+      visible={visible}
+      friendsById={friendsById}
+      hangouts={hangouts}
+      now={now}
+      tools={tools}
+      onShowWeek={onShowWeek}
+    />
   )
 }

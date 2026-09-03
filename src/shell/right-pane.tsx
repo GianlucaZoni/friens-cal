@@ -4,7 +4,7 @@ import { CandidateCard } from '@/candidates/candidate-card'
 import { CandidateList, Empty } from '@/candidates/candidate-list'
 import { containerOf, glows, isFullHouse } from '@/candidates/candidates'
 import type { CandidateList as List } from '@/candidates/use-candidates'
-import { useCandidates } from '@/candidates/use-candidates'
+import { friendsIn, useCandidates } from '@/candidates/use-candidates'
 import { Skeleton } from '@/components/ui/skeleton'
 import { facesOf, pinned } from '@/hangouts/hangout'
 import { HangoutCard, PinnedHangouts, type HangoutControls } from '@/hangouts/hangout-card'
@@ -131,16 +131,14 @@ export const RightPane = ({
       <DrawerPeek
         peek={peekOf(upcoming, list.all, list.empty)}
         list={list}
+        roster={roster}
+        hangouts={hangouts}
+        isFree={availability.isFree}
         friendsById={friendsById}
         namesById={namesById}
         viewerId={viewerId}
         now={now}
-        isFree={availability.isFree}
         controls={controls}
-        hiddenCount={roster.hidden.size}
-        onShowAll={roster.showAll}
-        onConfirm={hangouts.confirm}
-        confirming={hangouts.confirming}
       />
     )
 
@@ -184,11 +182,23 @@ export const RightPane = ({
   )
 }
 
-/** The label above the peek's one card, chosen by what the card turned out to be. */
-const PEEK_LABEL: Record<Exclude<Peek, null>['kind'], string> = {
-  hangout: 'Upcoming',
-  candidate: 'Best Candidate',
-  empty: 'Hangouts',
+/**
+ * The label above the peek's one card, chosen by what the card turned out to be
+ * — *"'Upcoming' … otherwise 'Best Candidate' … otherwise whichever of the
+ * three empty states applies"* (ticket 17).
+ *
+ * The last two cases share a word, and they share it for one reason: with
+ * nothing specific to name, the strip falls back to naming **the pane** — which
+ * is what `PANE.right.title` calls it everywhere else in the shell. A `null`
+ * peek is the read still in flight and an `'empty'` one is ticket 09's answer
+ * that there is nothing to suggest; neither has a plan to point at.
+ */
+const PANE_TITLE = 'Hangouts'
+
+const peekLabel = (peek: Peek): string => {
+  if (peek === null) return PANE_TITLE
+  if (peek.kind === 'hangout') return 'Upcoming'
+  return peek.kind === 'candidate' ? 'Best Candidate' : PANE_TITLE
 }
 
 /**
@@ -219,33 +229,36 @@ const PEEK_LABEL: Record<Exclude<Peek, null>['kind'], string> = {
 const DrawerPeek = ({
   peek,
   list,
+  roster,
+  hangouts,
+  isFree,
   friendsById,
   namesById,
   viewerId,
   now,
-  isFree,
   controls,
-  hiddenCount,
-  onShowAll,
-  onConfirm,
-  confirming,
 }: {
   peek: Peek
   list: List
+  /*
+    The two stores whole, rather than the four values the peek reads off them.
+    `CandidateList` next door takes those four unpacked on purpose — it is a
+    shared component and knowing about stores is not its business — but this one
+    is private to this file, its caller holds both intact, and unpacking them
+    here only makes a longer signature that has to be kept in step by hand.
+  */
+  roster: RosterState
+  hangouts: HangoutStore
+  isFree: AvailabilityStore['isFree']
   friendsById: ReadonlyMap<string, SetUpFriend>
   namesById: ReadonlyMap<string, string>
   viewerId: string | null
   now: number
-  isFree: AvailabilityStore['isFree']
   controls: HangoutControls
-  hiddenCount: number
-  onShowAll: () => void
-  onConfirm: HangoutStore['confirm']
-  confirming: string | null
 }) => (
   <div className="flex min-h-0 flex-col gap-1 px-2 pt-0.5">
     <p className="px-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-      {peek === null ? 'Hangouts' : PEEK_LABEL[peek.kind]}
+      {peekLabel(peek)}
     </p>
 
     {/*
@@ -264,8 +277,8 @@ const DrawerPeek = ({
           ticket 16 asked for cannot apply here.
         */
         hangoutsPinned={false}
-        hiddenCount={hiddenCount}
-        onShowAll={onShowAll}
+        hiddenCount={roster.hidden.size}
+        onShowAll={roster.showAll}
       />
     )}
 
@@ -288,10 +301,7 @@ const DrawerPeek = ({
       <ul aria-label="Candidates" className="flex flex-col">
         <CandidateCard
           candidate={peek.candidate}
-          friends={peek.candidate.friendIds.flatMap((id) => {
-            const friend = list.friendsById.get(id)
-            return friend === undefined ? [] : [friend]
-          })}
+          friends={friendsIn(peek.candidate, list.friendsById)}
           glowing={glows(peek.candidate, list.groupSize)}
           fullHouse={isFullHouse(peek.candidate, list.groupSize)}
           /*
@@ -300,9 +310,9 @@ const DrawerPeek = ({
             of them, not among the one that happens to be on screen.
           */
           container={containerOf(peek.candidate, list.all)}
-          onConfirm={() => onConfirm(peek.candidate)}
-          pending={confirming === peek.candidate.id}
-          busy={confirming !== null}
+          onConfirm={() => hangouts.confirm(peek.candidate)}
+          pending={hangouts.confirming === peek.candidate.id}
+          busy={hangouts.confirming !== null}
         />
       </ul>
     )}

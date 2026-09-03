@@ -1,6 +1,6 @@
 import { CandidateCard } from '@/candidates/candidate-card'
 import { containerOf, glows, isFullHouse, type Candidate } from '@/candidates/candidates'
-import type { CandidateList as List } from '@/candidates/use-candidates'
+import { friendsIn, type CandidateList as List } from '@/candidates/use-candidates'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useState } from 'react'
@@ -104,20 +104,6 @@ export const CandidateList = ({
     </>
   )
 }
-
-/**
- * The Friends in a Candidate, as faces.
- *
- * `flatMap` rather than `map`: `friendsById` is built from the same visible set
- * the pipeline swept, so a miss is not reachable — but a Friend who left the
- * roster between the scan and this render would otherwise be an `undefined` in
- * a list React then tries to draw.
- */
-const friendsIn = (candidate: Candidate, byId: List['friendsById']) =>
-  candidate.friendIds.flatMap((id) => {
-    const friend = byId.get(id)
-    return friend === undefined ? [] : [friend]
-  })
 
 /**
  * Ticket 09's three empty states, its copy verbatim, in its order.

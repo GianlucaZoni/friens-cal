@@ -39,6 +39,17 @@ export const DRAWER_PEEK = 120
  */
 const FULL_FRACTION = 0.85
 
+/**
+ * @param viewport `window.innerHeight`, and **not** a CSS `svh`.
+ *
+ * The two are the same on a desktop and not on a phone, where `svh` is the
+ * *small* viewport — the height with the address bar showing — and
+ * `innerHeight` is whatever the bar is doing right now. The drawer is a `fixed`
+ * element, so `innerHeight` is what it is actually positioned against; a
+ * resting height in `svh` with drag arithmetic in `innerHeight` clamps and
+ * snaps against a height the drawer never rests at, and lets go with a jump.
+ * `shell.tsx` holds one number from this and draws with it.
+ */
 export const fullHeightOf = (viewport: number) => Math.round(viewport * FULL_FRACTION)
 
 export type DrawerState = 'peek' | 'full'

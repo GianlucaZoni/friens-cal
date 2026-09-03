@@ -134,3 +134,23 @@ export const useCandidates = ({
     loading: status === 'loading' || hangoutStatus === 'loading',
   }
 }
+
+/**
+ * The Friends in a Candidate, as faces.
+ *
+ * `flatMap` rather than `map`: `friendsById` is built from the same visible set
+ * the pipeline swept, so a miss is not reachable — but a Friend who left the
+ * roster between the scan and this render would otherwise be an `undefined` in
+ * a list React then tries to draw.
+ *
+ * Here rather than in `candidate-list.tsx`, where it started, because **two**
+ * places draw a `CandidateCard` now: the list, and the bottom drawer's peek
+ * (issue 12). The `undefined` this guards against is not a case worth two
+ * answers — and a `.tsx` file that also exports a plain function loses fast
+ * refresh, which is a lint error in this repo.
+ */
+export const friendsIn = (candidate: Candidate, byId: CandidateList['friendsById']) =>
+  candidate.friendIds.flatMap((id) => {
+    const friend = byId.get(id)
+    return friend === undefined ? [] : [friend]
+  })

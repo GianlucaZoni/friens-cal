@@ -140,7 +140,7 @@ export const MonthGrid = ({
 }: {
   /**
    * The month lattice — the anchor's month padded out to whole weeks, which is
-   * **also the range the stores were read over** (`calendar.shownDays`).
+   * **also the range the stores were read over** (`calendar.days`).
    *
    * One array, handed to the grid and to `useAvailability` / `useHangouts`, so
    * there is no arrangement in which a cell is drawn from a range Postgres was

@@ -349,37 +349,84 @@ const BottomDrawer = ({ children }: { children: React.ReactNode }) => {
   /** The live pixel height while a finger is down, and null the rest of the time. */
   const [dragging, setDragging] = React.useState<number | null>(null)
 
+  /**
+   * How tall the drawer is when it is out — **one number in one unit**, used
+   * both to draw the resting state and to clamp and snap the drag.
+   *
+   * It was briefly two: `85svh` in a class for the resting height and
+   * `innerHeight * 0.85` in the arithmetic. Those agree on a desktop and not on
+   * a phone, where `svh` is the *small* viewport (address bar showing) and
+   * `innerHeight` is whatever the bar is doing right now — so a drag would
+   * clamp to, and snap against, a height the drawer never actually rested at,
+   * and let go with a jump. `innerHeight` is the right reference of the two,
+   * because this element is `fixed` and the viewport is what it is positioned
+   * against.
+   */
+  const [full, setFull] = React.useState(() => fullHeightOf(window.innerHeight))
+  React.useEffect(() => {
+    const sync = () => setFull(fullHeightOf(window.innerHeight))
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [])
+
+  /**
+   * Ends the drag in flight, if there is one — held in a ref so unmounting can
+   * call it.
+   *
+   * `use-month-gesture.ts` sets this convention and the reason bites harder
+   * here: **the shell itself unmounts this component mid-drag**. Crossing the
+   * breakpoint upward stops `ShellSidebar` rendering a drawer at all, and a
+   * phone rotated while a finger is down does exactly that — leaving
+   * `pointermove` and `pointerup` bound to a window whose handlers write into a
+   * tree that is gone.
+   */
+  const release = React.useRef<(() => void) | null>(null)
+  React.useEffect(() => () => release.current?.(), [])
+
   const onPointerDown = (event: React.PointerEvent) => {
-    // Secondary buttons have no business dragging.
-    if (event.button !== 0) return
+    // Secondary buttons have no business dragging, and neither has a second
+    // finger: two pointers would register two listener sets whose two releases
+    // toggle in opposite directions and cancel out. `use-month-gesture.ts`
+    // filters by `pointerId` for the same reason.
+    if (event.button !== 0 || release.current !== null) return
     const element = surface.current
     if (element === null) return
 
+    const { pointerId } = event
     const startHeight = element.getBoundingClientRect().height
     const startY = event.clientY
-    const full = fullHeightOf(window.innerHeight)
     let height = startHeight
 
     const onMove = (move: PointerEvent) => {
+      if (move.pointerId !== pointerId) return
       height = dragTo(startHeight, startY - move.clientY, full)
       setDragging(height)
     }
 
-    const onUp = () => {
+    const onUp = (up?: PointerEvent) => {
+      if (up !== undefined && up.pointerId !== pointerId) return
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
+      release.current = null
       setDragging(null)
       /*
         A press that never moved is a **tap**, and it toggles. Same 4px as
         `gesture.ts`'s `isDrag`, for the same reason: a finger leaving a phone
         screen moves a pixel or two on the way, and a handle that snapped back
         to where it already was would read as a dead control.
+
+        The toggle's target comes from the height the press *started* at rather
+        than from `drawer`, which this closure captured at pointerdown and which
+        three other things can move underneath it — the breakpoint sync,
+        `setSheet`, and `⇧⌘B`. A measured start height cannot go stale.
       */
-      if (Math.abs(height - startHeight) < 4) setDrawer(drawer === 'full' ? 'peek' : 'full')
+      if (Math.abs(height - startHeight) < 4)
+        setDrawer(snapOf(startHeight, full) === 'full' ? 'peek' : 'full')
       else setDrawer(snapOf(height, full))
     }
 
+    release.current = () => onUp()
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onUp)
@@ -395,15 +442,14 @@ const BottomDrawer = ({ children }: { children: React.ReactNode }) => {
       data-drawer={dragging === null ? drawer : 'dragging'}
       aria-label={PANE.right.title}
       /*
-        Height in pixels while a finger is down, and a class the rest of the
-        time — so the two resting states animate and the drag does not lag a
-        transition behind the finger.
+        Always a pixel height, and always from `full` — see the note on it. The
+        transition is dropped while a finger is down so the drag does not lag a
+        200ms animation behind it.
       */
-      style={{ height: dragging ?? (out ? undefined : DRAWER_PEEK) }}
+      style={{ height: dragging ?? (out ? full : DRAWER_PEEK) }}
       className={cn(
         'fixed inset-x-0 bottom-0 z-30 flex flex-col border-t bg-sidebar text-sidebar-foreground shadow-[0_-2px_12px_rgba(0,0,0,0.08)]',
-        dragging === null && 'transition-[height] duration-200 ease-out',
-        dragging === null && out && 'h-[85svh]'
+        dragging === null && 'transition-[height] duration-200 ease-out'
       )}
     >
       <button
@@ -461,9 +507,10 @@ export const ShellInset = ({ className, ...props }: React.ComponentProps<'main'>
  * width it exists at — below the breakpoint there is no keyboard, so the
  * shortcuts cannot be the only way in.
  *
- * **Below it, only the left one is in the bar.** Ticket 12 required both to be
- * permanently visible because both panes were sheets and a sheet with no trigger
- * is unreachable. The right pane is no longer a sheet: it is the bottom drawer,
+ * **Below it, only the left one is in the bar.** Ticket 12's prototype §4 asked
+ * for both to be permanently visible because both panes were sheets and a sheet
+ * with no trigger is unreachable (its live `## Decisions` never restates it, so
+ * this is a finding being honoured rather than a decision being overturned). The right pane is no longer a sheet: it is the bottom drawer,
  * which is on screen already and carries its own grab handle. A second control
  * for it in the bar would be a button that says *open the thing you are looking
  * at* — and ticket 17's bar has three groups and no room for a fourth. This

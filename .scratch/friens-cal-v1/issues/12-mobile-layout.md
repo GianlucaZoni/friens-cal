@@ -102,9 +102,10 @@ is rewiring. **No SQL**, as issue 11 predicted for its successor.
    modal, backdrop, focus trap, absent by default — and the ticket wants the
    right pane's contents *"permanently peeking"* with the grid live behind them.
    `vaul` is not a dependency and `src/components/ui/` has no drawer, so this is
-   the one genuinely new mechanism in the slice. Ticket 12 decision 7 made
-   `sheet: Pane | null` so a second sheet was **unrepresentable**; issue 12 makes
-   it `'left' | null`, which says something stronger:
+   the one genuinely new mechanism in the slice. Ticket 12 decision **8** made
+   `sheet: Pane | null` so a second sheet was **unrepresentable** (decision 7 is
+   the fork itself, which that invariant is the reason for); issue 12 makes it
+   `'left' | null`, which says something stronger:
 
    > **At most one modal surface, and the bottom drawer is not one.**
 
@@ -120,9 +121,11 @@ is rewiring. **No SQL**, as issue 11 predicted for its successor.
    pane is the drawer, so `toggle('right')` toggles peek/full rather than
    becoming a shortcut for nothing, and `ShellTrigger`'s `aria-expanded` reads
    the drawer when it is the surface in play. The trigger is **not** in the
-   phone's bar — ticket 12 required both triggers to be permanently visible
-   because both panes were sheets and a sheet without a trigger is unreachable;
-   a drawer that is already on screen with its own grab handle is not.
+   phone's bar — ticket 12's *prototype* §4 asked for both triggers to be
+   permanently visible because both panes were sheets and a sheet without a
+   trigger is unreachable; its live `## Decisions` never restates that, so this
+   is a finding being honoured rather than a decision overturned. A drawer that
+   is already on screen with its own grab handle is not unreachable.
 5. **The drag does not capture the pointer, and `touch-action: none` is on the
    handle only.** `use-month-gesture.ts`'s argument applies twice over here:
    window listeners registered on pointerdown make a drag released outside the
@@ -321,3 +324,100 @@ unchanged at the 9 pre-existing errors in `src/components/ui/` and
 35, both green and both re-run after the browser work. `verify-availability.mjs`
 deliberately not re-run: it ends by seeding demo rows, and this slice changed no
 SQL and no write path.
+
+## Review pass
+
+Both axes of `/code-review` against `main`. Four findings acted on, two answered,
+and one that both axes found independently.
+
+### Acted on
+
+1. **The drawer's full height was two numbers in two units, and both reviewers
+   found it.** `drawer.ts` said outright *"two places have to agree about one
+   number"* and then the resting height was a CSS class `h-[85svh]` while
+   `dragTo` and `snapOf` clamped and snapped against
+   `fullHeightOf(window.innerHeight)`. Those agree on a desktop, which is why
+   the verification pass measured 690 = 0.85 × 812 and saw nothing wrong. On a
+   phone they do not: `svh` is the **small** viewport — the height with the
+   address bar showing — and `innerHeight` is whatever the bar is doing right
+   now, so with the bar retracted the drag ceiling sits *above* the height the
+   drawer actually rests at and a release near the top snaps to `full` and then
+   visibly shrinks. Now one number, in `innerHeight`, held in state and synced
+   on `resize`: it drives the style at both resting heights and the arithmetic,
+   and the class is gone. `innerHeight` is the right one of the two because the
+   drawer is `fixed` and the viewport is what it is positioned against.
+2. **The window listeners had no unmount teardown**, against a convention
+   `use-month-gesture.ts` sets explicitly — and the reason bites harder here,
+   because **the shell itself unmounts this component mid-drag**. Crossing the
+   breakpoint upward stops `ShellSidebar` rendering a drawer at all, which is
+   exactly what rotating a phone with a finger down does. `release` is now a ref
+   the unmount effect calls, following that file's shape.
+3. **The tap path read `drawer` out of a closure captured at pointerdown**, and
+   three things can move it underneath a press: the breakpoint sync, `setSheet`
+   (the collapse rule), and `⇧⌘B`. The functional setter is not reachable — the
+   context types `setDrawer` as `(state) => void` — so the fix is better than
+   the one that was available: the toggle's target now comes from
+   `snapOf(startHeight, full)`, a **measured** start height, which cannot go
+   stale at all.
+4. **No `pointerId` filter**, where `use-month-gesture.ts` has one. A second
+   finger on the handle registered a second listener set whose release toggled
+   in the opposite direction and cancelled the first. Now a drag in flight
+   refuses a new pointerdown, and move/up are filtered by id.
+5. **Two documentation errors and one stale claim**, all in the diff's own blast
+   radius. `month-grid.tsx` still called the lattice `calendar.shownDays`, the
+   field this slice deleted. And two citations above were wrong: the one-sheet
+   slot is ticket 12 decision **8**, not 7 (7 is the fork, which the invariant is
+   the *reason* for), and *"both pane triggers permanently visible"* comes from
+   ticket 12's **prototype** §4 rather than its live `## Decisions` — so removing
+   the right one from the phone's bar is a finding being honoured, not a
+   decision overturned. Both corrected in place.
+6. **Smells, taken.** `DrawerPeek` was hand-unpacking twelve props out of stores
+   the caller holds intact — `roster` and `hangouts` now travel whole, which is
+   right for a component private to this file even though `CandidateList` next
+   door deliberately takes them unpacked (it is shared, and knowing about stores
+   is not its business). `friendsIn` was duplicated from `candidate-list.tsx`
+   into the peek and is now shared, which matters because the peek draws **the
+   same `CandidateCard`** and the `undefined` that flatMap guards against is not
+   a case worth two answers. It ended up in `use-candidates.ts` rather than
+   where it started: exporting a plain function from a `.tsx` file that also
+   exports components costs fast refresh, which is a lint error in this repo —
+   the gate went to 10 and caught it. And `'Hangouts'` appeared twice as a
+   label; `peekLabel` says it once, and says *why* the two cases share a word.
+
+### Answered, not changed
+
+- **Scope: day and 3-day render, and `drop-dialog.tsx` was hardened.** Both are
+  beyond the literal twelve criteria and both are named as such rather than
+  presented as required. The views are decision 1 above — issue 13's criteria
+  make them load-bearing and its own hysteresis answer depends on 3-day
+  existing. The drop dialog is the second of *"issue 10's two dialogs"* the trap
+  list names; the criterion says "retime and cancel", and the erase-side plural
+  dialog is a third one that fails at 390px in the same way and for the same
+  reason, so fixing one and leaving the other would have been reading the
+  criterion rather than the problem.
+- **AC11 is partial in one corner, and `### Left behind` already says where.**
+  The peek's *Best Candidate* and empty-state renderings were unit-tested and
+  not driven at either width, because both need the pinned region empty and the
+  demo project holds an unended Hangout that only cancelling `goopy` would
+  remove — which does not restore byte-identically.
+
+### The four fixes, re-driven in the browser
+
+- **One number.** Expanded at a viewport of 812 → **690**; at 900 → **765**; at
+  640 → **544**. Each is 0.85 of that viewport, and the last was measured on a
+  drawer that was *already open* when the viewport changed — so the resting
+  height follows the window rather than sitting where the arithmetic disagrees
+  with it.
+- **The second finger is refused.** Mid-drag at 620px, a second `pointerId`'s
+  move did not move the height and its release did not settle the drawer; the
+  state stayed `dragging` until the **first** pointer released, then snapped to
+  690.
+- **Unmount mid-drag is clean.** A drag left at 420px, then the viewport widened
+  past the breakpoint: the drawer unmounted, the panes came back as columns, and
+  `pointermove` / `pointerup` dispatched at the window afterwards produced
+  nothing — no console error, no leaked handler writing into a dead tree.
+- **The tap still toggles exactly once**, from the measured start height: at
+  full it went to 120 and `peek`.
+
+`npx tsc -b` clean, `yarn test` 212 passing, `yarn lint` back to the 9
+pre-existing errors. Console clean at every step.

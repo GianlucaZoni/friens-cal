@@ -41,8 +41,7 @@
  *   - it is **never absent**, where a sheet is absent by default;
  *   - it has **three states** (peek, dragging, full) where a sheet has two;
  *   - it must **not** be a `Sheet`, because `SheetContent` is Base UI's
- *     `Dialog` and every one of modal, backdrop and focus trap is wrong for a
- *     surface that is always on screen.
+ *     `Dialog`, and a dialog is open or closed.
  *
  * So the slot narrows to `'left' | null` — a second sheet is unrepresentable
  * because there is only one pane left that can be one — and the drawer is a
@@ -308,12 +307,29 @@ export const ShellSidebar = ({
  *
  * ## Why it is not a `Sheet`
  *
- * `SheetContent` is Base UI's `Dialog`. Every one of modal, backdrop and focus
- * trap is wrong here: the ticket wants the Candidates *"permanently peeking"*
- * with the grid live behind them, which is a surface and not a dialog. `vaul` is
- * not a dependency and `src/components/ui/` has no drawer, so this is the one
- * genuinely new mechanism in the slice — about sixty lines, most of them the
- * pointer.
+ * `SheetContent` is Base UI's `Dialog`, and **it is the open-or-closed shape
+ * rather than the modality that disqualifies it.** Worth stating precisely,
+ * because the modality half is available: `Dialog.Root` takes
+ * `modal?: boolean | 'trap-focus'`, and `false` allows *"user interaction with
+ * the rest of the document"* — no focus trap, no scroll lock, no pointer
+ * blocking outside. So a non-modal sheet is representable.
+ *
+ * What is not is this surface. It is **never absent**, it has **three states**
+ * rather than two, and it is **dragged**. Held permanently open with the
+ * backdrop removed, `Sheet` would contribute a portal and an `aria-labelledby`
+ * — both of which the `<aside aria-label>` below gives more directly — and
+ * every line of the pointer would still be ours.
+ *
+ * `vaul` is the library shaped for exactly this and it is **not** a dependency,
+ * deliberately: it is built on `@radix-ui/react-dialog`, and a Radix drawer
+ * containing the Base UI sheet that `CardDetail` opens inside it is two
+ * focus-management systems on a 375px screen — the hazard this fork exists to
+ * make unrepresentable, arriving by a new route. Issue 13's `## Addition`
+ * carries the full evaluation and names vaul as the fallback if a hand-rolled
+ * scroll-chained close does not survive a real-hardware run.
+ *
+ * So this is the one genuinely new mechanism in the slice — about seventy
+ * lines, most of them the pointer.
  *
  * ## The pointer, and why it does not capture
  *

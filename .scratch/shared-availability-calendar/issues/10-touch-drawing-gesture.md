@@ -193,3 +193,24 @@ events, which exercise the state machine but not the compositor — so "can
 `preventDefault` cancel a native scroll once a long-press arms" is instrumented,
 not measured. `preview.html` prints the verdict live. One iPhone and one Android
 run needed, and it matters more now that long-press is the create gesture.
+
+## Addendum — a second scroll-versus-drag arbitration, from issue 12
+
+This ticket's `### Two consequences` says the scroll-versus-draw conflict is
+resolved by long-press arming and swipe-paging **together**. Issue 12 built a
+bottom drawer that adds a *second* instance of the same conflict on the same
+screen, and left it undone rather than answering it here: at `scrollTop: 0` a
+downward swipe on the drawer's card list should collapse it, and anywhere else
+in the scroll range it should scroll.
+
+It is deliberately not this ticket's answer, because the two are the same
+question about different pixels and one of them has to own the arbitration.
+Recorded in
+[friens-cal issue 13](../../friens-cal-v1/issues/13-touch-drawing.md) under
+`## Addition`, with the rule, four acceptance criteria, and the evaluation of
+`vaul` and Base UI's `Sheet` against hand-rolling it (the answer is hand-roll,
+because vaul depends on `@radix-ui/react-dialog` and this repo is Base UI).
+
+That addition also carries the **real-hardware run** this ticket's `### Still
+open` asks for: the settle window after a flick reaches the top is a number only
+a device can give.

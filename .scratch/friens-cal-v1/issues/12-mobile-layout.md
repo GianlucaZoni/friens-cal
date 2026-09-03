@@ -421,3 +421,25 @@ and one that both axes found independently.
 
 `npx tsc -b` clean, `yarn test` 212 passing, `yarn lint` back to the 9
 pre-existing errors. Console clean at every step.
+
+## Correction — why `Sheet` was wrong, stated precisely
+
+Decision 3 above says `SheetContent` is Base UI's `Dialog` and that *"modal,
+backdrop, focus trap and absent-by-default are all wrong"*. **Three of those four
+are not the argument.** `Dialog.Root` takes `modal?: boolean | 'trap-focus'`,
+and `false` means *"user interaction with the rest of the document is allowed"* —
+no focus trap, no scroll lock, no pointer blocking outside; the backdrop is a
+child you simply do not render. A non-modal sheet is representable in this
+library and the slice did not check before saying otherwise.
+
+**The fourth is the whole argument, and it holds.** A Dialog is open or closed.
+This surface is never absent, has three states, and is dragged — so held
+permanently open, `Sheet` contributes a portal and an `aria-labelledby`, both of
+which `<aside aria-label>` gives more directly, and every line of the pointer is
+still ours. The conclusion is unchanged; the reason is now the one that survives
+reading the type.
+
+Corrected in `shell.tsx` in both places it was stated, and the `vaul` evaluation
+that decision 3 never made is on
+[issue 13](./13-touch-drawing.md) under `## Addition`, together with the
+scroll-chained close this slice left undone.

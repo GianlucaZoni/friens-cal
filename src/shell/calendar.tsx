@@ -4,14 +4,23 @@ import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { WeekGrid, type Viewer } from '@/availability/week-grid'
 import type { Hangout } from '@/hangouts/hangout'
 import type { RosterFriend, SetUpFriend } from '@/roster/use-roster'
+import { useAppShell } from '@/shell/shell-context'
 import type { CalendarViewState } from '@/shell/use-calendar-view'
 import { useCallback } from 'react'
 
 /**
- * The centre column, and which of the two views is in it.
+ * The centre column, and which of the four views is in it.
  *
- * Both are real as of issue 11, and they are **two visual languages over one
- * store** rather than one grid at two zoom levels. Ticket 05 prototyped the
+ * **Four views, two grids.** Issue 12 adds day and 3-day, and they are not new
+ * components: `WeekGrid` derives its columns, the shared hour gutter, the DST
+ * odd-day's own gutter and the gesture's hit-testing from `days` alone, so a day
+ * view is that grid with one column and a 3-day view is that grid with three.
+ * Everything that had to learn about them is in `view.ts`. They exist because
+ * issue 13 needs them: at a phone's 47px week columns no hysteresis budget can
+ * exceed a column width, and 3-day's 110px is the measured escape.
+ *
+ * The two grids are **two visual languages over one store** rather than one grid
+ * at two zoom levels. Ticket 05 prototyped the
  * week's composite at month-cell size and it reads as a corrupted thumbnail, so
  * the month has its own cell (`month-grid.tsx`) — but the measurement under both
  * washes is the same one, and `heat.ts` is the single ramp they share. The one
@@ -69,7 +78,22 @@ export const Calendar = ({
     [goToDate, setView]
   )
 
-  return calendar.view === 'week' ? (
+  /*
+    **The mobile month drops the avatars** (ticket 17), and it is a prop rather
+    than a fork — the cell is the same cell. At ~50×60px a phone cell puts
+    wrapped faces below the 12px floor prototype 14 measured, which is the exact
+    failure that killed the dot row: shape stops disambiguating and two near
+    hues read as one Friend. `AVATAR`'s own measurement table is the argument —
+    12px is the *largest* size at which nine Friends still fit in a 78×80 cell
+    carrying a chip, so a cell two thirds that size cannot hold them at any size
+    that is still a face. Dropping them removes the floor rather than fighting
+    it, and costs nothing, because a tap already answers *who* — the cells are
+    real buttons and the day panel opens as a bottom sheet on the `(hover: none)`
+    path.
+  */
+  const { isSheet } = useAppShell()
+
+  return calendar.view !== 'month' ? (
     <WeekGrid
       days={calendar.days}
       availability={availability}
@@ -83,12 +107,13 @@ export const Calendar = ({
   ) : (
     <MonthGrid
       /*
-        `monthDays` rather than `days`, and it is the same array `AppShell`
-        handed the two stores as `shownDays` — so a cell cannot be drawn from a
-        range Postgres was never asked for.
+        The lattice, and it is the same array `AppShell` handed the two stores —
+        `daysOf` answers both questions with one value, so a cell cannot be
+        drawn from a range Postgres was never asked for.
       */
-      days={calendar.monthDays}
+      days={calendar.days}
       anchor={calendar.anchor}
+      faces={!isSheet}
       availability={availability}
       viewer={viewer}
       visible={visible}

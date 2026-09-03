@@ -3,25 +3,26 @@ import { Blobatar } from '@/components/ui/blobatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { FriendBlob } from '@/identity/friend-blob'
 import { identityOf } from '@/identity/friend-row'
 import { ChangePasswordDialog, CustomiseDialog, ProfileDialog } from '@/identity/profile-dialogs'
 import { cn } from '@/lib/utils'
+import { MiniCalendar } from '@/shell/mini-calendar'
 import { ShellTrigger } from '@/shell/shell'
 import { useAppShell } from '@/shell/shell-context'
-import type { CalendarView, CalendarViewState } from '@/shell/use-calendar-view'
+import type { CalendarViewState } from '@/shell/use-calendar-view'
+import { ViewSelector } from '@/shell/view-selector'
 import { useState } from 'react'
 import {
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   KeyRoundIcon,
@@ -47,13 +48,116 @@ export const TopBar = ({
   calendar: CalendarViewState
   /** Some write has been outstanding for 400ms. See `SavingChip`. */
   saving: boolean
-}) => (
-  <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2">
-    <RangeLabel label={calendar.label} onToday={calendar.goToday} />
+}) => {
+  const { isSheet } = useAppShell()
+  return (
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2">
+      {isSheet ? (
+        <PhoneBar calendar={calendar} saving={saving} />
+      ) : (
+        <>
+          <RangeLabel label={calendar.label} />
+          {saving ? <SavingChip /> : null}
+          <TopCluster calendar={calendar} />
+        </>
+      )}
+    </header>
+  )
+}
+
+/**
+ * The phone's bar, and it is **a different bar rather than the same one
+ * narrowed** (ticket 17).
+ *
+ *     ┌──────────────────────────────────────────────┐
+ *     │ ▤     September 2026 ⌄          Today   ◍     │
+ *     └──────────────────────────────────────────────┘
+ *
+ * Ticket 12 decision 6 made the narrow behaviour **CSS only** — no width
+ * measuring, no JS breakpoint — by evicting two controls: below 768px "Today"
+ * and the view select left the bar, Today became tapping the date label and the
+ * view select moved into the blobatar menu. That was the right call for a bar
+ * with nowhere else to put things. Ticket 17 gives the phone somewhere else, so
+ * three of those decisions are reversed here deliberately rather than quietly:
+ *
+ *   - **Today comes back as a control**, on the right where the ticket puts it,
+ *     and the date label stops being a button. The dotted underline went with
+ *     it: an underlined label that no longer does anything is a control that
+ *     does not work.
+ *   - **The view select moves into the left drawer**, not the blobatar menu —
+ *     see `ViewSelector`. Nothing about the calendar is under *account* any more.
+ *   - **A chevron appears**, opening the date navigator. Nothing in the bar had
+ *     one before because nothing in the bar jumped to an arbitrary date; on
+ *     desktop the mini calendar in the left pane does that, and on a phone that
+ *     pane is a drawer you would have to open first.
+ *
+ * **And `‹ ›` leave.** The ticket names three groups and the prototype measured
+ * that a fourth does not fit at 375px — the first thing a full cluster eats is
+ * the date label, which is the one thing on the bar you cannot do without. The
+ * cost is real and worth stating: until issue 13's horizontal swipe lands,
+ * moving a week on a phone is *open the navigator, tap a day* rather than one
+ * press. The navigator is a full month with its own arrows, so nothing is
+ * unreachable — it is two taps instead of one, for one slice.
+ *
+ * The right pane's trigger is absent for a different reason: the pane is the
+ * bottom drawer now, already on screen, with its own grab handle. See
+ * `ShellTrigger`.
+ */
+const PhoneBar = ({ calendar, saving }: { calendar: CalendarViewState; saving: boolean }) => (
+  <>
+    <ShellTrigger side="left" />
+    <DateNavigator calendar={calendar} />
     {saving ? <SavingChip /> : null}
-    <TopCluster calendar={calendar} />
-  </header>
+    <Button variant="ghost" size="sm" className="shrink-0" onClick={calendar.goToday}>
+      Today
+    </Button>
+    <FriendMenu />
+  </>
 )
+
+/**
+ * The centre of the phone's bar: the label, and the chevron that opens a
+ * **date navigator** — *"not month view"*, which is what the ticket's own
+ * acceptance criterion is careful to say.
+ *
+ * **It is `MiniCalendar`, the same component the left pane holds on desktop**,
+ * rather than a third date surface. That component is the only control in the
+ * app that jumps the calendar to an arbitrary date, and it carries a comment
+ * about the browsed-month-versus-anchor split being *a derivation, not an
+ * effect* — a second implementation of that would be a second place to get it
+ * wrong. What it gains here is `onPicked`, so the popover closes on the press
+ * that moved the anchor; on desktop the pane it lives in does not close, so
+ * there was nothing to tell.
+ *
+ * A `Popover` rather than a `Sheet`, and it is not a sheet-slot question: the
+ * slot governs the two **panes** (`shell-context.ts`), and this is a control's
+ * own popup, exactly like the blobatar menu beside it.
+ */
+const DateNavigator = ({ calendar }: { calendar: CalendarViewState }) => {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              RANGE_LABEL_CLASS,
+              'flex items-center justify-center gap-1 rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-ring'
+            )}
+          />
+        }
+      >
+        <span className="truncate">{calendar.label}</span>
+        <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="sr-only">— go to a date</span>
+      </PopoverTrigger>
+      <PopoverContent align="center" className="w-auto p-1">
+        <MiniCalendar calendar={calendar} onPicked={() => setOpen(false)} />
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 /**
  * The only thing an outstanding write is allowed to say.
@@ -80,30 +184,19 @@ const SavingChip = () => (
 const RANGE_LABEL_CLASS = 'mx-1 flex-1 truncate text-left text-sm font-medium tabular-nums'
 
 /**
- * The date label. Below the sheet breakpoint it is *also* the Today button:
- * the cluster does not fit at 375px, and the first thing it would eat is this
- * label, which is the one thing on the bar you cannot do without — so Today
- * gives up its own control and moves here instead.
+ * The date label, on desktop: text, and only text.
  *
- * Two elements rather than one with `pointer-events-none`: a button that is
- * mouse-inert but still focusable is a control keyboard users can reach and
- * mouse users cannot see, and above the breakpoint there is already a Today
- * button two inches to the right.
+ * It used to be the Today button below the breakpoint — ticket 12 decision 6
+ * evicted Today from the narrow bar and this was where it went, because the
+ * cluster did not fit at 375px and the label is the one thing on the bar you
+ * cannot do without. **Ticket 17 gives Today its own control back** (see
+ * `PhoneBar`), so there is nothing left for the narrow branch to do and the
+ * dotted underline went with it: an underlined label that no longer responds to
+ * a tap is worse than a plain one.
  */
-const RangeLabel = ({ label, onToday }: { label: string; onToday: () => void }) => {
-  const { isSheet } = useAppShell()
-  if (!isSheet) return <span className={RANGE_LABEL_CLASS}>{label}</span>
-  return (
-    <button
-      type="button"
-      onClick={onToday}
-      title="Go to today"
-      className={cn(RANGE_LABEL_CLASS, 'underline decoration-dotted underline-offset-4')}
-    >
-      {label}
-    </button>
-  )
-}
+const RangeLabel = ({ label }: { label: string }) => (
+  <span className={RANGE_LABEL_CLASS}>{label}</span>
+)
 
 /**
  * `‹ · Today · ›` │ `Week / Month` │ pane triggers │ blobatar.
@@ -129,7 +222,7 @@ const TopCluster = ({ calendar }: { calendar: CalendarViewState }) => {
         <Button variant="ghost" size="icon-sm" aria-label="Previous" onClick={goPrevious}>
           <ChevronLeftIcon />
         </Button>
-        <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={goToday}>
+        <Button variant="ghost" size="sm" onClick={goToday}>
           Today
         </Button>
         <Button variant="ghost" size="icon-sm" aria-label="Next" onClick={goNext}>
@@ -137,36 +230,22 @@ const TopCluster = ({ calendar }: { calendar: CalendarViewState }) => {
         </Button>
       </div>
 
-      <Separator orientation="vertical" className="mx-1 hidden h-5 md:block" />
+      <Separator orientation="vertical" className="mx-1 h-5" />
 
-      <ToggleGroup
-        className="hidden md:flex"
-        variant="outline"
-        size="sm"
-        spacing={0}
-        value={[view]}
-        onValueChange={(next) => {
-          // Base UI hands back an array and allows it to be empty. A calendar is
-          // always in some view, so an empty selection is not a state to enter.
-          if (next[0]) setView(next[0] as CalendarView)
-        }}
-      >
-        <ToggleGroupItem value="week" aria-label="Week view">
-          <span className="hidden lg:inline">Week</span>
-          <span className="lg:hidden">W</span>
-        </ToggleGroupItem>
-        <ToggleGroupItem value="month" aria-label="Month view">
-          <span className="hidden lg:inline">Month</span>
-          <span className="lg:hidden">M</span>
-        </ToggleGroupItem>
-      </ToggleGroup>
+      {/*
+        Four options as of issue 12, abbreviated to `D / 3D / W / M` below `lg`
+        — the same eviction ticket 12 measured, one step earlier because there
+        are twice as many of them. The drawer renders the identical control with
+        the words written out; see `ViewSelector`.
+      */}
+      <ViewSelector view={view} onView={setView} abbreviate />
 
       <Separator orientation="vertical" className="mx-1 h-5" />
       <ShellTrigger side="left" />
       <ShellTrigger side="right" />
 
       <Separator orientation="vertical" className="mx-1 h-5" />
-      <FriendMenu view={view} onView={setView} />
+      <FriendMenu />
     </div>
   )
 }
@@ -183,13 +262,7 @@ const TopCluster = ({ calendar }: { calendar: CalendarViewState }) => {
  * does not belong beside things that are. No "delete account": membership is a
  * hand-curated allowlist and leaving is a conversation.
  */
-const FriendMenu = ({
-  view,
-  onView,
-}: {
-  view: CalendarView
-  onView: (view: CalendarView) => void
-}) => {
+const FriendMenu = () => {
   const { state, signOut } = useSession()
   const [dialog, setDialog] = useState<'profile' | 'customise' | 'password' | null>(null)
 
@@ -235,22 +308,15 @@ const FriendMenu = ({
         <DropdownMenuContent align="end" className="w-56">
           {/*
           Every label here is Base UI's `Menu.GroupLabel` and throws outside a
-          `Menu.Group` — so the menu is groups, and the narrow-only view select
-          is a group of its own rather than a pair of loose items.
-        */}
-          <div className="md:hidden">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>View</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem checked={view === 'week'} onClick={() => onView('week')}>
-                Week
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={view === 'month'} onClick={() => onView('month')}>
-                Month
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-          </div>
+          `Menu.Group`, so the menu is groups.
 
+          **The narrow-only view select is gone from here.** Ticket 12 decision
+          6 put it in this menu because the bar did not fit at 375px and there
+          was nowhere else; ticket 17 gives the phone a left drawer that holds
+          exactly this class of control, and a mode selector filed under
+          *account* was only ever where there was nowhere else. See
+          `ViewSelector`.
+        */}
           <DropdownMenuGroup>
             <DropdownMenuLabel className="flex flex-col gap-0.5">
               <span>{name}</span>

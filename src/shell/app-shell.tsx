@@ -51,18 +51,22 @@ export const AppShell = () => {
   const calendar = useCalendarView()
   const roster = useRoster()
   /*
-   * `shownDays`, not `days` — **every day the view on screen draws**, which in
-   * month view starts up to five weeks before the anchor's Monday.
+   * `calendar.days` is **every day the view on screen draws** — one day, three,
+   * a week, or a month lattice that starts up to five weeks before the anchor's
+   * Monday. The grids are handed the same array, so the cells drawn and the
+   * rows fetched cannot disagree.
    *
-   * Both stores take their floor from `floorOfView`, which reads the first day
-   * it is handed, and both were handed the anchor's *week*. So the month grid
-   * drew cells from a range Postgres had never been asked for, with `status`
-   * already `ready` — a month of unfetched Availability is indistinguishable
-   * from a month nobody drew anything in. See `shownDays`, which is where the
-   * two views' ranges are reconciled so the cells and the rows cannot disagree.
+   * That is not tidying. Both stores take their floor from `floorOfView`, which
+   * reads the first day it is handed, and before issue 11 both were handed the
+   * anchor's *week* — so the month grid drew cells from a range Postgres had
+   * never been asked for, with `status` already `ready`, and a month of
+   * unfetched Availability is indistinguishable from a month nobody drew
+   * anything in. Issue 11 closed it with a second array beside the first; issue
+   * 12 made the first one view-correct, so there is no longer a second thing to
+   * keep in step. See `daysOf`.
    */
-  const availability = useAvailability(calendar.shownDays)
-  const hangouts = useHangouts(calendar.shownDays)
+  const availability = useAvailability(calendar.days)
+  const hangouts = useHangouts(calendar.days)
   const tools = useDrawingTools()
 
   /**

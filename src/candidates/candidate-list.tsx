@@ -125,8 +125,12 @@ const friendsIn = (candidate: Candidate, byId: List['friendsById']) =>
  * Each one names the *reason* there is nothing to show, which is the whole
  * design: "no overlaps yet" shown to somebody who has hidden four Friends would
  * be true and useless.
+ *
+ * Exported because the bottom drawer's peek shows *"whichever of the three
+ * empty states applies"* (ticket 17) and there is no version of that which is
+ * worth a second copy of this copy.
  */
-const Empty = ({
+export const Empty = ({
   reason,
   hangoutsPinned,
   hiddenCount,

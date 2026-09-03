@@ -165,7 +165,15 @@ export const RetimeDialog = ({
         if (!open) onClose()
       }}
     >
-      <DialogContent>
+      {/*
+        Bounded and scrollable, for the phone: at 390×844 the header, the
+        consequence sentence, a date field, two selects and a footer are close
+        to the viewport's height before an error line is added, and this dialog
+        is centred with `-translate-y-1/2` and has no scroller of its own — so
+        an extra sentence would push `Change the time` off the bottom of the
+        screen with nothing to scroll it back.
+      */}
+      <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Change the time</DialogTitle>
           <DialogDescription>

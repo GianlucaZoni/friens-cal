@@ -1,12 +1,18 @@
 import { useSession } from '@/auth/use-session'
 import type { AvailabilityStore } from '@/availability/use-availability'
-import { CandidateList } from '@/candidates/candidate-list'
+import { CandidateCard } from '@/candidates/candidate-card'
+import { CandidateList, Empty } from '@/candidates/candidate-list'
+import { containerOf, glows, isFullHouse } from '@/candidates/candidates'
+import type { CandidateList as List } from '@/candidates/use-candidates'
 import { useCandidates } from '@/candidates/use-candidates'
-import { pinned } from '@/hangouts/hangout'
-import { PinnedHangouts } from '@/hangouts/hangout-card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { facesOf, pinned } from '@/hangouts/hangout'
+import { HangoutCard, PinnedHangouts, type HangoutControls } from '@/hangouts/hangout-card'
 import type { HangoutStore } from '@/hangouts/use-hangouts'
 import type { RosterState, SetUpFriend } from '@/roster/use-roster'
+import { peekOf, type Peek } from '@/shell/peek'
 import { SidebarContent } from '@/shell/shell'
+import { useAppShell } from '@/shell/shell-context'
 import { useMemo } from 'react'
 
 /**
@@ -114,6 +120,30 @@ export const RightPane = ({
    */
   const hasPinned = upcoming.length > 0 && viewerId !== null
 
+  /*
+   * The peek, on a phone. The pane's contents are the drawer's contents at both
+   * heights — this is the same component, rendering one labelled card instead of
+   * the list while the drawer is down. See `DrawerPeek`.
+   */
+  const { isSheet, drawer } = useAppShell()
+  if (isSheet && drawer === 'peek')
+    return (
+      <DrawerPeek
+        peek={peekOf(upcoming, list.all, list.empty)}
+        list={list}
+        friendsById={friendsById}
+        namesById={namesById}
+        viewerId={viewerId}
+        now={now}
+        isFree={availability.isFree}
+        controls={controls}
+        hiddenCount={roster.hidden.size}
+        onShowAll={roster.showAll}
+        onConfirm={hangouts.confirm}
+        confirming={hangouts.confirming}
+      />
+    )
+
   return (
     <SidebarContent>
       <div className="flex flex-col gap-1.5 p-2">
@@ -153,3 +183,128 @@ export const RightPane = ({
     </SidebarContent>
   )
 }
+
+/** The label above the peek's one card, chosen by what the card turned out to be. */
+const PEEK_LABEL: Record<Exclude<Peek, null>['kind'], string> = {
+  hangout: 'Upcoming',
+  candidate: 'Best Candidate',
+  empty: 'Hangouts',
+}
+
+/**
+ * The bottom drawer while it is down: **one labelled card**, and nothing else.
+ *
+ * Ticket 17, and its reason is the whole design: *"the peek is the scarcest
+ * space on the smallest screen, and a card answers* when are we meeting
+ * *without opening anything."* One real card rather than a summary count — a
+ * count would need opening to be worth anything, which is the opposite of what
+ * a peek is for.
+ *
+ * `peekOf` chooses; this draws. The card is the **same** `HangoutCard` or
+ * `CandidateCard` the expanded drawer holds, with the same detail sheet behind
+ * a tap, so the peek is a window onto the list rather than a summary of it —
+ * and confirming the best Candidate is reachable without dragging anything.
+ *
+ * ## A tap here opens a second bottom surface, and that is correct
+ *
+ * `CardDetail` comes up from the bottom on the `(hover: none)` path (issue 10),
+ * so tapping this card puts a modal sheet over a non-modal drawer. The
+ * acceptance criterion *"only one sheet can be open at a time"* is a claim about
+ * the two **panes** — that is what the shell's slot governs
+ * (`shell-context.ts`) — and below the breakpoint it now holds by construction,
+ * because only the left pane can be a sheet at all. A card detail was never in
+ * the slot: it has coexisted with the left drawer since issue 10, and one modal
+ * surface over one permanent one is exactly one focus trap.
+ */
+const DrawerPeek = ({
+  peek,
+  list,
+  friendsById,
+  namesById,
+  viewerId,
+  now,
+  isFree,
+  controls,
+  hiddenCount,
+  onShowAll,
+  onConfirm,
+  confirming,
+}: {
+  peek: Peek
+  list: List
+  friendsById: ReadonlyMap<string, SetUpFriend>
+  namesById: ReadonlyMap<string, string>
+  viewerId: string | null
+  now: number
+  isFree: AvailabilityStore['isFree']
+  controls: HangoutControls
+  hiddenCount: number
+  onShowAll: () => void
+  onConfirm: HangoutStore['confirm']
+  confirming: string | null
+}) => (
+  <div className="flex min-h-0 flex-col gap-1 px-2 pt-0.5">
+    <p className="px-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+      {peek === null ? 'Hangouts' : PEEK_LABEL[peek.kind]}
+    </p>
+
+    {/*
+      `null` is **not** an empty state: `list.empty` is null while the read is in
+      flight, and ticket 09 wrote three separate messages precisely so that
+      "nobody's free yet" is never shown over a query that has not landed.
+    */}
+    {peek === null && <Skeleton className="h-[62px] rounded-md" />}
+
+    {peek?.kind === 'empty' && (
+      <Empty
+        reason={peek.reason}
+        /*
+          There is no pinned region above this one — if there were a Hangout the
+          peek would be showing it rather than an empty state — so the reword
+          ticket 16 asked for cannot apply here.
+        */
+        hangoutsPinned={false}
+        hiddenCount={hiddenCount}
+        onShowAll={onShowAll}
+      />
+    )}
+
+    {peek?.kind === 'hangout' && viewerId !== null && (
+      <ul aria-label="Confirmed hangouts" className="flex flex-col">
+        <HangoutCard
+          hangout={peek.hangout}
+          friends={facesOf(peek.hangout, friendsById)}
+          friendsById={friendsById}
+          namesById={namesById}
+          viewerId={viewerId}
+          now={now}
+          isFree={isFree}
+          controls={controls}
+        />
+      </ul>
+    )}
+
+    {peek?.kind === 'candidate' && (
+      <ul aria-label="Candidates" className="flex flex-col">
+        <CandidateCard
+          candidate={peek.candidate}
+          friends={peek.candidate.friendIds.flatMap((id) => {
+            const friend = list.friendsById.get(id)
+            return friend === undefined ? [] : [friend]
+          })}
+          glowing={glows(peek.candidate, list.groupSize)}
+          fullHouse={isFullHouse(peek.candidate, list.groupSize)}
+          /*
+            Resolved against the whole ranked list, as it is in the expanded
+            drawer — the annotation is about where this Candidate sits among all
+            of them, not among the one that happens to be on screen.
+          */
+          container={containerOf(peek.candidate, list.all)}
+          onConfirm={() => onConfirm(peek.candidate)}
+          pending={confirming === peek.candidate.id}
+          busy={confirming !== null}
+        />
+      </ul>
+    )}
+  </div>
+)

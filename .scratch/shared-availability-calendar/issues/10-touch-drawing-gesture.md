@@ -211,6 +211,7 @@ Recorded in
 `vaul` and Base UI's `Sheet` against hand-rolling it (the answer is hand-roll,
 because vaul depends on `@radix-ui/react-dialog` and this repo is Base UI).
 
-That addition also carries the **real-hardware run** this ticket's `### Still
-open` asks for: the settle window after a flick reaches the top is a number only
-a device can give.
+This ticket's `### Still open` asks for a **real-hardware run**, and friens-cal
+issue 15 is where that lives. The drawer's rule adds one thing to measure there
+that nothing else in the plan does: the settle window after a flick reaches the
+top of a scroller is a number only a real compositor and a real thumb can give.

@@ -84,8 +84,11 @@ Vaul's author states the same algorithm for the same reason (*"a `shouldDrag`
 function that doesn't allow you to drag unless you are scrolled to the top …
 very similar to how native drawers work on iOS"*, plus a short timeout because
 *"scrolling can be fast on mobile devices"*). Vaul ships it as
-`scrollLockTimeout`, defaulted to 500ms; its article suggests 100ms. Pick by
-measurement on the real hardware this ticket already owes a run on.
+`scrollLockTimeout`, defaulted to 500ms; its article suggests 100ms. Ship a
+starting number here and let **[issue 15](./15-verify-touch-on-hardware.md)**
+settle it: a settle window is a compositor-and-thumb measurement, and 15 is the
+ticket that owns real hardware. This ticket's own verification is synthetic
+pointers, which exercise the state machine and not the flick.
 
 The scroller is `RightPane`'s own `SidebarContent`, and it is `overflow-y-auto`
 only while the drawer is out — at the peek it is `overflow-hidden` and there is
@@ -138,8 +141,15 @@ dialogs, two backdrops, two focus traps"* — arriving by a new route.
 
 **So: hand-roll it here.** The algorithm above is two sentences and the surface
 is already ours; the drag it extends is ~70 lines in `BottomDrawer`. Vaul is the
-named fallback if the hand-rolled version does not survive this ticket's
-real-hardware run — which is the one thing no library and no synthetic pointer
-can settle for us, and which this ticket already owed. Adopting it then would be
-a deliberate act with a measurement behind it, rather than a dependency taken on
-a guess.
+named fallback if the hand-rolled version does not survive
+**[issue 15](./15-verify-touch-on-hardware.md)** — the hardware gate, which now
+carries a criterion for this gesture. Adopting it then would be a deliberate act
+with a measurement behind it, rather than a dependency taken on a guess.
+
+### Decided
+
+The human took this recommendation on 6 September 2026: **hand-roll the
+scroll-chained close in this ticket, with vaul as the named fallback behind
+issue 15's measurement.** Recorded here rather than left as a proposal, because
+the next agent to open this file should build it rather than re-open the
+question.

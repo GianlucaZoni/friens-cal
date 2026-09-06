@@ -136,6 +136,7 @@ export const MonthGrid = ({
   now,
   tools,
   faces = true,
+  onPage,
   onShowWeek,
 }: {
   /**
@@ -180,6 +181,11 @@ export const MonthGrid = ({
    */
   faces?: boolean
   /** Move the anchor to this day and switch to the week — see the note above. */
+  /**
+   * What a pre-arm horizontal swipe does — page by a **month**. See
+   * `useMonthGesture`, and `stepBy`, which is where the block's size lives.
+   */
+  onPage: (direction: -1 | 1) => void
   onShowWeek: (day: Date) => void
 }) => {
   const counted = useMemo(() => setUpOnly(visible), [visible])
@@ -209,6 +215,7 @@ export const MonthGrid = ({
     requestErase: eraseGuard.requestErase,
     viewer,
     body,
+    onPage,
   })
 
   /*

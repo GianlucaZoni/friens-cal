@@ -58,7 +58,24 @@ export const Calendar = ({
   now: number
   tools: DrawingTools
 }) => {
-  const { goToDate, setView } = calendar
+  const { goToDate, setView, goPrevious, goNext } = calendar
+
+  /**
+   * What a horizontal swipe on the grid does — **issue 12 decision 8, paid
+   * back**.
+   *
+   * That slice took `‹ ›` off the phone's bar because a fourth group does not
+   * fit at 375px, and the first thing a fourth group eats is the date label. So
+   * moving a week on a phone became *open the navigator, tap a day*, with issue
+   * 13's swipe named as what would pay for it. This is that swipe, and it costs
+   * nothing new: `goPrevious` / `goNext` already step by the current view's
+   * block through `stepBy`, so the gesture measures nothing and the four views
+   * need no cases.
+   */
+  const onPage = useCallback(
+    (direction: -1 | 1) => (direction === -1 ? goPrevious() : goNext()),
+    [goPrevious, goNext]
+  )
 
   /**
    * Drill into a day: move the anchor to it **and** switch to the week.
@@ -103,6 +120,7 @@ export const Calendar = ({
       hangouts={hangouts}
       now={now}
       tools={tools}
+      onPage={onPage}
     />
   ) : (
     <MonthGrid
@@ -121,6 +139,7 @@ export const Calendar = ({
       hangouts={hangouts}
       now={now}
       tools={tools}
+      onPage={onPage}
       onShowWeek={onShowWeek}
     />
   )

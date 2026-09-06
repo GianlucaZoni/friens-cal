@@ -1,5 +1,6 @@
 import { isDrag, type Point } from '@/availability/gesture'
 import { daysBetween, wholeDay } from '@/availability/month'
+import { ARM_MS, pageDirection, preArmVerdict, reportCompositorLoss } from '@/availability/touch'
 import type { AvailabilityStore } from '@/availability/use-availability'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import type { Viewer } from '@/availability/week-grid'
@@ -16,6 +17,13 @@ export type MonthDraft = {
   days: ReadonlySet<number>
 }
 
+/**
+ * Where a gesture has got to — the week grid's own three phases, and the same
+ * one difference between a mouse and a finger. See `use-draw-gesture.ts`, which
+ * states the argument once for both grids.
+ */
+type Phase = 'live' | 'holding' | 'paging'
+
 type MonthDrag = {
   /**
    * `read` is a press that cannot write: the erase toggle is on and the day
@@ -24,8 +32,11 @@ type MonthDrag = {
    * also read nothing, and only a press that stayed still opens the panel.
    */
   kind: MonthDraftKind | 'read'
+  phase: Phase
   anchor: number
   origin: Point
+  /** Where the pointer was last seen, so a release can measure the swipe. */
+  point: Point
   /** Whether 4px has been travelled. Below it this gesture is a click. */
   moved: boolean
   /** What the last move resolved to — committed verbatim on release. */
@@ -69,33 +80,43 @@ type MonthDrag = {
  *
  * ## Window listeners, and no pointer capture
  *
- * The week grid captures the pointer, because its columns retarget every later
- * event to the one the drag began on and it needs them to arrive somewhere it
- * can hit-test from. This gesture needs the opposite: the cells are real
- * `<button>`s so a keyboard can reach a day, and `setPointerCapture` on
- * `pointerdown` would have to come with a `preventDefault` that stops the button
- * taking focus.
+ * The move and the release are **window listeners, registered on pointerdown
+ * and torn down when the gesture ends** — which is what makes a drag released
+ * outside the grid commit rather than hang, and it leaves the cells real
+ * `<button>`s a keyboard can reach, where `setPointerCapture` on `pointerdown`
+ * would have needed a `preventDefault` that stops one taking focus. They are
+ * registered imperatively rather than through an effect on a `dragging` flag: a
+ * flag would cost a render at the start of every gesture, and the listeners want
+ * the values the press was made under anyway.
  *
- * So the move and the release are **window listeners, registered on
- * pointerdown and torn down when the gesture ends** — which is also what makes a
- * drag released outside the grid commit rather than hang, the case capture was
- * buying. They are registered imperatively rather than through an effect on a
- * `dragging` flag: a flag would cost a render at the start of every gesture, and
- * the listeners want the values the press was made under anyway.
+ * The side benefit is now the whole grid's rather than this hook's: with no
+ * `setPointerCapture` anywhere in the path, **the gesture can be driven by
+ * synthetic pointer events**. Issue 13 took the same shape to the week grid for
+ * exactly that reason, so the wall issues 08, 09 and 10 all hit is down for all
+ * four views.
  *
- * The side benefit is worth naming, because it is the difference between a
- * verified acceptance criterion and a read one: with no `setPointerCapture` in
- * the path, **this gesture can be driven by synthetic pointer events** — which
- * the week grid's cannot, and which is the wall issues 08, 09 and 10 all hit.
+ * ## The finger, and ticket 14's conflict — which is real and still open
  *
- * ## Mouse and pen only
+ * Issue 13 makes the month drawable by touch on the same terms as the week: a
+ * **long-press arms**, a pre-arm horizontal swipe pages by a month, and a
+ * pre-arm vertical one is the browser's. `use-draw-gesture.ts` states that
+ * argument in full; `touch.ts` holds the numbers; both grids share them, which
+ * is the point.
  *
- * Touch is issue 13, exactly as in the week grid, and the conflict ticket 14
- * named is real: tap-to-inspect and drag-to-draw are the same 78×72 rectangle,
- * with nothing to carve a target out of. Ignoring touch here leaves the month
- * grid scrolling under a finger and the day panel reachable by tap, which is the
- * honest interim — and the panel carries a whole-day draw and erase, so touch is
- * not locked out of writing, it is only locked out of the drag.
+ * What issue 13 does **not** resolve is ticket 14's objection, and it should not
+ * be read as having done: tap-to-inspect and drag-to-draw are still the same
+ * 54×102 rectangle with nothing to carve a target out of. What makes that
+ * tolerable is the same thing that makes it tolerable on the week grid — 450ms
+ * of stillness separates the two, and neither a tap nor a swipe can write. And
+ * the day panel's `I'm free all day` / `Erase this day` **stay**: they are the
+ * discoverable route, ticket 01's standing correction is that a gesture may be
+ * the accelerator and may not be the only path, and on a 54px cell they are the
+ * only thing a screen reader can reach.
+ *
+ * **No edge auto-scroll here, and none is missing.** The week grid's exists
+ * because its columns are two to three screens tall; the lattice is five or six
+ * rows of `flex-1 basis-0` that fill the inset, so on a phone there is nothing
+ * to scroll and nothing for a band to do.
  */
 export const useMonthGesture = ({
   days,
@@ -104,6 +125,7 @@ export const useMonthGesture = ({
   requestErase,
   viewer,
   body,
+  onPage,
 }: {
   /** The month lattice, in order. Indices into it are this hook's addresses. */
   days: readonly Date[]
@@ -140,6 +162,12 @@ export const useMonthGesture = ({
    * asking the elements cannot be.
    */
   body: RefObject<HTMLDivElement | null>
+  /**
+   * What a pre-arm horizontal swipe does: page by the current view's block,
+   * which in this view is a **month** and not 30 or 31 days — `stepBy` uses
+   * `addMonths` precisely so a step from 31 January does not land in March.
+   */
+  onPage: (direction: -1 | 1) => void
 }) => {
   const [draft, setDraft] = useState<MonthDraft | null>(null)
   /** Which day's panel is open, as an index into the lattice. */
@@ -218,6 +246,20 @@ export const useMonthGesture = ({
       if (current === null) return
 
       /*
+       * A pre-arm horizontal swipe. It pages and it writes nothing — and it
+       * suppresses the click the browser will send, because a swipe that
+       * happened to begin and end on the same cell would otherwise open that
+       * day's panel over the month it just left.
+       */
+      if (current.phase === 'paging') {
+        const direction = pageDirection(current.point.x - current.origin.x)
+        dragged.current = true
+        abort()
+        if (direction !== null) onPage(direction)
+        return
+      }
+
+      /*
        * Only the anchor's own cell will see a click — see `dragged`. `closest`
        * rather than the target itself, because the release usually lands on one of
        * the cell's children (an avatar, the numeral, a chip).
@@ -241,7 +283,7 @@ export const useMonthGesture = ({
 
       abort()
     },
-    [days, availability, requestErase, abort]
+    [days, availability, requestErase, abort, onPage]
   )
 
   /**
@@ -262,9 +304,8 @@ export const useMonthGesture = ({
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLElement>, day: number) => {
-      // Left button only, and no touch — see the note on this hook.
+      // Left button only. A finger is welcome now, and differs only in `Phase`.
       if (event.button !== 0) return
-      if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return
       if (viewer === null) return
       // One gesture at a time; a second pointer down mid-drag is not a gesture.
       if (drag.current !== null) return
@@ -293,6 +334,7 @@ export const useMonthGesture = ({
        */
       const kind: MonthDrag['kind'] = tools.erasing ? (held ? 'erase' : 'read') : 'draw'
 
+      const touch = event.pointerType === 'touch'
       const origin = { x: event.clientX, y: event.clientY }
 
       const onMove = (moved: PointerEvent) => {
@@ -300,6 +342,19 @@ export const useMonthGesture = ({
         if (current === null || moved.pointerId !== current.pointerId) return
 
         const point = { x: moved.clientX, y: moved.clientY }
+        current.point = point
+
+        if (current.phase === 'holding') {
+          const verdict = preArmVerdict(point.x - current.origin.x, point.y - current.origin.y)
+          if (verdict === 'hold') return
+          // The long-press has lost the gesture: sideways it becomes the view's
+          // and is measured on release, vertically it is the browser's.
+          if (verdict === 'page') current.phase = 'paging'
+          else abort()
+          return
+        }
+        if (current.phase === 'paging') return
+
         if (!current.moved && !isDrag(current.origin, point)) return
         current.moved = true
 
@@ -322,10 +377,34 @@ export const useMonthGesture = ({
         setDraft({ kind: current.kind, days: new Set(span) })
       }
 
+      /**
+       * `preventDefault` on a non-passive `touchmove`, once the gesture is ours.
+       *
+       * The same instrument the week grid carries, for the same gate: issue 15
+       * asks whether this still beats the compositor once a long-press has
+       * armed, and `cancelable === false` is the browser saying it does not.
+       */
+      const onTouchMove = (moving: TouchEvent) => {
+        const current = drag.current
+        if (current === null || current.phase === 'holding') return
+        if (!moving.cancelable) {
+          if (current.phase === 'live') {
+            reportCompositorLoss('uncancelable-touchmove', 'month, armed draw')
+          }
+          return
+        }
+        moving.preventDefault()
+      }
+
+      const element = body.current
+      let timer = 0
+
       const release = () => {
+        window.clearTimeout(timer)
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', onUp)
         window.removeEventListener('pointercancel', onCancel)
+        element?.removeEventListener('touchmove', onTouchMove)
       }
       // Named function declarations so `release` can name them before they run.
       function onUp(up: PointerEvent) {
@@ -333,18 +412,46 @@ export const useMonthGesture = ({
         latestFinish.current(up.target instanceof Element ? up.target : null)
       }
       function onCancel(cancelled: PointerEvent) {
-        if (cancelled.pointerId !== drag.current?.pointerId) return
+        const current = drag.current
+        if (current === null || cancelled.pointerId !== current.pointerId) return
+        if (current.phase === 'live') reportCompositorLoss('pointercancel', 'month, armed draw')
         abort()
       }
+
+      /**
+       * Arming, and `moved` goes true with it.
+       *
+       * A long-press *is* the deliberate act the 4px threshold looks for on a
+       * mouse, so releasing here without moving commits **this day, all day** —
+       * which is exactly what ticket 01 says a month drag means, for a drag of
+       * one day. The unit of this grid is the day; there is no smaller thing for
+       * a press to land on.
+       */
+      const arm = () => {
+        const current = drag.current
+        if (current === null || current.phase !== 'holding') return
+        current.phase = 'live'
+        current.moved = true
+        if (current.kind === 'read') return
+        current.span = [current.anchor]
+        current.shape = `${current.kind}|${current.anchor}|${current.anchor}`
+        setDraft({ kind: current.kind, days: new Set(current.span) })
+      }
+
+      // Nothing to arm for a `read` press — see the week grid's note.
+      if (touch && kind !== 'read') timer = window.setTimeout(arm, ARM_MS)
 
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
       window.addEventListener('pointercancel', onCancel)
+      if (touch) element?.addEventListener('touchmove', onTouchMove, { passive: false })
 
       drag.current = {
         kind,
+        phase: touch ? 'holding' : 'live',
         anchor: day,
         origin,
+        point: origin,
         moved: false,
         span: [],
         shape: '',
@@ -352,7 +459,7 @@ export const useMonthGesture = ({
         release,
       }
     },
-    [viewer, days, availability, tools.erasing, dayAt, abort]
+    [viewer, days, availability, tools.erasing, dayAt, abort, body]
   )
 
   /**

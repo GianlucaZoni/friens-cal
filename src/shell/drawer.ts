@@ -10,7 +10,10 @@
  * grid. Two places have to agree about one number.
  *
  * **No `@/` imports**, so `drawer.test.ts` reaches this under plain Node.
+ * `../availability/touch.ts` carries its extension for the same reason —
+ * the shape `view.ts` already has against `month.ts`.
  */
+import { TOUCH_SLOP_PX } from '../availability/touch.ts'
 
 /**
  * How much of the drawer is always out, in pixels.
@@ -77,3 +80,74 @@ export const dragTo = (startHeight: number, travelled: number, full: number) =>
  */
 export const snapOf = (height: number, full: number): DrawerState =>
   height >= (DRAWER_PEEK + full) / 2 ? 'full' : 'peek'
+
+/* ------------------------------------------------------------------ *
+ * The scroll-chained close (issue 13's `## Addition`)
+ * ------------------------------------------------------------------ */
+
+/**
+ * How long the close stays refused after the scroller **arrives** at its top,
+ * in milliseconds. **A starting number, not a measured one.**
+ *
+ * The rule it guards: a drag on the drawer's body may start only while the
+ * scroller is at the top, and it must stay refused for a moment after getting
+ * there — or a fast flick that hits the ceiling mid-momentum turns into a close
+ * nobody asked for. Vaul's author states the same algorithm for the same reason
+ * and ships it as `scrollLockTimeout`, **defaulted to 500ms while the article
+ * suggests 100ms**. That five-fold gap *is* the uncertainty, and it is not one
+ * arithmetic can close: the settle window is a compositor-and-thumb measurement
+ * and [issue 15](.scratch/friens-cal-v1/issues/15-verify-touch-on-hardware.md)
+ * is the ticket that owns real hardware.
+ *
+ * 250ms is chosen between them rather than at either end, and the reasoning is
+ * stated so the hardware run has something to disagree with:
+ *
+ * - **100ms is shorter than the gap between two flicks of the same motion.**
+ *   Nobody scrolls a list with one gesture; a second flick lands 150–300ms
+ *   after the first lifts, and at 100ms the one that finds the top already
+ *   arrived closes the drawer instead of scrolling it.
+ * - **500ms is long enough to read as a dead control.** A deliberate swipe down
+ *   immediately after reaching the top is the *common* way this gesture is
+ *   reached — you scroll to the top of the list because you are done with it.
+ *
+ * Both failures are asymmetric in cost, which is the other half of the choice:
+ * a missed close costs one more swipe, a spurious close costs the reader their
+ * place. That argues for the longer end of whatever the measurement finds.
+ */
+export const SETTLE_MS = 250
+
+/**
+ * Whether a press on the drawer's body may begin a close at all.
+ *
+ * @param scrollTop the body scroller's own `scrollTop`, or `0` when there is no
+ * scroller — at the peek the content is one card and `overflow-hidden`, so the
+ * *other* half of the rule is what refuses it there.
+ * @param sinceAwayFromTop milliseconds since the scroller was last anywhere but
+ * its top, `Infinity` if it has never moved.
+ */
+export const mayChainClose = (scrollTop: number, sinceAwayFromTop: number): boolean =>
+  scrollTop <= 0 && sinceAwayFromTop >= SETTLE_MS
+
+/** What a move on the drawer's body turns out to have been. */
+export type BodySwipe =
+  /** Inside the slop circle: nothing has been decided yet. */
+  | 'waiting'
+  /** Downwards, and therefore the drawer's — it collapses to the peek. */
+  | 'close'
+  /** Anything else, and therefore the scroller's — including a swipe back up. */
+  | 'scroll'
+
+/**
+ * Which of the three a move on the body belongs to.
+ *
+ * **Downwards and dominantly vertical**, sharing the grid's own slop so the two
+ * gestures on this screen agree about how far a resting thumb may drift. The
+ * upward case is handed back deliberately: a scroller already at its top has
+ * nothing to scroll upwards, but the finger that starts a close and changes its
+ * mind must be able to give the gesture back rather than dragging the drawer
+ * shut behind it.
+ */
+export const bodySwipe = (dx: number, dy: number): BodySwipe => {
+  if (Math.hypot(dx, dy) < TOUCH_SLOP_PX) return 'waiting'
+  return dy > 0 && Math.abs(dy) > Math.abs(dx) ? 'close' : 'scroll'
+}

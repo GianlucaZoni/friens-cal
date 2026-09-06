@@ -3,7 +3,15 @@
  *
  *     yarn test
  */
-import { DRAWER_PEEK, dragTo, fullHeightOf, snapOf } from './drawer.ts'
+import {
+  DRAWER_PEEK,
+  SETTLE_MS,
+  bodySwipe,
+  dragTo,
+  fullHeightOf,
+  mayChainClose,
+  snapOf,
+} from './drawer.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -45,4 +53,45 @@ test('a peek-height release from a peek-height start is still a peek', () => {
   // not snap the drawer open by accident — `shell.tsx` treats a sub-4px travel
   // as a tap and toggles instead, and this is the half that has to agree.
   assert.equal(snapOf(dragTo(DRAWER_PEEK, 0, FULL), FULL), 'peek')
+})
+
+/* ------------------------------------------------------------------ *
+ * The scroll-chained close
+ * ------------------------------------------------------------------ */
+
+test('a body drag is allowed at the top of a scroller that has settled there', () => {
+  assert.equal(mayChainClose(0, Number.POSITIVE_INFINITY), true)
+  assert.equal(mayChainClose(0, SETTLE_MS), true)
+})
+
+test('anywhere else in the scroll range the swipe belongs to the scroller', () => {
+  assert.equal(mayChainClose(1, Number.POSITIVE_INFINITY), false)
+  assert.equal(mayChainClose(400, Number.POSITIVE_INFINITY), false)
+})
+
+test('arriving at the top mid-flick does not arm the close until the window has passed', () => {
+  assert.equal(mayChainClose(0, 0), false)
+  assert.equal(mayChainClose(0, SETTLE_MS - 1), false)
+})
+
+test('an overscrolled scroller counts as the top, because rubber-banding reports negatives', () => {
+  assert.equal(mayChainClose(-30, Number.POSITIVE_INFINITY), true)
+})
+
+test('only a downward, dominantly vertical move closes', () => {
+  assert.equal(bodySwipe(0, 40), 'close')
+  assert.equal(bodySwipe(12, 40), 'close')
+})
+
+test('a swipe back up is handed to the scroller, so a finger can change its mind', () => {
+  assert.equal(bodySwipe(0, -40), 'scroll')
+})
+
+test("a sideways move on the body is not the drawer's", () => {
+  assert.equal(bodySwipe(40, 10), 'scroll')
+})
+
+test('nothing is decided inside the slop circle', () => {
+  assert.equal(bodySwipe(0, 0), 'waiting')
+  assert.equal(bodySwipe(0, 9), 'waiting')
 })

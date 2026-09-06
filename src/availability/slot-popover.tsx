@@ -47,8 +47,7 @@ export const SlotPopover = ({
   day,
   slot,
   end,
-  top,
-  height,
+  box,
   held,
   answer,
   onClose,
@@ -60,9 +59,15 @@ export const SlotPopover = ({
   slot: Slot
   /** The wall clock this Slot ends at — `24:00` where that is midnight. */
   end: string
-  /** Where the Slot sits in its column, so the popover points at it. */
-  top: number
-  height: number
+  /**
+   * Where the Slot sits in its column, so the popover points at it.
+   *
+   * A style rather than two numbers, because the grid's row height is a custom
+   * property now (`--slot`, 20px with a mouse and 44px under a finger) and the
+   * anchor is positioned in `calc` against it. Nothing here needs to know which
+   * of the two is in force.
+   */
+  box: { top: string; height: string }
   /** Whether the viewer already holds this Slot. */
   held: boolean
   answer: SlotAnswer
@@ -95,7 +100,7 @@ export const SlotPopover = ({
       nativeButton={false}
       render={<span aria-hidden />}
       className="pointer-events-none absolute inset-x-0"
-      style={{ top, height }}
+      style={box}
     />
     <PopoverContent align="center" side="right" className="w-60">
       <PopoverHeader>

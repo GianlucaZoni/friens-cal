@@ -4,37 +4,65 @@ import { bandsOf, segmentsOf, type Band } from '@/availability/segments'
 import { answerAt } from '@/availability/slot-answer'
 import { SlotPopover } from '@/availability/slot-popover'
 import { closingLabel, runsOf, slotsOfDay, type Run, type Slot } from '@/availability/slots'
+import { TOUCH_SLOT_PX, durationLabel } from '@/availability/touch'
 import type { AvailabilityStore } from '@/availability/use-availability'
-import { draftCell, useDrawGesture, type DrawGesture } from '@/availability/use-draw-gesture'
+import {
+  draftCell,
+  useDrawGesture,
+  type DrawGesture,
+  type Edge,
+} from '@/availability/use-draw-gesture'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import { whenOf } from '@/candidates/when'
 import { DropDialog } from '@/hangouts/drop-dialog'
 import { facesOf, isHappening, isPast, nameOf, runInColumn, type Hangout } from '@/hangouts/hangout'
 import { useEraseGuard } from '@/hangouts/use-erase-guard'
+import { useHoverPointer } from '@/hooks/use-hover-pointer'
 import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import { setUpOnly, type RosterFriend, type SetUpFriend } from '@/roster/use-roster'
 import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
-import { Fragment, useCallback, useMemo, useRef } from 'react'
+import { Fragment, useCallback, useMemo, useRef, type CSSProperties } from 'react'
 import { groupBy, maxBy } from 'lodash-es'
 import { format, isToday } from 'date-fns'
 import { Pin } from 'lucide-react'
 
 /**
- * Half an hour, in pixels. The hour is 40px, which is what the shell's lattice
- * was — issue 05 halved the row, it did not change the density.
+ * Half an hour, in pixels, **with a mouse**. The hour is 40px, which is what the
+ * shell's lattice was — issue 05 halved the row, it did not change the density.
  *
- * One constant, because a drag maps pixels back to slots with it: an offset
- * divided by this is a slot index, and that is only true while every row is the
- * same height. Which is also why the DST day gets *more rows* rather than taller
- * ones — see `slotsOfDay`.
+ * On a touch screen it is `TOUCH_SLOT_PX`, and that is not a preference: at 44px
+ * rows a week cell at 375px is 47×44, which clears the minimum touch target with
+ * no margin, and prototype 10 measured the desktop row as not a target under any
+ * view. The cost is stated where the number is.
  *
- * The gesture itself divides by each column's measured height rather than by
- * this, so that the arithmetic stays right for the column that holds 46 or 50 of
- * them; this is the number the rows are *drawn* at.
+ * Every row is still the same height as every other, which is what makes a
+ * block's height mean something — and why the DST day gets *more rows* rather
+ * than taller ones (see `slotsOfDay`).
+ *
+ * **The gesture never reads either number.** It divides each column's measured
+ * height by that column's own row count, so the 46-row and 50-row days stay
+ * right and the whole 20px↔44px switch costs `use-draw-gesture.ts` nothing.
  */
 const SLOT_PX = 20
+
+/**
+ * The row height, as one custom property the whole grid positions against.
+ *
+ * `--slot` is set once on the grid's root and read by every absolutely
+ * positioned child through the cascade — the shape `--sidebar-width` already has
+ * in `shell.tsx`. The alternative was threading a pixel number through five
+ * components and two helpers, which is five places that have to agree about one
+ * number: the mistake `shell.tsx`'s review pass caught in the drawer's height.
+ */
+const SLOT = 'var(--slot)'
+
+/** Where `rows` rows starting at `row` sit in a column, in that unit. */
+const box = (row: number, rows: number) => ({
+  top: `calc(${SLOT} * ${row})`,
+  height: `calc(${SLOT} * ${rows})`,
+})
 
 /**
  * The hour gutter's width. Named because four places have to agree on it — the
@@ -114,6 +142,7 @@ export const WeekGrid = ({
   hangouts,
   now,
   tools,
+  onPage,
 }: {
   days: Date[]
   availability: AvailabilityStore
@@ -144,6 +173,14 @@ export const WeekGrid = ({
   /** The start of the current Slot — the app's one clock, held in `AppShell`. */
   now: number
   tools: DrawingTools
+  /**
+   * What a pre-arm horizontal swipe does — page by this view's block.
+   *
+   * Handed in rather than reached for: *how far* a block is belongs to
+   * `view.ts`, and issue 12 already spelled it once in `stepBy`. See
+   * `useDrawGesture`.
+   */
+  onPage: (direction: -1 | 1) => void
 }) => {
   const columns = useMemo(
     () => days.map((day) => ({ day, slots: slotsOfDay(day, GROUP_TIME_ZONE) })),
@@ -177,6 +214,19 @@ export const WeekGrid = ({
    */
   const body = useRef<HTMLDivElement | null>(null)
 
+  /** The scroller the columns sit in — where edge auto-scroll does its work. */
+  const scroller = useRef<HTMLDivElement | null>(null)
+
+  /**
+   * `(hover: none)`, and what it changes: the 44px row, and the resize handles.
+   *
+   * The same query `CardDetail` splits on, and the same argument — this is about
+   * **what the pointer can do**, not how wide the window is. A narrow desktop
+   * window still hovers and still wants 20px rows; a large tablet does not
+   * hover and cannot address a 7px edge zone.
+   */
+  const touch = !useHoverPointer()
+
   /**
    * Ticket 08 §10's confirmation, in front of both erase paths.
    *
@@ -199,6 +249,8 @@ export const WeekGrid = ({
     requestErase: eraseGuard.requestErase,
     viewer,
     body,
+    scroller,
+    onPage,
   })
 
   /**
@@ -225,7 +277,11 @@ export const WeekGrid = ({
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div
+      /* One number, one place. Every row and every positioned block reads it. */
+      style={{ '--slot': `${touch ? TOUCH_SLOT_PX : SLOT_PX}px` } as CSSProperties}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
       <div className="flex shrink-0 border-b">
         {/* The gutter's width, so the columns line up with their headers. */}
         <LoadState status={availability.status} className={cn(GUTTER_W, 'shrink-0')} />
@@ -264,13 +320,40 @@ export const WeekGrid = ({
         seven dividers run the full height and the shorter column of a DST week
         simply leaves its last rows empty.
       */}
-      <div className="flex min-h-0 flex-1 items-start overflow-auto">
+      <div
+        ref={scroller}
+        /*
+          **The arming signal a thumb cannot cover** (ticket 10 §6). There is no
+          Vibration API on iOS Safari, so "you are drawing now" has to be seen —
+          and the draft and its tag are both under the hand that made them. This
+          ring is around the whole surface, so some of it is always visible past
+          a thumb, and it says *which* of the two things is armed: the viewer's
+          own colour for a draw, destructive for an erase.
+        */
+        style={
+          drawing.armed
+            ? {
+                boxShadow: `inset 0 0 0 3px ${
+                  drawing.draft?.kind === 'erase'
+                    ? 'var(--destructive)'
+                    : friendColourAlpha(viewer?.hue ?? 0, 0.75)
+                }`,
+              }
+            : undefined
+        }
+        className="flex min-h-0 flex-1 items-start overflow-auto"
+      >
         <Gutter slots={shared} />
         {/*
-          Move, up and cancel live here rather than on each column, because a
-          drag is captured by the column it began on and every later event
-          retargets to it — so they arrive here by bubbling however far the
-          pointer has since travelled, including outside the window.
+          **Only the click is React's now.** Move, up and cancel used to bubble
+          here from the column that had captured the pointer; the gesture
+          registers them on the `window` at pointerdown instead, which commits a
+          drag released outside the element and — the reason it matters to this
+          slice — leaves no `setPointerCapture` in the path, which throws for a
+          synthetic pointer and is the wall issues 08, 09 and 10 all hit.
+
+          The click stays, because that is where the popover mounts (see
+          `pending` in the gesture) and a tap takes the same route.
 
           `select-none` stops the browser from painting a text selection across
           the hour labels while a drag is in flight; `cursor-copy` is the whole
@@ -280,9 +363,6 @@ export const WeekGrid = ({
         <div
           ref={body}
           className={cn('flex flex-1 items-start select-none', drawing.placing && 'cursor-copy')}
-          onPointerMove={drawing.onPointerMove}
-          onPointerUp={drawing.onPointerUp}
-          onPointerCancel={drawing.onPointerCancel}
           onClick={drawing.onClick}
         >
           {laidOut.map(({ day, slots, ownGutter }, index) => (
@@ -299,6 +379,7 @@ export const WeekGrid = ({
                 friendsById={friendsById}
                 now={now}
                 opensWithGutter={ownGutter}
+                handles={touch}
                 drawing={drawing}
               />
             </Fragment>
@@ -330,7 +411,7 @@ const Gutter = ({ slots, className }: { slots: Slot[]; className?: string }) => 
     {slots.map((slot) => (
       <div
         key={slot.start.getTime()}
-        style={{ height: SLOT_PX }}
+        style={{ height: SLOT }}
         className="pr-1 pt-px text-right text-[9px] leading-none tabular-nums text-muted-foreground/70"
       >
         {/*
@@ -352,8 +433,8 @@ const Gutter = ({ slots, className }: { slots: Slot[]; className?: string }) => 
   </div>
 )
 
-/** Where a run sits in its column, in pixels. The one place `SLOT_PX` is spent. */
-const boxOf = (run: Run) => ({ top: run.start * SLOT_PX, height: run.length * SLOT_PX })
+/** Where a run sits in its column. */
+const boxOf = (run: Run) => box(run.start, run.length)
 
 /**
  * The wall clock a Slot ends at — the next row's label, or the day's own end.
@@ -374,6 +455,7 @@ const DayColumn = ({
   friendsById,
   now,
   opensWithGutter,
+  handles,
   drawing,
 }: {
   /** Its position in the week, which is the identity the gesture addresses it by. */
@@ -391,6 +473,15 @@ const DayColumn = ({
   now: number
   /** Its own gutter is immediately to the left, and carries the day separator. */
   opensWithGutter: boolean
+  /**
+   * Whether a selected block grows resize handles — the `(hover: none)` path.
+   *
+   * A mouse resizes a block by drawing over it or erasing part of it, and a 7px
+   * edge zone it can hit is not worth the two knobs. A finger has neither, which
+   * is prototype 10 §3: *"the only part of the desktop model that has no touch
+   * equivalent at all"*.
+   */
+  handles: boolean
   drawing: DrawGesture
 }) => {
   const { draft } = drawing
@@ -485,6 +576,21 @@ const DayColumn = ({
 
   const popover = drawing.popover?.column === index ? drawing.popover.row : null
 
+  /**
+   * The block the handles hang off, taken out of the runs this column already
+   * derived rather than asked for separately — so the handles are on the edges
+   * of the shape actually on screen, including the merge with whatever the
+   * selection grew into.
+   *
+   * `draft === null` because a gesture in flight speaks for itself: mid-resize
+   * the two knobs would sit at the edges the block no longer has.
+   */
+  const selected = useMemo(() => {
+    const at = drawing.selection
+    if (!handles || draft !== null || at === null || at.column !== index) return null
+    return runs.find((run) => at.row >= run.start && at.row < run.start + run.length) ?? null
+  }, [handles, draft, drawing.selection, index, runs])
+
   return (
     /*
       `min-w-0` so the column can shrink with its siblings. Without it a flex
@@ -501,7 +607,7 @@ const DayColumn = ({
       {slots.map((slot, row) => (
         <div
           key={slot.start.getTime()}
-          style={{ height: SLOT_PX }}
+          style={{ height: SLOT }}
           className={cn(
             'relative flex justify-center',
             row === 0 && 'border-t-0',
@@ -592,6 +698,7 @@ const DayColumn = ({
               hue={viewer?.hue ?? 0}
               from={slots[run.start].label}
               to={endOf(slots, run.start + run.length - 1)}
+              rows={run.length}
               {...boxOf(run)}
             />
           ))}
@@ -621,13 +728,48 @@ const DayColumn = ({
         />
       ))}
 
+      {/*
+        The two knobs, over everything — a handle nothing can be pressed through
+        is not a handle. They are the last positioned siblings, which is the
+        stacking order in this column.
+      */}
+      {selected !== null && (
+        <>
+          <ResizeHandle
+            edge="top"
+            atRow={selected.start}
+            hue={viewer?.hue ?? 0}
+            onPointerDown={(event) =>
+              drawing.onHandleDown(event, {
+                column: index,
+                edge: 'top',
+                start: selected.start,
+                length: selected.length,
+              })
+            }
+          />
+          <ResizeHandle
+            edge="bottom"
+            atRow={selected.start + selected.length}
+            hue={viewer?.hue ?? 0}
+            onPointerDown={(event) =>
+              drawing.onHandleDown(event, {
+                column: index,
+                edge: 'bottom',
+                start: selected.start,
+                length: selected.length,
+              })
+            }
+          />
+        </>
+      )}
+
       {popover === null || viewer === null ? null : (
         <SlotPopover
           day={day}
           slot={slots[popover]}
           end={endOf(slots, popover)}
-          top={popover * SLOT_PX}
-          height={SLOT_PX}
+          box={box(popover, 1)}
           held={isFree(viewer.id, slots[popover].start)}
           /*
             The answer, and the span it holds for. `segmentAt` is what turns a
@@ -686,15 +828,14 @@ const HeatWash = ({ band, hue, outOf }: { band: Band; hue: number; outOf: number
         property of the *time*, not of a block.
       */
       className="pointer-events-none absolute inset-x-0 overflow-hidden rounded-[3px]"
-      style={{ top: start * SLOT_PX, height: (end - start) * SLOT_PX }}
+      style={box(start, end - start)}
     >
       {band.map((segment) => (
         <div
           key={segment.start}
           className="absolute inset-x-0"
           style={{
-            top: (segment.start - start) * SLOT_PX,
-            height: (segment.end - segment.start) * SLOT_PX,
+            ...box(segment.start - start, segment.end - segment.start),
             /*
               `friendColour` is the one spelling of a Friend's colour, and the
               strength is an `opacity` resolved by the cascade — so the ramp is
@@ -717,17 +858,30 @@ const HeatWash = ({ band, hue, outOf }: { band: Band; hue: number; outOf: number
  * Friends are free* (ticket 15), and issue 07 has not spent it yet. A wash here
  * would be the one channel the draft is not allowed to borrow.
  *
- * The time tag is ticket 10's, ported from touch: mid-gesture it is worth more
- * than the toolbar's state, because it says what you have actually drawn rather
- * than what mode you are in. Inside the run rather than above it — the grid is a
- * scroller, and a tag hanging off the top of the first row would be clipped by
- * it.
+ * ## The tag sits above the draft, and that is a correction
+ *
+ * Issue 06 put it *inside* the run's first row, reasoning that the grid is a
+ * scroller and a tag hanging off the top would be clipped. Ticket 10 §6 asks
+ * for it above, for a reason the desktop does not have: **the hand is on the
+ * glass**, and every pixel of the draft between the anchor and the finger is
+ * under it. A tag inside the first row is the one part of the arming signal
+ * most likely to be covered.
+ *
+ * The clipping objection is answered rather than overruled — the tag is clamped
+ * into the column, so a draft that starts on row 0 gets its tag over its own
+ * first row instead of outside the scroller. It carries a ground for the same
+ * reason: over the wash, unbacked text at 9px is not legible.
+ *
+ * It says the **duration** too, which is the number a range does not give you
+ * by inspection. `2h` under a thumb is worth more than reading `10:00–12:00`
+ * and subtracting.
  */
 const DraftRun = ({
   erasing,
   hue,
   from,
   to,
+  rows,
   top,
   height,
 }: {
@@ -735,26 +889,87 @@ const DraftRun = ({
   hue: number
   from: string
   to: string
-  top: number
-  height: number
+  /** How many Slots the draft covers — the duration, before it is a string. */
+  rows: number
+  top: string
+  height: string
 }) => (
-  <div
-    className={cn(
-      'pointer-events-none absolute inset-x-[3px] overflow-hidden rounded-[3px] border border-dashed',
-      erasing && 'border-destructive'
-    )}
-    style={{ top, height, ...(erasing ? {} : { borderColor: friendColour(hue) }) }}
-  >
+  <>
+    <div
+      className={cn(
+        'pointer-events-none absolute inset-x-[3px] rounded-[3px] border border-dashed',
+        erasing && 'border-destructive'
+      )}
+      style={{ top, height, ...(erasing ? {} : { borderColor: friendColour(hue) }) }}
+    />
     <span
       className={cn(
-        'absolute inset-x-0 top-0 truncate px-0.5 text-center text-[9px] leading-[11px] font-medium tabular-nums',
-        erasing ? 'text-destructive' : 'text-foreground/70'
+        'pointer-events-none absolute inset-x-[3px] truncate rounded-[3px] bg-background/85 px-0.5 text-center text-[9px] leading-[13px] font-medium tabular-nums',
+        erasing ? 'text-destructive' : 'text-foreground/80'
       )}
+      /* Above the draft, or on top of its first row where there is no above. */
+      style={{ top: `max(0px, calc(${top} - ${TAG_H}px))`, height: TAG_H }}
     >
-      {from}–{to}
+      {from}–{to} · {durationLabel(rows)}
+      {erasing && ' erase'}
     </span>
+  </>
+)
+
+/** The draft tag's height, in pixels. Two places need it: the box and the clamp. */
+const TAG_H = 13
+
+/**
+ * One edge of a selected block, as something a thumb can actually grab.
+ *
+ * **44px of hit area for a 34×14 knob** (prototype 10 §3, measured): the knob is
+ * what you see and the box around it is what you press, so the target clears the
+ * minimum without a knob big enough to hide the block it belongs to. At a 44px
+ * row the two handles of a 30-minute block abut exactly — `[edge−22, edge+22]`
+ * — which is why the touch row height and this number are the same measurement
+ * and not two.
+ *
+ * **`touch-action: none`, here and nowhere else this slice adds it.** It is the
+ * whole of why a handle drag needs no long-press and no arbitration: the browser
+ * has been told this box is not a scroller, so there is nothing to out-race. The
+ * grid around it keeps its default touch behaviour entirely, which is the rule
+ * issue 12 set for the drawer's own handle and the one issue 13 restates for
+ * these.
+ *
+ * `aria-hidden`, deliberately: this is an **accelerator**, and ticket 01's
+ * standing correction is that a gesture may be one and may not be the only
+ * route. Lengthening a block without it is drawing over it; shortening it is
+ * `Erase block` in the popover, then drawing what you meant. Neither of those is
+ * a gesture, and both are reachable from the tap that opens the popover.
+ */
+const ResizeHandle = ({
+  edge,
+  atRow,
+  hue,
+  onPointerDown,
+}: {
+  edge: Edge
+  /** The row boundary the edge sits on — `start` at the top, `start + length` below. */
+  atRow: number
+  hue: number
+  onPointerDown: (event: React.PointerEvent<HTMLElement>) => void
+}) => (
+  <div
+    aria-hidden
+    data-resize={edge}
+    onPointerDown={onPointerDown}
+    className="absolute inset-x-0 flex touch-none items-center justify-center"
+    style={{ top: `calc(${SLOT} * ${atRow} - ${HANDLE_PX / 2}px)`, height: HANDLE_PX }}
+  >
+    <span
+      className="h-[14px] w-[34px] rounded-full border border-background shadow-sm"
+      style={{ background: friendColour(hue) }}
+    />
   </div>
 )
+
+/** The handle's hit area, square with the minimum touch target. */
+const HANDLE_PX = 44
 
 /**
  * How tall a Hangout has to be before it can carry faces.

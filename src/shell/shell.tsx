@@ -58,7 +58,15 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { DRAWER_PEEK, dragTo, fullHeightOf, snapOf, type DrawerState } from '@/shell/drawer'
+import {
+  DRAWER_PEEK,
+  bodySwipe,
+  dragTo,
+  fullHeightOf,
+  mayChainClose,
+  snapOf,
+  type DrawerState,
+} from '@/shell/drawer'
 import {
   SHEET_BREAKPOINT,
   ShellContext,
@@ -342,15 +350,35 @@ export const ShellSidebar = ({
  * pointer event can drive, which is the difference between a verified surface
  * and a described one.
  *
- * ## `touch-action`, decided with issue 13 in mind rather than after it
+ * ## `touch-action`, and the second arbitration issue 13 added
  *
- * `touch-action: none` sits on **the handle only**, never on the drawer body
- * and never on anything the grid owns. Issue 13 is about to claim drag on this
- * same screen — long-press-then-draw, with a horizontal swipe paging the view —
- * and the way the two coexist is that they never share a surface: the drawer's
- * drag target is an 18px strip with a grip in it, and the calendar keeps its
- * default touch behaviour entirely. That is also the same rule issue 13 states
- * for its own resize knobs (*"`touch-action: none` on the knob only"*).
+ * `touch-action: none` still sits on **the handle only** — never on the drawer
+ * body, and never on anything the grid owns. Issue 13 has now claimed drag on
+ * this same screen (long-press-then-draw, with a horizontal swipe paging the
+ * view) and the two coexist because neither declares a surface un-scrollable:
+ * the grid's armed draw wins by `preventDefault` on a non-passive `touchmove`,
+ * and so does the close below. The only `touch-action: none` that slice adds is
+ * on its resize knobs, which is the one place its ticket asks for it.
+ *
+ * ## The scroll-chained close (issue 13's `## Addition`)
+ *
+ * The body **is** a drag surface now, which is the thing issue 12 stopped short
+ * of and handed on deliberately: it is a second arbitration between a scroll
+ * and a drag on the same pixels, and one ticket had to own both. The rule is
+ * two sentences and lives in `drawer.ts` as `mayChainClose` and `bodySwipe`:
+ *
+ * > A drag on the body may **start** only while the scroller is at its top, and
+ * > it stays refused for `SETTLE_MS` after the scroller *arrives* there.
+ *
+ * The first half is what keeps a continuous drag through the top from becoming
+ * a close: the press happened when `scrollTop` was positive, so it never armed.
+ * The second is for the discrete case — a flick that lands on the ceiling, then
+ * another flick of the same motion, which is what vaul's `scrollLockTimeout`
+ * exists for. `SETTLE_MS` is a **starting number**; issue 15 measures it.
+ *
+ * At the peek there is nothing to arbitrate — one card, `overflow-hidden`, and
+ * the drawer is already down — so the gesture is not attached at all, and a
+ * downward swipe there keeps doing nothing rather than becoming a second close.
  *
  * ## What the peek shows
  *
@@ -362,6 +390,8 @@ export const ShellSidebar = ({
 const BottomDrawer = ({ children }: { children: React.ReactNode }) => {
   const { drawer, setDrawer } = useAppShell()
   const surface = React.useRef<HTMLElement | null>(null)
+  /** The body, which holds the scroller and is itself the second drag surface. */
+  const body = React.useRef<HTMLDivElement | null>(null)
   /** The live pixel height while a finger is down, and null the rest of the time. */
   const [dragging, setDragging] = React.useState<number | null>(null)
 
@@ -448,7 +478,126 @@ const BottomDrawer = ({ children }: { children: React.ReactNode }) => {
     window.addEventListener('pointercancel', onUp)
   }
 
+  /**
+   * When the body's scroller was last **anywhere but** its top.
+   *
+   * `-Infinity` until it moves, so `performance.now() - away` is `Infinity` and
+   * a scroller that has never been scrolled is settled by definition. It is a
+   * timestamp rather than a boolean because the rule is about *how long ago*:
+   * see `SETTLE_MS`.
+   */
+  const away = React.useRef(Number.NEGATIVE_INFINITY)
+
+  /**
+   * Whether the click after a close drag has to be swallowed.
+   *
+   * **Cleared by the next press, not only by the click it is waiting for.** A
+   * latch that only a click can clear swallows the *next* press whenever that
+   * click never arrives — which is what a browser does after a
+   * `preventDefault`ed `touchmove`, and what `use-month-gesture.ts` says about
+   * its own `dragged` flag for the same reason. Caught in the browser: a close
+   * drag left it standing and the following tap on a card opened nothing.
+   */
+  const swallow = React.useRef(false)
+
+  /**
+   * The scroller inside the body, which is `RightPane`'s own `SidebarContent`.
+   *
+   * Asked for by `data-sidebar` rather than held in a ref, because the element
+   * belongs to the pane and arrives here as `children` — the drawer owns the
+   * surface and its height, and what is on it is the pane's business. It is
+   * absent at the peek, which is one of the two reasons the gesture is not
+   * attached there.
+   */
+  const scrollerOf = () => body.current?.querySelector<HTMLElement>('[data-sidebar="content"]')
+
   const out = drawer === 'full'
+
+  /**
+   * Watch the scroller so the settle window has something to measure.
+   *
+   * Re-run on `out` because the scroller does not exist at the peek: the pane
+   * renders one card and no `SidebarContent` there. Passive, because this reads
+   * `scrollTop` and never cancels anything.
+   */
+  React.useEffect(() => {
+    const element = scrollerOf()
+    if (element === undefined || element === null) return
+    const onScroll = () => {
+      if (element.scrollTop > 0) away.current = performance.now()
+    }
+    element.addEventListener('scroll', onScroll, { passive: true })
+    return () => element.removeEventListener('scroll', onScroll)
+  }, [out])
+
+  /**
+   * A downward swipe on the cards, which is what every native sheet does.
+   *
+   * **Touch only.** On a desktop the body is a mouse's scroller and a list of
+   * cards to click; a mouse drag that collapsed the pane would take text
+   * selection and card presses with it, and there is a grab handle two pixels
+   * above with a keyboard route into the same state. This is the gesture a
+   * finger expects and nothing else does.
+   */
+  const onBodyPointerDown = (event: React.PointerEvent) => {
+    if (event.pointerType !== 'touch') return
+    // Whatever the last gesture left waiting to be suppressed, this press is not
+    // it — see `swallow`.
+    swallow.current = false
+    if (!out || release.current !== null) return
+    const element = surface.current
+    if (element === null) return
+    // The rule, both halves. `drawer.ts` owns it; this is where it is asked.
+    if (!mayChainClose(scrollerOf()?.scrollTop ?? 0, performance.now() - away.current)) return
+
+    const { pointerId } = event
+    const startHeight = element.getBoundingClientRect().height
+    const origin = { x: event.clientX, y: event.clientY }
+    let height = startHeight
+    let closing = false
+
+    const onMove = (move: PointerEvent) => {
+      if (move.pointerId !== pointerId) return
+      if (!closing) {
+        const verdict = bodySwipe(move.clientX - origin.x, move.clientY - origin.y)
+        if (verdict === 'waiting') return
+        // Handed back to the scroller, which still has the gesture: nothing has
+        // been `preventDefault`ed yet, so the list scrolls as it always did.
+        if (verdict === 'scroll') return onUp()
+        closing = true
+        swallow.current = true
+      }
+      height = dragTo(startHeight, origin.y - move.clientY, full)
+      setDragging(height)
+    }
+
+    /*
+     * The same `preventDefault` the grid's armed draw uses, and the same reason:
+     * once this is the drawer's gesture the scroller must not also have it. At
+     * the top of a list there is usually nothing to scroll upwards, but there is
+     * pull-to-refresh, and there is the rubber band.
+     */
+    const onTouchMove = (moving: TouchEvent) => {
+      if (closing && moving.cancelable) moving.preventDefault()
+    }
+
+    const onUp = (up?: PointerEvent) => {
+      if (up !== undefined && up.pointerId !== pointerId) return
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      body.current?.removeEventListener('touchmove', onTouchMove)
+      release.current = null
+      setDragging(null)
+      if (closing) setDrawer(snapOf(height, full))
+    }
+
+    release.current = () => onUp()
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    body.current?.addEventListener('touchmove', onTouchMove, { passive: false })
+  }
 
   return (
     <aside
@@ -498,6 +647,21 @@ const BottomDrawer = ({ children }: { children: React.ReactNode }) => {
         for a vertical swipe that belongs to neither.
       */}
       <div
+        ref={body}
+        onPointerDown={onBodyPointerDown}
+        /*
+          A close drag can end on a card, and a card tap opens a detail sheet.
+          Browsers suppress the click after a `preventDefault`ed touchmove, but
+          not on every platform and not for a drag that only just crossed the
+          slop — so the one click after a close is swallowed here, in the capture
+          phase, before the card it landed on hears about it.
+        */
+        onClickCapture={(event) => {
+          if (!swallow.current) return
+          swallow.current = false
+          event.preventDefault()
+          event.stopPropagation()
+        }}
         className={cn('flex min-h-0 flex-1 flex-col', out ? 'overflow-y-auto' : 'overflow-hidden')}
       >
         {children}

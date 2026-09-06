@@ -1,6 +1,6 @@
 import { CandidateCard } from '@/candidates/candidate-card'
 import { containerOf, glows, isFullHouse, type Candidate } from '@/candidates/candidates'
-import type { CandidateList as List } from '@/candidates/use-candidates'
+import { friendsIn, type CandidateList as List } from '@/candidates/use-candidates'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useState } from 'react'
@@ -106,27 +106,17 @@ export const CandidateList = ({
 }
 
 /**
- * The Friends in a Candidate, as faces.
- *
- * `flatMap` rather than `map`: `friendsById` is built from the same visible set
- * the pipeline swept, so a miss is not reachable — but a Friend who left the
- * roster between the scan and this render would otherwise be an `undefined` in
- * a list React then tries to draw.
- */
-const friendsIn = (candidate: Candidate, byId: List['friendsById']) =>
-  candidate.friendIds.flatMap((id) => {
-    const friend = byId.get(id)
-    return friend === undefined ? [] : [friend]
-  })
-
-/**
  * Ticket 09's three empty states, its copy verbatim, in its order.
  *
  * Each one names the *reason* there is nothing to show, which is the whole
  * design: "no overlaps yet" shown to somebody who has hidden four Friends would
  * be true and useless.
+ *
+ * Exported because the bottom drawer's peek shows *"whichever of the three
+ * empty states applies"* (ticket 17) and there is no version of that which is
+ * worth a second copy of this copy.
  */
-const Empty = ({
+export const Empty = ({
   reason,
   hangoutsPinned,
   hiddenCount,

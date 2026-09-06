@@ -65,7 +65,16 @@ export const DropDialog = ({
       if (!open) onDismiss()
     }}
   >
-    <AlertDialogContent>
+    {/*
+      Bounded, because **there is no upper bound on how many Hangouts a long
+      erase reaches** — a month-view drag across a fortnight can name a dozen.
+      At 390px an unbounded list runs off both ends of a dialog that is centred
+      by `-translate-y-1/2` and has no scroller of its own, taking the two
+      buttons with it: the one dialog in the product whose whole job is to be
+      read before it is answered would become unanswerable. `svh` rather than
+      `vh` so a phone's collapsing address bar cannot put the footer under it.
+    */}
+    <AlertDialogContent className="max-h-[calc(100svh-2rem)] grid-rows-[auto_1fr_auto]">
       <AlertDialogHeader>
         <AlertDialogTitle>Erase this availability?</AlertDialogTitle>
         <AlertDialogDescription>
@@ -80,7 +89,7 @@ export const DropDialog = ({
         </AlertDialogDescription>
       </AlertDialogHeader>
 
-      <ul className="flex flex-col gap-2 text-left text-xs">
+      <ul className="flex min-h-0 flex-col gap-2 overflow-y-auto text-left text-xs">
         {dropping.map((hangout) => (
           <DropLine key={hangout.id} hangout={hangout} viewerId={viewerId} now={now} />
         ))}

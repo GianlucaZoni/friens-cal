@@ -135,11 +135,12 @@ export const MonthGrid = ({
   hangouts,
   now,
   tools,
+  faces = true,
   onShowWeek,
 }: {
   /**
    * The month lattice — the anchor's month padded out to whole weeks, which is
-   * **also the range the stores were read over** (`calendar.shownDays`).
+   * **also the range the stores were read over** (`calendar.days`).
    *
    * One array, handed to the grid and to `useAvailability` / `useHangouts`, so
    * there is no arrangement in which a cell is drawn from a range Postgres was
@@ -162,6 +163,22 @@ export const MonthGrid = ({
   /** The start of the current Slot — the app's one clock, held in `AppShell`. */
   now: number
   tools: DrawingTools
+  /**
+   * Whether the cells draw **who**. False on a phone (ticket 17), and it is a
+   * prop rather than a fork because it is the same cell — see `AVATAR`, whose
+   * measurement table is the whole argument: 12px is the *largest* size at which
+   * nine Friends still fit in a 78×80 cell carrying a chip, and a phone's cell
+   * is ~50×60. There is no size that is both a face and small enough, so
+   * dropping them removes the floor rather than fighting it.
+   *
+   * It costs nothing, because *who* was never only in the faces: a tap opens the
+   * day panel, which names everybody at 20px with their names beside them — and
+   * the cell's own `aria-label` still lists them either way, so nothing is lost
+   * to a screen reader at all. It is also the one place this cell's
+   * avatars-clip-before-the-chip rule stops mattering, because there are no
+   * avatars to clip.
+   */
+  faces?: boolean
   /** Move the anchor to this day and switch to the week — see the note above. */
   onShowWeek: (day: Date) => void
 }) => {
@@ -340,6 +357,7 @@ export const MonthGrid = ({
                   key={day.toISOString()}
                   index={first + column}
                   cell={cells[first + column]}
+                  faces={faces}
                   hue={viewer?.hue ?? null}
                   outOf={counted.length}
                   outside={!isSameMonth(day, anchor)}
@@ -489,6 +507,7 @@ const AVATAR = 'size-3'
 const MonthCell = ({
   index,
   cell,
+  faces,
   hue,
   outOf,
   outside,
@@ -501,6 +520,8 @@ const MonthCell = ({
   /** Its position in the lattice, which is the identity the gesture addresses it by. */
   index: number
   cell: MonthCellData
+  /** Whether this cell draws the faces at all — see `MonthGrid`'s own prop. */
+  faces: boolean
   /** The viewer's hue — the one colour on this grid. Null before setup finishes. */
   hue: number | null
   /** The size of the wash's query, which is the ramp's denominator. */
@@ -610,15 +631,22 @@ const MonthCell = ({
         aria-hidden
         className="mt-0.5 flex min-h-0 flex-1 flex-wrap content-start gap-0.5 overflow-hidden"
       >
-        {free.map((friend) => (
-          /*
-            Unlabelled, like a week block's faces: the cell's own `aria-label`
-            already names every one of them, and a per-face title would read the
-            same list a second time. At 12px there is no room for a name anyway —
-            the panel is where a name settles a hue collision.
-          */
-          <FriendBlob key={friend.id} identity={friend.identity} size="xs" className={AVATAR} />
-        ))}
+        {/*
+          The spacer stays when `faces` is false, and it is not an oversight: it
+          is what pushes the chip to the cell's foot and keeps the numeral where
+          it is, so the phone's cell is the desktop's with one channel removed
+          rather than a differently-laid-out box.
+        */}
+        {faces &&
+          free.map((friend) => (
+            /*
+              Unlabelled, like a week block's faces: the cell's own `aria-label`
+              already names every one of them, and a per-face title would read
+              the same list a second time. At 12px there is no room for a name
+              anyway — the panel is where a name settles a hue collision.
+            */
+            <FriendBlob key={friend.id} identity={friend.identity} size="xs" className={AVATAR} />
+          ))}
       </span>
 
       {booked.length > 0 && (

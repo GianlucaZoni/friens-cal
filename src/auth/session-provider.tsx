@@ -1,4 +1,4 @@
-import { SessionContext, type SessionValue } from '@/auth/use-session'
+import { SIGNUP_FAILURE, SessionContext, type SessionValue } from '@/auth/use-session'
 import type { Friend, FriendUpdate } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import type { AuthError, User } from '@supabase/supabase-js'
@@ -97,6 +97,40 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
     return error ? signInErrorMessage(error) : null
   }, [])
 
+  const signUp = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signUp({ email, password })
+
+    if (error) {
+      // Logged, never rendered — and the console is now the only place the real
+      // reason survives. `User already registered`, `Password should be at
+      // least 6 characters`, and the allowlist hook's own refusal all arrive
+      // here and all leave as the same sentence, which is the point
+      // (`SIGNUP_FAILURE`). Whoever debugs this from the group chat needs
+      // something to go on.
+      console.error('Signup failed:', error.code, error.message)
+      return SIGNUP_FAILURE
+    }
+
+    // Success with no session is not success. Two configurations produce it,
+    // both of them Confirm Email being switched back on in the dashboard: a
+    // brand-new account waiting on an email that ticket 13 made undeliverable,
+    // and an already-registered address, which Supabase then obfuscates into a
+    // user with no identities and no error rather than admitting it exists.
+    // Neither can happen while Confirm Email is off. If one ever does, this
+    // screen wants rewriting rather than patching — but it must not silently
+    // hand back a session that is not there and leave the Friend on a form that
+    // says nothing.
+    if (!data.session) {
+      console.error('Signup returned no session — is Confirm Email switched on?')
+      return SIGNUP_FAILURE
+    }
+
+    // Nothing to do on success: the auth listener flips the session, and the
+    // blank Friend row the `01-friend.sql` trigger just made is what sends them
+    // through `RequireSetup` to `/setup`.
+    return null
+  }, [])
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
   }, [])
@@ -143,10 +177,11 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
             }
           : auth,
       signIn,
+      signUp,
       signOut,
       saveFriend,
     }
-  }, [auth, fetched, userId, signIn, signOut, saveFriend])
+  }, [auth, fetched, userId, signIn, signUp, signOut, saveFriend])
 
   return <SessionContext value={value}>{children}</SessionContext>
 }

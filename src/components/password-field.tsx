@@ -21,6 +21,7 @@ export const PasswordField = ({
   autoComplete,
   description,
   disabled,
+  invalid,
 }: {
   id: string
   label: string
@@ -29,6 +30,12 @@ export const PasswordField = ({
   autoComplete: string
   description?: React.ReactNode
   disabled?: boolean
+  /**
+   * Marks the control, and with it the whole `InputGroup` — the wrapper's ring
+   * is driven by `has-[[data-slot][aria-invalid=true]]`, so this is what turns
+   * the border red rather than anything on the field itself.
+   */
+  invalid?: boolean
 }) => {
   const [shown, setShown] = useState(false)
 
@@ -42,6 +49,7 @@ export const PasswordField = ({
           value={value}
           autoComplete={autoComplete}
           disabled={disabled}
+          aria-invalid={invalid}
           onChange={(e) => onChange(e.target.value)}
         />
         <InputGroupAddon align="inline-end">

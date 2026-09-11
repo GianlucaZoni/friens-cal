@@ -42,7 +42,7 @@ no password reset (ticket 13); the sign-in screen already says so honestly.
       grant/revoke; not reachable over the Data API
 - [x] The hook is registered in the dashboard
 - [x] Sign-up screen using the ticket 18 draft A copy
-- [ ] An address on the list can sign up and lands in the setup flow
+- [x] An address on the list can sign up and lands in the setup flow
 - [x] An address not on the list is refused, with a message that does **not**
       reveal list membership
 - [x] An already-registered address produces the same message as a rejected one,
@@ -341,4 +341,38 @@ any signup that would confirm it is the signup that creates the account.
 `RequireAuth` → `/setup` is already proved separately (a session on `/sign-up`
 redirects to `/`, and `RequireSetup` sends a blank Friend row on to `/setup`),
 so what the run adds is the hook saying yes rather than no.
+
+
+## The acceptance run, 11 Sep 2026 — nine of nine
+
+The first real address on the list signed itself up and came out the other side
+of the setup flow. Read back from the roster as an existing Friend, since nothing can
+read `allowlist` and the account's own password is not ours to hold:
+
+```
+● "Demo Friend"  hue=200 tone=0.49 expr=happy     created 2026-08-30
+● "Gianluca"     hue=35  tone=0.49 expr=smug      created 2026-08-30
+● "UserTwo"      hue=275 tone=0.71 expr=thinking  created 2026-09-02
+● "GianY"        hue=47  tone=0.49 expr=thinking  created 2026-09-11T15:28
+```
+
+Signing that address up a second time answers `user_already_exists`, so the
+account exists; the fourth row is `01-friend.sql`'s trigger firing on it; and
+the row is **not blank**, so the Friend went through `/setup` and came back with
+values rather than nulls. That closes the last criterion, and it closes two
+others in passing that belong to neighbouring tickets: ticket 11's
+materialisation wrote `hue` and `tone` as numbers instead of leaving them null,
+and `tone = 0.49` is one of the six band interiors the check constraint allows —
+the off-by-one the ticket 18 prototype found would have stored something else.
+
+That also means the whole chain ran: hook said yes, trigger made the row,
+`RequireAuth` passed the fresh session, `RequireSetup` saw no `hue` and sent it
+to `/setup`, and the finished row let it back out to `/`.
+
+**One observation, for issue 03 rather than this one.** The new Friend's starting
+hue is 47 and the existing "Gianluca" row is 35 — twelve degrees apart, which is
+closer than the bias away from taken hues is meant to land. It resolves itself
+here, because that row belongs to the `friend@example.com` account being
+deleted, and step 2 of setup moves the slider anywhere by design. Worth a look
+the next time somebody joins a Group whose hues are all staying.
 

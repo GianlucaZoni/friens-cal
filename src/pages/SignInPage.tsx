@@ -112,6 +112,12 @@ export const SignInPage = () => {
               Not "invite-only": there are no invites. CONTEXT.md calls it a
               hand-curated allowlist, and this echoes the second line of the
               signup rejection copy ticket 18 chose.
+
+              It is a full stop and NOT a link to `/sign-up`, which does exist —
+              issue 14 decided that deliberately. A new Friend is given the URL
+              in the group chat; everyone else reads a sentence that is already
+              the honest answer, rather than following a link to a form that
+              will refuse them without saying why.
             */}
             <p className="text-xs text-muted-foreground">
               No account? Everyone here was added by hand.

@@ -6,6 +6,7 @@ import { DesignSystemPage } from '@/pages/DesignSystem'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SetupPage } from '@/pages/SetupPage'
 import { SignInPage } from '@/pages/SignInPage'
+import { SignUpPage } from '@/pages/SignUpPage'
 import { BrowserRouter, Route, Routes } from 'react-router'
 
 export const AppRoutes = () => {
@@ -14,6 +15,16 @@ export const AppRoutes = () => {
       <SessionProvider>
         <Routes>
           <Route path="/sign-in" element={<SignInPage />} />
+
+          {/*
+            Reachable by URL and by nothing else, on purpose (issue 14). No
+            screen links here: a new Friend is told this address in the group
+            chat, in the same message that tells them they were added to the
+            allowlist. The gate that matters is the `before-user-created` hook
+            either way — this is only about not advertising a door that five
+            people can open and everyone else bounces off, uninformatively.
+          */}
+          <Route path="/sign-up" element={<SignUpPage />} />
 
           <Route element={<RequireAuth />}>
             {/*

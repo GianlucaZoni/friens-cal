@@ -10,6 +10,7 @@ import { facesOf, pinned } from '@/hangouts/hangout'
 import { HangoutCard, PinnedHangouts, type HangoutControls } from '@/hangouts/hangout-card'
 import type { HangoutStore } from '@/hangouts/use-hangouts'
 import type { RosterState, SetUpFriend } from '@/roster/use-roster'
+import { DrawerFill } from '@/shell/drawer-fill'
 import { peekOf, type Peek } from '@/shell/peek'
 import { SidebarContent } from '@/shell/shell'
 import { useAppShell } from '@/shell/shell-context'
@@ -177,6 +178,12 @@ export const RightPane = ({
           onConfirm={hangouts.confirm}
           confirming={hangouts.confirming}
         />
+
+        {/*
+          Nothing, unless the URL asks for it. Issue 15's only way to give the
+          scroller something to flick. See `DrawerFill`.
+        */}
+        <DrawerFill />
       </div>
     </SidebarContent>
   )

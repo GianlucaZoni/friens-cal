@@ -324,21 +324,21 @@ const FriendMenu = () => {
             </DropdownMenuLabel>
 
             <DropdownMenuItem onClick={() => setDialog('profile')}>
-              <UserIcon /> Profile…
+              <UserIcon /> Profile
             </DropdownMenuItem>
 
             {/*
-            "How you look…" is the customise-blobatar item, under the name
+            "How you look" is the customise-blobatar item, under the name
             ticket 18 gave it. Disabled only in the gap before the row lands:
             there is no identity to seed the controls from, and opening them on
             an invented one would let a Friend "keep" a colour they never chose.
           */}
             <DropdownMenuItem onClick={() => setDialog('customise')} disabled={identity === null}>
-              <PaletteIcon /> How you look…
+              <PaletteIcon /> How you look
             </DropdownMenuItem>
 
             <DropdownMenuItem onClick={() => setDialog('password')}>
-              <KeyRoundIcon /> Change password…
+              <KeyRoundIcon /> Change password
             </DropdownMenuItem>
 
             <DropdownMenuItem onClick={() => void signOut()}>

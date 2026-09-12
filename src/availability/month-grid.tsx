@@ -344,7 +344,13 @@ export const MonthGrid = ({
         `preventDefault` on pointerdown, because that would also stop the cell
         taking focus, and the cells are real buttons on purpose.
       */}
-      <div ref={body} className="flex min-h-0 flex-1 select-none flex-col overflow-auto">
+      <div
+        ref={body}
+        /* `no-scrollbar` for the same reason as the week grid: the weekday
+           header is a sibling row, so a scrollbar with width would shift these
+           columns off it. */
+        className="no-scrollbar flex min-h-0 flex-1 select-none flex-col overflow-auto"
+      >
         {weeks.map((week, row) => {
           const first = row * DAYS_IN_WEEK
           /** Your own Availability, merged into one shape per contiguous stretch. */

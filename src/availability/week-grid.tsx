@@ -341,7 +341,16 @@ export const WeekGrid = ({
               }
             : undefined
         }
-        className="flex min-h-0 flex-1 items-start overflow-auto"
+        /*
+          `no-scrollbar` (shadcn's utility) is alignment, not taste. The day
+          headers are a sibling row above this element rather than inside it, so
+          a scrollbar that holds its width instead of overlaying takes its 15px
+          out of the scroller alone: the header row keeps the full width, the
+          seven columns get less, and every column sits 15px left of the date it
+          belongs under. Desktop only — touch scrollbars overlay, so they cost
+          nothing. Wheel, trackpad, touch and keyboard all still scroll.
+        */
+        className="no-scrollbar flex min-h-0 flex-1 items-start overflow-auto"
       >
         <Gutter slots={shared} />
         {/*

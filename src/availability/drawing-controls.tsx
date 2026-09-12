@@ -48,19 +48,46 @@ export const DrawingControls = ({ tools }: { tools: DrawingTools }) => (
     </Tabs>
 
     {/*
-      Not a third tab, on purpose. Erase is not a third geometry — it is the
+      Not a third tab, on purpose. Erase is not a third geometry: it is the
       other thing either geometry can do, and a drag still has to start inside a
-      block for it to mean anything. `aria-pressed` carries the state; the tint
-      is `toggleVariants`' own.
+      block for it to mean anything.
+
+      `aria-pressed` carries the state, and **issue 15 found that state was
+      unreadable**. `toggleVariants` tints a pressed toggle `bg-muted`, which is
+      `oklch(0.97 0 0)` sitting on an `oklch(0.985 0 0)` sidebar: 1.5% of
+      lightness at zero chroma, which on a phone in daylight is nothing at all.
+      It then uses that *same* `bg-muted` for `hover:`, so on a desktop an
+      un-pressed toggle under the cursor is pixel-identical to a pressed one.
+      The verification run read the control as broken on touch and it was not;
+      it was working silently, which is its own kind of broken.
+
+      So this one paints itself `--destructive` when it is on. That is already
+      the colour of an erase drag everywhere else it appears (issue 13: the
+      armed ring and the draft's tag both go `oklch(0.58 0.22 27)`), and this is
+      the only mode in the app where a drag takes something away. The `hover:`
+      pairs are scoped to `aria-pressed` too, or the base `hover:bg-muted` would
+      grey the red out under a cursor.
+
+      **The label goes dark rather than white in dark mode**, because
+      `--destructive` inverts there. Measured off the rasterised tokens: white
+      on the light theme's `oklch(0.58 0.22 27)` is **4.78:1** and passes AA,
+      but white on dark's far lighter `oklch(0.704 0.191 22.216)` is **2.89:1**
+      and does not. The near-black `--background` on that same red is
+      **6.85:1**. (Nothing in the app adds `.dark` to the document yet, so that
+      branch is measured from the tokens rather than seen on screen.)
     */}
     <div className="px-2 pt-2">
       <Toggle
         variant="outline"
         size="sm"
-        className="w-full justify-start"
+        className="w-full justify-start aria-pressed:border-destructive aria-pressed:bg-destructive aria-pressed:text-white aria-pressed:hover:bg-destructive/90 aria-pressed:hover:text-white dark:aria-pressed:text-background dark:aria-pressed:hover:text-background"
         pressed={tools.erasing}
         onPressedChange={tools.setErasing}
-        title="Drag inside a block to take that span out"
+        title={
+          tools.erasing
+            ? 'Erasing: drag inside a block to take that span out'
+            : 'Drag inside a block to take that span out'
+        }
       >
         <EraserIcon /> Erase
       </Toggle>

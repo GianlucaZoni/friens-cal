@@ -350,3 +350,39 @@ to take with this measurement in hand.
 The `SETTLE_MS` you would ship and why. The miss count from B on each phone, and
 the narrowest column that still works. Whether the red line ever appeared, on
 which phone, and doing what.
+
+## Addendum: the Erase toggle was working, and looked like it was not
+
+Raised during the run as a suspected touch bug, and it is not one. Chased on
+12 September 2026 and the behaviour is correct: with Erase on, an armed drag
+inside a block took `02:30-04:30` out of a `02:00-04:30` run on the first
+attempt.
+
+What is real is that **the control gave no usable sign of its own state**, which
+is how a verification run came to read it as broken.
+
+`toggleVariants` tints a pressed toggle `bg-muted`. In the light theme that is
+`oklch(0.97 0 0)` sitting on an `oklch(0.985 0 0)` sidebar: **1.5% of lightness
+at zero chroma**. It then uses that *same* `bg-muted` for `hover:`, so on a
+desktop an un-pressed toggle under the cursor is pixel-identical to a pressed
+one. (`aria-pressed` does match, so the state was always announced correctly to
+a screen reader. The `data-[state=on]:` in the same class list is Radix's
+convention and never matches Base UI, which sets `data-pressed`. Harmless here,
+but it is dead weight in a shadcn-generated file.)
+
+The Erase toggle now paints itself `--destructive` when it is on, which is
+already the colour of an erase drag everywhere else it appears (issue 13's armed
+ring and draft tag). Measured off the rasterised tokens: white on the light
+theme's red is **4.78:1**, white on dark's much lighter red is **2.89:1**, so
+the dark branch uses the near-black `--background` instead at **6.85:1**.
+
+Scoped to this one control rather than to `toggleVariants`, because it is the
+only bare `<Toggle>` in the app and it is the only mode where a drag takes
+something away. Everything else is `ToggleGroup`.
+
+**For the run sheet**: §A through §E are unaffected. The only change is that
+"tap Erase" is now obvious rather than a leap of faith.
+
+**Noticed while there, not actioned**: nothing in the app ever adds `.dark` to
+the document. The dark tokens are fully defined and issue 13 checked them, but
+there is no theme toggle, so dark mode is currently unreachable at runtime.

@@ -1,6 +1,6 @@
 # 16 — Deploy to Vercel
 
-Status: ready-for-human
+Status: ready-for-human — deployed, four acceptance criteria left to a human
 
 ## Parent
 
@@ -9,7 +9,7 @@ Status: ready-for-human
 ## What to build
 
 Almost nothing in the app. This closes the map's first **"Not yet specified"**
-entry, *"Deployment: where the SPA is hosted, how env vars get there"*, and it
+entry, _"Deployment: where the SPA is hosted, how env vars get there"_, and it
 is the last thing between a built v1 and a v1 the Group can open.
 
 The app is a **Vite SPA with no server**: no API routes, no SSR, no Vercel
@@ -194,3 +194,52 @@ app depends on the hostname, and the link gets pasted into a chat.
 
 Push-to-deploy is on via `vercel git connect`: main redeploys production, every
 branch gets a preview.
+
+### Deployed — 2026-09-12
+
+**Production: https://friens-cal.vercel.app**, project `giany/friens-cal`,
+push-to-deploy connected to `GianlucaZoni/friens-cal`.
+
+What the deploy actually did:
+
+- **The rewrite works.** `/`, `/sign-up`, `/setup` and `/design-system` all
+  return `200 text/html` on a cold request to the production origin. The
+  ticket's central worry is closed.
+- **Four env rows**, Production and Preview. Worth recording how to check them,
+  because `vercel env ls` is misleading: it prints an `eyJ2IjoidjIi…` ciphertext
+  preview for every variable, which looks exactly like a JWT pasted into the
+  wrong field. It is not the value. `vercel env pull --environment=<env>` and a
+  byte comparison against `.env` is the only honest check, and both matched in
+  both environments, so the `grep | cut | vercel env add` pipe carried no
+  trailing newline.
+- **The variables reached the bundle.** `dist/assets/index-XxabThhD.js` contains
+  the Supabase host, and the deployed pages render with an empty console. Not a
+  white page.
+- **Supabase needed nothing**, as predicted. `/auth/v1/settings` answers 200 and
+  the CORS preflight for a password grant from `https://friens-cal.vercel.app`
+  is allowed. No Site URL or Redirect URL change was required.
+
+**One surprise worth knowing about: preview deployments are behind Vercel
+Authentication.** Every path on a preview URL `302`s to `vercel.com/sso-api`.
+That is the team account's Standard Protection default, not a misconfiguration,
+and it leaves the production domain public. It does mean a preview link cannot
+be handed to a Friend for review without either signing them into Vercel or
+turning protection off in project settings. Left on.
+
+Acceptance criteria, marked honestly:
+
+- [x] Cold `/sign-up` renders the form on the deployed origin rather than a 404
+- [x] Both variables present in Production and Preview, values verified against
+      `.env`, deployed bundle reaches Supabase
+- [x] The lockfile question is settled, `yarn.lock` is the only one left
+- [x] The preview-writes-to-production-data decision is recorded above
+- [x] The map's "Not yet specified → Deployment" entry is struck with the URL
+- [ ] **Hard refresh on `/setup` while signed in.** Signed out it redirects to
+      sign-in, which is the guard behaving, and proves the route is served
+      rather than 404ing. The signed-in half is untested.
+- [ ] **Sign in on the deployed origin**
+- [ ] **The allowlist end to end**, one address on it and one off it
+- [ ] **Availability drawn on the deployed origin persists across a reload**
+
+The last four all need a real account and a real password, so they are the
+Friend's to run, not the agent's.

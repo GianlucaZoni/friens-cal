@@ -15,7 +15,7 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
 
 - **Domain**: `CONTEXT.md` at the repo root. Use its terms exactly — Friend,
   Availability, Candidate, Hangout, Participant, Hidden, Join, Left. Candidate
-  and Hangout are *not* interchangeable.
+  and Hangout are _not_ interchangeable.
 - **Decisions**: `docs/adr/0001` (Supabase), `docs/adr/0002` (cross-Friend
   availability writes).
 - **Skills**: every session calls `grilling` and `domain-modeling`. Prototype
@@ -79,7 +79,7 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   merging feedback is live mid-drag; click-no-move makes a 30-minute block
   (4px threshold); Escape aborts; ⇧click multi-selects, no marquee; column-locked
   drags with over-drag to cross midnight. **Deleting the middle of a range is
-  confirmed unacceptable** — recommends an erase drag starting *inside* a block;
+  confirmed unacceptable** — recommends an erase drag starting _inside_ a block;
   awaiting the human. ⌥+drag works but is undiscoverable, so it stays an
   accelerator behind a menu control.
 
@@ -87,7 +87,7 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   the composite is replaced by a **single-hue heatmap in the viewer's colour,
   opacity proportional to how many visible Friends are free**, with the viewer's
   own Availability marked by a border and ring rather than a solid fill.
-  Per-Friend colour leaves the grid entirely; *who* is answered only on hover.
+  Per-Friend colour leaves the grid entirely; _who_ is answered only on hover.
 
 - [07 — The data model and its policies](issues/07-data-model-and-schema.md):
   **Availability is slot rows** (`friend_id`, `slot_start`, unique together) —
@@ -113,7 +113,7 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   Hidden Friends, **blank out Hangout slots for everyone**, sweep into atomic
   runs, extend each run's Friend-set maximally, prune dominated, then sort by
   count (never duration). Sub-Candidates are separate cards. The **glow becomes
-  `2 × friends > group size`** and pinned Hangouts unpin when they *end* — both
+  `2 × friends > group size`** and pinned Hangouts unpin when they _end_ — both
   override ticket 01. The 30-minute minimum turns out to be structurally
   unreachable. A **slot-boundary timer** is required, because clipping makes the
   list stale with no data change.
@@ -129,8 +129,8 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   that is the point.
 
 - [12 — The app shell: two independently-toggled sidebars](issues/12-app-shell-two-sidebars.md):
-  **fork, not nested providers** — because two providers make *two simultaneous
-  sheets representable*, and only 5 of 23 exports touch the context. Top bar
+  **fork, not nested providers** — because two providers make _two simultaneous
+  sheets representable_, and only 5 of 23 exports touch the context. Top bar
   **variant C**; `⌘B` / `⇧⌘B` kept, but the handler owned (the shipped one fires
   on `⌥⌘B`, `⌃⌘B` and synthetic `key:"b"+shift`); both panes open by default;
   month+year label only, with day numbers on week column headers. **One sheet
@@ -155,7 +155,7 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   **draft A**, chosen because **copy alone cannot close the enumeration leak** —
   Supabase returns `User already registered` regardless, and only A's
   client-side catch-all shape closes it. **Change password ships** (ticket 13
-  killed *reset*, which needs email; `updateUser` does not). Blobatar animation:
+  killed _reset_, which needs email; `updateUser` does not). Blobatar animation:
   always for the top-right and customisation avatars, on sidebar hover / open
   drawer for the roster.
 
@@ -163,18 +163,18 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   drawer (view selector, drawing mode, roster with always-visible eyes);
   month+year chevron → a **calendar navigator**, not the month view; Today and
   the blobatar top-right; the right sidebar becomes a **bottom drawer that
-  peeks** with one labelled card — *Upcoming* (nearest unfinished Hangout) else
-  *Best Candidate*. **Month view ships on mobile without avatars** — dropping
+  peeks** with one labelled card — _Upcoming_ (nearest unfinished Hangout) else
+  _Best Candidate_. **Month view ships on mobile without avatars** — dropping
   them removes ticket 14's 12px floor instead of fighting it, since tap already
-  answers *who*. Opening the left drawer collapses the bottom one to its peek.
+  answers _who_. Opening the left drawer collapses the bottom one to its peek.
 
 - [16 — The right sidebar: Candidate and Hangout cards](issues/16-right-sidebar-cards.md):
   the app-shell card — no count numeral, **wrapping** blobatars, a left **stripe**
-  that *is* the glow. **On touch there are no card controls at all**: a tap opens
+  that _is_ the glow. **On touch there are no card controls at all**: a tap opens
   a detail sheet holding every action, which subsumes the 3-dots and keeps ticket
   10's "a bare tap never writes". Force-write is a **Dialog**. Sub-Candidates
   annotate their relation; the sub-glow tail collapses behind "show more" at the
-  *same* threshold as the glow; the empty state rewords when Hangouts are pinned;
+  _same_ threshold as the glow; the empty state rewords when Hangouts are pinned;
   `C_theme = min maxChroma(L_theme, h)`.
 
 - [04 — Provision the Supabase project](issues/04-provision-supabase-project.md):
@@ -187,7 +187,7 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
 
 - [19 — Optimistic writes, failed round-trips, and the gap in between](issues/19-optimistic-writes.md):
   paint optimistically with **no** pending treatment — a faded block would read
-  as *fewer Friends*, since ticket 15 spent opacity on the count. **One insert
+  as _fewer Friends_, since ticket 15 spent opacity on the count. **One insert
   per gesture** (atomic by construction, so partial failure never arises) with
   `on conflict do nothing`, which makes **retry idempotent**: two auto-retries,
   then revert and a toast naming the lost range. Realtime echoes are no-ops
@@ -200,15 +200,15 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   amendments once flat trust was live and visible:
   [07](issues/07-data-model-and-schema.md) and
   [08](issues/08-hangout-lifecycle.md) add **provenance** to `hangout` —
-  `created_by`, and `retimed_by` which *is* ticket 08 §1's "edited" mark rather
+  `created_by`, and `retimed_by` which _is_ ticket 08 §1's "edited" mark rather
   than a boolean beside it — explicitly as a record of who acted and **not** as
   ownership: every policy stays `using (true)`, because provenance earns its
-  place *because* anybody may cancel anybody's plan and nobody is notified.
+  place _because_ anybody may cancel anybody's plan and nobody is notified.
   Both need `with check` or they record nothing. [16](issues/16-right-sidebar-cards.md)
   gives its detail sheet its own content, **the Hangout's name** — issue 09
   found every action ticket 16 had put in that sheet belonged to issue 10, which
   is why confirm shipped as a bare tick — plus the `"Hangout"` default and the
-  name on the calendar marker. **Resolved by the human**: a *rename* **does**
+  name on the calendar marker. **Resolved by the human**: a _rename_ **does**
   count as an edit, so the mark is `edited_by` / `edited_at` and not
   `retimed_by` — against the recommendation, and correctly, because no RLS
   policy can say "if `starts_at` changed then the mark must be set" (`with
@@ -220,28 +220,34 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
   `.scratch/friens-cal-v1/`). [ADR-0002](../../docs/adr/0002-cross-friend-availability-writes.md)
   gains an amendment: the cross-Friend RPC takes **three** arguments, not the
   one its own refinement called "the entire reason the hole is narrow". A retime
-  needs the Participants extended to the range the Hangout is *arriving* at, and
+  needs the Participants extended to the range the Hangout is _arriving_ at, and
   the stored row only knows the one it is leaving — so the move and the extension
   are one statement in one transaction, because two statements outside one leave
   a plan at a time nobody covers with nothing to repair it. Still narrow: **who**
-  is derived from the stored row, and the range written *is* the Hangout's own
+  is derived from the stored row, and the range written _is_ the Hangout's own
   range by the time it returns.
 
   Three further things the tickets did not decide, resolved while building:
   **`created_by` is immutable** from a `before update` trigger, closing the one
   hole ticket 07's two `with check`s leave between them (an update can sign
-  itself honestly *and* reassign authorship, and no policy can compare the old
+  itself honestly _and_ reassign authorship, and no policy can compare the old
   row to the new); **`edited_at` is stamped by the database**, so provenance
   never carries a browser's clock; and **the auto-cancel exempts Past
   Hangouts** while the drop stays strict — derived from ticket 08 §6, since an
   auto-cancel is a cancel, and otherwise tidying up old Availability would erase
-  old plans against ticket 01. Ticket 08 §10's plural drop dialog is written *as*
+  old plans against ticket 01. Ticket 08 §10's plural drop dialog is written _as_
   the trigger it predicts, `generate_series` on both sides, because a dialog that
   named the wrong Hangouts would be believed.
 
 ## Not yet specified
 
-- **Deployment.** Where the SPA is hosted, how env vars get there.
+- ~~**Deployment.** Where the SPA is hosted, how env vars get there.~~
+  Settled by [issue 16](../friens-cal-v1/issues/16-deploy-to-vercel.md).
+  Vercel, Vite preset, `dist/`, with a catch-all rewrite to `index.html`
+  in `vercel.json` so deep links survive. Production is
+  **https://friens-cal.vercel.app**. The two `VITE_SUPABASE_*` variables
+  live in Production and Preview, and push-to-deploy is connected to
+  `GianlucaZoni/friens-cal`.
 - **"Copy last week".** The ergonomic escape hatch if redrawing every week
   turns out to be tedious in real use. Deliberately not designed now.
 - **Alt+drag on a day column** to copy a whole day's Availability. A different
@@ -252,7 +258,7 @@ Planning only. Nothing here ships production code; prototypes are throwaway.
 ## Out of scope
 
 - **Recurring availability.** Recurrence rules (exceptions, "this and future",
-  DST) would contaminate a model that is currently just *(friend, start, end)*.
+  DST) would contaminate a model that is currently just _(friend, start, end)_.
   Alt+drag duplication covers the ergonomic need.
 - **Multiple groups / circles.** v1 has exactly one implicit Group. A group
   table, membership joins, a switcher and per-group visibility are a separate

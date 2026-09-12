@@ -163,3 +163,34 @@ it for, and this is the moment it starts doing the job for real.
   command; a GitHub Actions pipeline that runs `yarn test`, `tsc -b` and
   `yarn lint` as a deployment gate is worth having and is not this.
 - **A staging Supabase project**, unless decision 2 goes that way.
+
+## Comments
+
+### The three decisions, settled — 2026-09-12
+
+**1. One lockfile: yarn.** `package-lock.json` is deleted. `yarn.lock` stays,
+which is what every doc in this repo already assumed, and it is what Vercel will
+now detect. `yarn build` reproduces the deploy build locally: `tsc -b` clean,
+1,054 kB bundle, 4,092 modules, no errors.
+
+`.vercel` is added to `.gitignore` ahead of `vercel link`, so the project link
+stays out of the repo.
+
+**2. Preview deployments write to production data. Accepted deliberately.**
+One Supabase project, the same `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_PUBLISHABLE_KEY` in Production and Preview. A branch that draws
+Availability draws it on the Group's real calendar, and a branch that deletes
+some deletes it for everyone.
+
+The reasoning: the blast radius is a handful of Availability rows in a calendar
+shared by friends, recoverable by drawing them again. A second Supabase project
+buys isolation at the price of a second schema to migrate, a second allowlist
+hook to keep in step and a second set of Friend rows to seed, all by hand,
+forever. Not worth it at this size. Revisit if the Group grows past the people
+who can be told "don't trust the preview link".
+
+**3. Domain: the `*.vercel.app` subdomain.** No custom domain. Nothing in the
+app depends on the hostname, and the link gets pasted into a chat.
+
+Push-to-deploy is on via `vercel git connect`: main redeploys production, every
+branch gets a preview.

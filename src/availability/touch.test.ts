@@ -13,8 +13,10 @@ import {
   TOUCH_SLOT_PX,
   durationLabel,
   edgeScrollBy,
+  onCompositorLoss,
   pageDirection,
   preArmVerdict,
+  reportCompositorLoss,
 } from './touch.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -135,4 +137,35 @@ test('a touch row clears the 44px minimum target, and the desktop row does not',
 
 test('arming is prototype 10’s ~450ms, accepted with its cost named', () => {
   assert.equal(ARM_MS, 450)
+})
+
+/* ------------------------------------------------------------------ *
+ * The instrument issue 15 reads
+ * ------------------------------------------------------------------ */
+
+test('the instrument hands each loss to its watchers, once per reason', () => {
+  // Issue 15 put a readout on the glass because a phone has no console, and it
+  // is only as good as this subscription. The once-per-reason rule is asserted
+  // here rather than trusted: it is the reason a tester must do a full reload
+  // between attempts, and a regression that made it once-per-*loss* would turn
+  // a screen that already spoke into a screen that looks like a pass.
+  const spoken = console.warn
+  console.warn = () => {}
+
+  const heard: string[] = []
+  const unsubscribed: string[] = []
+  const stop = onCompositorLoss((loss) => heard.push(loss))
+  onCompositorLoss((loss) => unsubscribed.push(loss))()
+
+  try {
+    reportCompositorLoss('uncancelable-touchmove', 'phase live')
+    reportCompositorLoss('uncancelable-touchmove', 'phase live, a second time')
+    reportCompositorLoss('pointercancel', 'armed draw cancelled')
+  } finally {
+    console.warn = spoken
+    stop()
+  }
+
+  assert.deepEqual(heard, ['uncancelable-touchmove', 'pointercancel'])
+  assert.deepEqual(unsubscribed, [])
 })

@@ -192,13 +192,35 @@ export const durationLabel = (slots: number): string => {
  * ------------------------------------------------------------------ */
 
 /** Which way the compositor took a gesture the grid had already armed. */
-type Loss =
+export type Loss =
   /** A `touchmove` arrived with `cancelable === false` — the scroll had begun. */
   | 'uncancelable-touchmove'
   /** A `pointercancel` arrived mid-draw — the scroller took the gesture outright. */
   | 'pointercancel'
 
 const reported = new Set<Loss>()
+
+const listeners = new Set<(loss: Loss, detail: string) => void>()
+
+/**
+ * Watch the instrument, and get an unsubscribe back.
+ *
+ * **Issue 15 added this, and it is the difference between the instrument being
+ * readable and not.** `reportCompositorLoss` writes to `console.warn`, which on
+ * a desktop is a keypress away and on a phone is a Mac, a cable and Safari's
+ * Web Inspector, so the one line this whole ticket turns on is invisible to
+ * the person actually holding the phone. `CompositorLossReadout` subscribes
+ * here and puts it on the glass.
+ *
+ * Deliberately a plain callback rather than a DOM event: `touch.ts` reaches
+ * `yarn test` under plain Node, where there is no `window` to dispatch on.
+ */
+export const onCompositorLoss = (listener: (loss: Loss, detail: string) => void): (() => void) => {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
 
 /**
  * The one impure thing in this file, and it is here rather than in a hook
@@ -219,6 +241,7 @@ const reported = new Set<Loss>()
 export const reportCompositorLoss = (loss: Loss, detail: string): void => {
   if (reported.has(loss)) return
   reported.add(loss)
+  for (const listener of listeners) listener(loss, detail)
   console.warn(
     `[touch] the scroller took an armed draw (${loss}): ${detail}. ` +
       'This is issue 15’s gate — preventDefault did not win. See ' +

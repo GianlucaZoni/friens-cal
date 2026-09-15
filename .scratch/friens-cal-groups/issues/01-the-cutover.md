@@ -1,6 +1,6 @@
 # 01 — The cutover: every table gains a cal, and Realtime moves to broadcast
 
-Status: ready-for-human
+Status: claimed
 Blocked by: none
 
 ## Parent

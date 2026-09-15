@@ -62,3 +62,22 @@ Also to settle here:
 3. **Whether switching Groups re-subscribes or re-connects.** Ticket 01 put the
    Group in the URL, so switching is a route change, and three hooks currently
    subscribe on mount.
+
+## From ticket 04, which is now resolved
+
+[04](04-group-schema-and-migration.md) did not decide Realtime, and made this
+ticket more urgent rather than less.
+
+- **The key is now `(cal_id, friend_id, slot_start)`.** With default replica
+  identity a delete payload is the primary key, so every delete event now
+  **names the cal**. That is ticket 02 §4's warning arriving as a fact.
+- **The client's store keeps its two-part key** (`slotKey(friendId, slotStart)`),
+  because one cal is on screen at a time. So whatever this ticket chooses, the
+  fold and the removal path do not have to widen; the subscription has to stop
+  delivering other cals' events.
+- **`friend` stays `using (true)`** and stays published, unchanged. Only
+  `availability` and `hangout` are tables whose reads became restricted, so the
+  delete hole is scoped to those two.
+- **Option A's cost went up slightly.** `replica identity full` on a table whose
+  key is now three columns writes the whole old row on every statement, against
+  a table that takes sixteen-row inserts.

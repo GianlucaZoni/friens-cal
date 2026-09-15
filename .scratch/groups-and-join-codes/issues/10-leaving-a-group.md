@@ -48,3 +48,28 @@ defend invariants this act now walks straight through.
    which would delete the Membership while RLS still has to admit the
    Availability delete that follows. One of those orders locks you out of your
    own cleanup.
+
+## From ticket 04, which is now resolved
+
+[04](04-group-schema-and-migration.md) settled the schema and left this ticket
+one question sharper than it was.
+
+- **Leaving is a plain `delete` on `membership`**, not an RPC, under
+  `using (friend_id = (select auth.uid()))`. ADR-0003's audited set stays at
+  three functions, and ticket 04 recorded why this is not a fourth.
+- **`membership` has no `left_at`.** The row goes. Rejoining by Code is a fresh
+  row and the Code still works.
+- **Your Availability in that cal goes by cascade**, because `availability`
+  references `(cal_id, friend_id)` on `membership` with `on delete cascade`.
+  Nothing has to remember to erase it.
+- **The open question this leaves is the one ticket 01 and ticket 04 disagree
+  about.** That cascade is a `delete` on `availability`, so the existing
+  statement-level trigger fires and **drops** you from the cal's Hangouts,
+  leaving no row. Ticket 01 said leaving marks you **Left**, which is a row with
+  `left_at` set and a permanently different meaning (CONTEXT.md: Left "outranks
+  Availability permanently"). Ticket 04 guaranteed only that the Availability
+  goes and handed the choice here.
+- **`hangout_participant` deliberately does not cascade from `membership`**, so
+  whichever way that goes, your name stays on past Hangouts — and it stays
+  readable, because ticket 04 kept `friend` globally readable for exactly this
+  reason.

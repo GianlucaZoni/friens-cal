@@ -49,3 +49,16 @@ and a cal of friends split across two countries is representable.
    answer is "the Group's zone, and per-viewer is a later effort", that is a
    legitimate outcome and cheaper than it looks — but it should be decided, not
    defaulted into by the constant staying where it is.
+
+## From ticket 04, which is now resolved
+
+[04](04-group-schema-and-migration.md) added the column and deliberately left it
+unread.
+
+- **`cal.time_zone` exists**: `text not null default 'Europe/Rome'`, checked
+  against `pg_timezone_names` so a typo fails at write time rather than at
+  render time.
+- **The client's `GROUP_TIME_ZONE` constant is still the only thing the grid
+  reads.** Ticket 04 refused to replace it, because doing so would decide this
+  ticket by implementation. Whether the grid draws the cal's zone or the
+  viewer's is still entirely open here.

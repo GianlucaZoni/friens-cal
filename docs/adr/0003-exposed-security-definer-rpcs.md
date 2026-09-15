@@ -103,3 +103,26 @@ permission.
   more than each being defensible alone.
 - If Supabase ever amends the guide, this ADR is where the judgement gets
   retired, not three migrations.
+
+## Amendment (2026-09-15, from issue 04) — the two new functions are `join_cal` and `create_cal`
+
+Issue 04 named the physical table. `group` is a fully reserved word in Postgres,
+so the domain term cannot be the identifier without quoting every reference, and
+the table is **`cal`** with a `cal_id` column.
+
+This ADR was written before that and names the two new functions `join_group`
+and `create_group` throughout. They are **`join_cal(code)` and
+`create_cal(name)`**. A function called `join_group` reaching into a table
+called `cal` is a seam that makes the next reader ask which of the two is stale.
+
+Nothing else moves. The four conditions stand word for word, and all three
+functions still satisfy them: `retime_hangout` derives its Participants from the
+stored row, `join_cal` joins `auth.uid()`, `create_cal` makes `auth.uid()` the
+first Member.
+
+**The set is still exactly three**, and issue 04 is where that was last tested.
+Leaving a Group looked like a fourth candidate and is not one: it is a plain
+`delete` on `membership` under `using (friend_id = (select auth.uid()))`, with
+the rest following from an `on delete cascade`. A function would have bought
+nothing the policies cannot express, and the auditable-as-a-set property in the
+Consequences above is the reason to notice that rather than write it.

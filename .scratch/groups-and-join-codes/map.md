@@ -20,7 +20,9 @@ that effort.
 - **Domain**: `CONTEXT.md` at the repo root, updated by this effort's ticket 01.
   **Group** is redefined — no longer singular and implicit, now many, named and
   joinable — and **Code**, **Membership** and **Invite** are new terms. Use them
-  exactly. The UI says "friens cal"; the code says Group.
+  exactly. Three words became two in ticket 04: the glossary concept is
+  **Group**, the identifier is **`cal`** (`group` is reserved in Postgres),
+  and the UI string is "friens cal".
 - **Decisions**: `docs/adr/0001` (Supabase), `docs/adr/0002` (cross-Friend
   availability writes, plus its 2026-09-02 amendment), and **`docs/adr/0003`
   (exposed `security definer` RPCs), written by this effort** — read it before
@@ -40,10 +42,11 @@ that effort.
   auth. Live project `mvvxyzqbdkkauxkltavw` (EU).
 - **The human is new to Supabase.** Any session touching it explains the core
   concepts as it goes rather than assuming them.
-- **This effort touches every table.** Per-Group Availability (ticket 01, Q4)
-  means `availability`, `hangout`, `hangout_participant` and `friend` all change
-  their policies, and the first two change their keys. There is no
-  new-table-only version of this.
+- **This effort touches every table but one.** Per-Group Availability (ticket
+  01, Q4) means `availability`, `hangout` and `hangout_participant` all change
+  their policies, and the first two change their keys. **`friend` does not**:
+  ticket 04 kept its `using (true)` read policy, because identity is global by
+  decision. There is no new-table-only version of this.
 - **There is live data.** The migration is real, but small: one Group,
   "spiritually unemployed", everybody in it, every existing row backfilled.
 
@@ -109,6 +112,30 @@ that effort.
   Group row. **Brute force is accepted and recorded**: the allowlist means the
   attacker must be someone a Friend vouched for by name, and a successful guess
   appears in a roster.
+
+- [04 — The Group, Membership, and dragging `cal_id` through everything](issues/04-group-schema-and-migration.md):
+  the schema the build is generated from, fourteen answers. **The table is
+  `cal`** — `group` is fully reserved in Postgres — so the product has two words
+  and not three: concept **Group**, identifier `cal`, UI string "friens cal"
+  (**[ADR-0003](../../docs/adr/0003-exposed-security-definer-rpcs.md) amended**,
+  the RPCs are `join_cal` and `create_cal`). Two findings outrank the rest.
+  **The lifecycle triggers are group-blind and that is now a bug**: erasing your
+  Saturday in one cal would drop you from another cal's Saturday Hangout, and
+  both join predicates have to gain `cal_id`. And **ticket 02's second helper is
+  dropped** — `friend` keeps `using (true)`, because `CONTEXT.md` declares
+  identity global and co-member scoping would render a Friend who left as a
+  **nameless, faceless Participant** on the past Hangouts they keep. One policy
+  helper, not two. `availability` **references `membership`** rather than
+  `friend`, so leaving a cal erases your Availability there by cascade;
+  `hangout_participant` does not, because a Participant row is a record that you
+  were there. Its redundant `cal_id` is held honest by a **composite FK**.
+  Leaving is a **plain `delete`**, so ADR-0003's audited set stays at three. The
+  client's two-part `slotKey` **survives untouched** (one cal on screen at a
+  time); the indexes do not. **The migration accepts an outage** and says so: the
+  moment the key widens, the deployed client's every draw fails, and at three
+  Friends a reload beats a deploy in the middle of a migration. Three files,
+  `08`–`10`. `CONTEXT.md` needed no change, and that was checked rather than
+  assumed.
 
 ## Not yet specified
 

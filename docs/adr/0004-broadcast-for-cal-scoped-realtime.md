@@ -103,3 +103,40 @@ never says who.
 - **`scripts/verify-realtime.mjs` no longer proves what it claims.** It tests
   `postgres_changes`, so after this it passes on `friend` and says nothing about
   the three tables that moved.
+
+## Amendment (2026-09-16, from issue 14) — a fourth table, a third topic, and `friend` still stays put
+
+Issue 14 scoped the roster to the cal's Members and found that doing so removes
+the event that makes the sidebar live. The act that adds somebody to your cal is
+a **`membership` insert**, and the three tables above do not include it, so a
+Friend who joins and starts drawing is a Friend the roster never heard of — and
+the heat denominator, which is that same set, under-reports by one until a
+reload.
+
+**`membership` joins the broadcast tables, on a third topic `cal:<id>:members`**,
+per-row `realtime.broadcast_changes()` carrying `friend_id`, one topic per hook
+as above. Same `select`-only `realtime.messages` policy, same
+`private.my_cal_ids()` helper.
+
+Reason 2 above applies unchanged: under a `postgres_changes` filter a membership
+delete arrives as primary-key columns only, and the client has nothing to check.
+
+**One reason above does not apply, and it is worth being explicit about.**
+Reason 1 is that removing a table from `supabase_realtime` is the only thing that
+closes the delete hole — but `membership` is a new table from issue 04 and was
+never published. Nothing is being removed here. This is a choice about how to add
+liveness to a table that had none, decided the same way for reason 2 and reason 3
+alone.
+
+**`friend` stays on `postgres_changes`, table-wide, and is now load-bearing for a
+second reason.** This ADR excluded it because identity is global and its reads
+are unrestricted. Issue 14 adds: it is also the only path by which a
+*brand-new account* — one created after a client's roster read — reaches that
+client at all. A new signup who then joins your cal arrives as a `friend` INSERT
+on this subscription, and the `cal:<id>:members` broadcast then makes them a
+Member. Two events on two mechanisms, both required. Narrowing this subscription
+to match any cal-scoped read would leave the members broadcast announcing a
+Member whose name nobody holds.
+
+The leaving burst noted in Consequences gains one message. It does not move the
+number.

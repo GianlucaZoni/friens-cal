@@ -11,6 +11,9 @@ done when no decision a builder would otherwise guess at is still open.
 
 Planning only. Nothing here ships production code; prototypes are throwaway.
 
+**Reached, 2026-09-16.** Fourteen tickets, all resolved; the frontier is empty
+and nothing in the fog graduated on the last one. The next move is `/to-issues`.
+
 This effort reverses one line of the v1 map's Out of scope section
 ("Multiple groups / circles… a separate effort if it is ever wanted"). It is
 that effort.
@@ -344,6 +347,41 @@ that effort.
   both mechanisms deliberately. `CONTEXT.md` needed no change, checked rather
   than assumed.
 
+- [14 — The roster reads every Friend in the product](issues/14-roster-read-scoping.md):
+  **the read is not what gets scoped — the sets it feeds are.**
+  `from('friend').select('*')` stays exactly as it is, and a `membership` read
+  for the current cal supplies the ids that filter it. Two findings outrank the
+  four questions. **`CONTEXT.md` had already decided this and the code has been
+  contradicting it**: Candidate reads *"two or more non-Hidden **Members**"*, so
+  the ticket brings a query into line with a word ticket 01 wrote rather than
+  choosing a scope. And **the damage is the denominator, not the leak** — the
+  ticket's own disclosure framing is half-wrong by the glossary's *"there is no
+  concept of a stranger"*, while `heat.ts`'s ramp is normalised over this set,
+  so every wash on every grid slides toward the bottom of the range with each
+  signup, `groupSize` counts the product, and **every stranger wears a muted
+  silence dot on your sidebar**. Scoping the *read* was disqualified by a
+  mechanism: **`facesOf` silently drops unknown ids**, so it does not reproduce
+  ticket 04's nameless, faceless Participant but an **absent** one, the face row
+  one short and nothing saying so. `namesById` is the casualty that would have
+  been missed — `nameFor`'s comment stops being true and prints *"someone else"*
+  for a live, present Friend. So **`friendsById` and `namesById` move inside
+  `useRoster`**, built from the full set, and no call site can pick the wrong
+  one. Both reads gate `ready`, because a null member set coerced either way
+  flashes an empty cal or the whole product. §3 dissolved and a larger one
+  replaced it: **joining a cal is a `membership` insert and nothing subscribed to
+  it**, so the sidebar stops being live — **a third topic `cal:<id>:members`**,
+  taking the seat ticket 12 left by name, and `useRoster` ends up running two
+  channels on two mechanisms. **Ticket 12's `friend` subscription turns out to be
+  load-bearing for a reason it was not kept for**: it is the only path a
+  brand-new account reaches an existing client by, so narrowing it would have the
+  members broadcast announce a Member whose name nobody has.
+  [ADR-0004 amended](../../docs/adr/0004-broadcast-for-cal-scoped-realtime.md);
+  a fourth table and a third topic, one of its three reasons pointedly not
+  applying. §4 closed at **three** reads: `use-taken-hues` stays product-wide and
+  deliberately so, because Setup happens before you belong anywhere and hue is
+  global. `CONTEXT.md` needed no change, and that was checked rather than
+  assumed — "roster" is a UI word for the Members, not a second name for them.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went
@@ -371,7 +409,10 @@ that effort.
 
 - **Closing the gap between a hook's read and its subscription.** Ticket 12 left
   v1's window where it found it: an event landing between the two is missed, and
-  a missed delete leaves a phantom row until reload. Broadcast's three-day
+  a missed delete leaves a phantom row until reload. Ticket 14 added a third
+  read-and-subscription pair without changing the item's character — a
+  `membership` event landing in that window leaves a Member off the sidebar and
+  out of the denominator until reload. Broadcast's three-day
   retention makes `replay: { since }` available for the first time, but choosing
   `since` after a reconnect is a client-state question with no bearing on any
   security decision. Revisit if somebody actually sees a phantom.

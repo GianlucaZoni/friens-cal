@@ -1,7 +1,7 @@
 # 14 — The roster reads every Friend in the product
 
 Type: grilling
-Status: open
+Status: claimed
 
 ## Question
 

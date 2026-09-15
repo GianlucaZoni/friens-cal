@@ -7,7 +7,6 @@ import { SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader } from '
 import { useAppShell } from '@/shell/shell-context'
 import type { CalendarViewState } from '@/shell/use-calendar-view'
 import { ViewSelector } from '@/shell/view-selector'
-import { useState } from 'react'
 
 /**
  * The left pane: where the grid is pointed, then what a drag means, then whose
@@ -48,35 +47,10 @@ export const LeftPane = ({
   silent: ReadonlySet<string>
   tools: DrawingTools
 }) => {
-  const { isSheet, sheet } = useAppShell()
-  const [hovering, setHovering] = useState(false)
-
-  /*
-    Roster blobatars animate **while the cursor is over the sidebar**, and on
-    mobile **while the drawer is open** (ticket 12 decision 9) — one crowd at a
-    time, rather than a wall of permanent motion.
-
-    `sheet === 'left'` rather than "we are below the breakpoint": below it the
-    pane only exists while the drawer is open today, because Base UI unmounts a
-    closed sheet, but that is the sheet's implementation and not the decision.
-    This is the condition the decision actually names.
-  */
-  const animate = sheet === 'left' || hovering
+  const { isSheet } = useAppShell()
 
   return (
-    // The handlers sit here rather than on `SidebarContent`, so the header the
-    // mark lives in counts as "over the sidebar" too.
-    //
-    // Only a mouse counts: a tap fires `pointerenter` and never the matching
-    // leave, so a touch user above the breakpoint would leave the roster
-    // animating for the rest of the session.
-    <div
-      className="flex h-full min-h-0 flex-col"
-      onPointerEnter={(event) => {
-        if (event.pointerType === 'mouse') setHovering(true)
-      }}
-      onPointerLeave={() => setHovering(false)}
-    >
+    <div className="flex h-full min-h-0 flex-col">
       <SidebarHeader className="h-12 shrink-0 justify-center border-b px-3">
         <span className="text-sm font-semibold">friens</span>
       </SidebarHeader>
@@ -101,7 +75,7 @@ export const LeftPane = ({
           </div>
         )}
         <DrawingControls tools={tools} />
-        <FriendRoster roster={roster} silent={silent} animate={animate} />
+        <FriendRoster roster={roster} silent={silent} />
       </SidebarContent>
     </div>
   )

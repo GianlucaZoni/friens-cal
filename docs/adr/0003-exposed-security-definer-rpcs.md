@@ -165,3 +165,24 @@ The lesson generalises past this table. **When condition 1 cannot be met, that
 is evidence the RPC is the wrong shape, not evidence the rule is too strict.**
 An argument naming a person is usually a read requirement in disguise; remove
 the read and the function tends to dissolve into a policy.
+
+## Amendment (2026-09-16, from issue 10) — leaving also writes a trigger, and the set is still three
+
+The amendment above says leaving is "a plain `delete` on `membership` … with
+the rest following from an `on delete cascade`". That is not the whole of it.
+Leaving must also mark the leaver **Left** on the cal's future Hangouts, and a
+cascade cannot do that — issue 10 settled Left rather than dropped, because a
+dropped Participant is indistinguishable from one who never joined and gets
+re-offered the plan they walked out of.
+
+That work is a `before delete on membership` trigger: `security definer`,
+`set search_path = ''`, revoked from `public`, `anon` and `authenticated`.
+
+**The set is still exactly three.** A trigger function is not callable over the
+Data API — it is reached by the referential machinery alone, which is the same
+distinction `06-hangout-lifecycle.sql` §3 draws for the drop trigger — so the
+four conditions above have nothing to say about it and the audit is unchanged.
+
+Recorded because the sentence above would otherwise send the next person
+looking for where the Left gets written, find nothing, and reach for a fourth
+function.

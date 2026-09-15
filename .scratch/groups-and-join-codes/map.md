@@ -212,6 +212,27 @@ that effort.
   gains the write side. Reverses the v1 map's per-viewer out-of-scope line, the
   second of its rulings this effort has overturned.
 
+- [10 — Leaving a Group, and what goes with you](issues/10-leaving-a-group.md):
+  **Left, not dropped** — ticket 01 beats ticket 04's cascade, because a dropped
+  Participant is indistinguishable from one who never joined and the sidebar
+  **re-offers them the plan they walked out of** the moment they rejoin and draw.
+  The finding that outranks the six questions: **ticket 04 §4's "your name stays
+  on past Hangouts" does not hold.** Leaving cascades every Availability row
+  including past ones, and the drop trigger has no Past exemption — so leaving
+  erases you from the cal's history. The shield is **one predicate**: the trigger
+  fires after the Membership row is already gone, so it asks whether the Friend
+  is still a Member and skips a departure. **The strict drop stays strict** — the
+  round-1 fear of reopening v1 ticket 07 §7 was wrong, and the correction is the
+  mechanism. Left is written by a **`before delete on membership` trigger**, not
+  a fourth RPC, so **ADR-0003's set stays at three** ([amended](../../docs/adr/0003-exposed-security-definer-rpcs.md)
+  so the next auditor can find where the Left is written). Order needs no dance:
+  one statement, five consequences, RLS never enters it. The dialog names every
+  Hangout, says the past is safe, and **shows the Code**, because leaving is the
+  moment it becomes unreachable to you. Rejoining needs nothing new — Rejoin is
+  unconditional and writes the Availability to cover the range. The control lives
+  on **`/`**, which **collides with ticket 05's two-target row** and is handed to
+  06 rather than decided. `CONTEXT.md`'s **Left** gained the Group case.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went

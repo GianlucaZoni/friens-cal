@@ -1,22 +1,57 @@
 # CONTEXT
 
 Glossary for `friens-cal`. Terms only — no implementation detail, no decisions
-(those live in `docs/adr/` and in the wayfinder map at
-`.scratch/shared-availability-calendar/map.md`).
+(those live in `docs/adr/` and in the wayfinder maps at
+`.scratch/shared-availability-calendar/map.md` and
+`.scratch/groups-and-join-codes/map.md`).
 
 ## Friend
 
-A person with an account. Membership is a hand-curated allowlist — there is no
-open signup, and no concept of a stranger. Every Friend belongs to the one
-Group. Prefer "Friend" over "user" or "member" in UI copy and code; the
-`auth.users` row Supabase creates for them is not the Friend, it is the
-credential behind one.
+A person with an account. There is no open signup: holding an account at all
+requires an Invite, so there is no concept of a stranger. A Friend belongs to
+any number of Groups, including none. Prefer "Friend" over "user" or "member" in
+UI copy and code; the `auth.users` row Supabase creates for them is not the
+Friend, it is the credential behind one.
+
+A Friend is one person everywhere. Their name, face and colour do not vary from
+Group to Group, and two Friends in different Groups may share a colour without
+it meaning anything.
 
 ## Group
 
-The single shared calendar all Friends belong to. There is exactly one, and it
-is implicit — it is never named, switched, or selected in the UI. Its existence
-as a term only matters because a future effort may introduce several.
+A named shared calendar, and the boundary around everything drawn on it. There
+are many, a Friend may be in several, and the product calls one a **friens
+cal**.
+
+A Group is the unit of privacy as well as of grouping: Availability, Candidates
+and Hangouts belong to exactly one Group and are invisible outside it. A Friend
+in two Groups states their Availability in each separately, and neither can see
+what the other knows — including when the same Friend is committed in both.
+
+A Group keeps one fixed time zone. It is never deleted: a Group nobody is left
+in simply persists, and its Code still works.
+
+## Member
+
+A Friend in a Group. Membership is entered by Code and left voluntarily; nobody
+can be removed by anyone else, and no Member outranks another. Renaming a Group,
+sharing its Code and confirming plans in it are open to every Member equally.
+
+## Code
+
+The six characters that let a Friend into a Group. Every Member can see it and
+is expected to share it — it is an address, not a secret, and it never changes.
+Holding a Code is not admission to the product: it moves a Friend who already
+has an account into a Group, and nothing more.
+
+## Invite
+
+Permission for one email address to hold an account at all, granted by a Friend
+and recorded against their name. It admits somebody to the product, not to any
+particular Group — an invited person still needs a Code to reach a calendar.
+
+Invite and Code are the two independent gates, and neither substitutes for the
+other.
 
 ## Slot
 
@@ -30,8 +65,13 @@ and twice a year that zone gives a day twenty-three hours or twenty-five.
 
 ## Availability
 
-A statement by one Friend that they are free for one Slot: *(friend, slot)*. It
-has no title, no participants and no invite state — those belong to a Hangout.
+A statement by one Friend, in one Group, that they are free for one Slot:
+*(group, friend, slot)*. It has no title, no participants and no invite state —
+those belong to a Hangout.
+
+It is scoped to its Group and says nothing anywhere else. A Friend free on
+Saturday in two Groups has said so twice, and a Friend who is busy in one Group
+is silent rather than unavailable in the other.
 
 Availability is **binary**: a Slot is drawn or it is not. There is no "maybe",
 and there is no half a Slot.
@@ -56,15 +96,15 @@ the grid. It never hides Hangouts.
 
 ## Candidate
 
-A **computed** suggestion: a run of Slots in which two or more non-Hidden
-Friends all have Availability. A Candidate is not stored and has no identity — it exists
+A **computed** suggestion, within one Group: a run of Slots in which two or more
+non-Hidden Members all have Availability. A Candidate is not stored and has no identity — it exists
 only as long as the Availability underneath it does, and it is recomputed
 whenever that changes.
 
 ## Hangout
 
-A **committed** record that a set of Friends is meeting at a given time,
-created by confirming a Candidate. It survives changes to the Availability that
+A **committed** record that a set of Friends is meeting at a given time, created
+by confirming a Candidate in one Group. It survives changes to the Availability that
 produced it, carries an optional title, and is visible to every Friend —
 including those who are not Participants.
 

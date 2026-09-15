@@ -288,6 +288,33 @@ that effort.
   growing to fit. `CONTEXT.md` needed no change, and that was checked rather
   than assumed.
 
+- [09 — Double-booking yourself across Groups](issues/09-double-booking.md): the
+  warning is **a mark, not an interruption**, and the ticket's own §2 framing is
+  what did not survive. `candidate-card.tsx:63` states a rule this would have
+  broken — *"confirming needs no dialog"*, because retime writes other people's
+  Availability and confirm writes none — so a confirm-time modal would have been
+  the first one on the action deliberately built without one. The warning moved
+  **earlier**, to where you are scanning rather than committing. **Ticket 10 had
+  already added a fourth act this ticket did not know about**: Rejoin makes you a
+  Participant exactly as confirm and Join do. One rule keeps it coherent — **the
+  mark is on a commitment you could take on, never on one you hold** — which is
+  also why confirming makes it vanish from the card just clicked, and why drawing
+  Availability is untouched at both ends: an offer is not a commitment. Blocking
+  was **never available**: ticket 04's constraint is per-cal, so preventing this
+  needs the coupling per-Group Availability exists to remove. **There is no
+  all-clear anywhere** — no green state, no "no conflicts" — because the absence
+  of a mark must never be readable as a pass, which is also why a failed fetch
+  takes the list's failure path instead of quietly drawing nothing. The read
+  needs **no RPC and no policy change**; ADR-0003's set stays at three. Card
+  carries the **time only** (bounded, and it says whether the conflict matters);
+  the detail and retime dialog carry the naming. **Retime is the best instance of
+  the feature** — its dialog already states consequences and its picker is live,
+  so the line recomputes and steers you off the collision. **Snapshot, not live**,
+  deliberately so open ticket 12 is not bent around a nicety — it is nonetheless
+  the **first consumer wanting data from cals not on screen**, recorded there. No
+  `CONTEXT.md` change and no ADR, both checked rather than assumed. Invisible
+  until somebody is in two cals.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went
@@ -334,6 +361,7 @@ that effort.
   otherwise need.
 - **Per-Group identity, or per-Group hue.** One face, one name, one colour,
   everywhere. v1 ticket 11 already accepted hue collisions on principle.
-- **Forbidding cross-Group double-booking.** Ticket 09 warns *you*. Actually
-  preventing it needs the cross-Group read that per-Group Availability exists to
-  prevent.
+- **Forbidding cross-Group double-booking, and warning anybody but you.**
+  [Ticket 09](issues/09-double-booking.md) warns *you*, and can, because they are
+  your own commitments. Both preventing it and warning you about *Marco* need the
+  cross-Group read that per-Group Availability exists to prevent.

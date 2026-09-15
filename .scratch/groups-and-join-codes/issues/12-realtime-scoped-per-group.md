@@ -81,3 +81,23 @@ ticket more urgent rather than less.
 - **Option A's cost went up slightly.** `replica identity full` on a table whose
   key is now three columns writes the whole old row on every statement, against
   a table that takes sixteen-row inserts.
+
+## Note from ticket 09 — the first consumer that wants *more* than one cal
+
+[Ticket 09](09-double-booking.md) resolved with a cross-cal busy mark, and it is
+worth knowing before this ticket chooses: **both options above are shaped around
+narrowing to one cal, and 09 is the first thing in the product that wants data
+from the cals that are not on screen.** Its query is your own non-Left
+Participant rows in every cal you are a Member of, over the view window.
+
+- **Option A** narrows with a filter string on `postgres_changes`. A cross-cal
+  subscription is not one filter string.
+- **Option B** gives each cal its own `cal:<id>` topic. Staying live across cals
+  means subscribing to *N* topics, one per Membership.
+
+**Ticket 09 chose not to need this.** Its mark is a snapshot refreshed on view
+or cal change, not a live subscription, explicitly so that this ticket is not
+bent around a non-blocking nicety. So it is a constraint you may ignore — but
+ignore it knowingly: if B wins and the topic is the unit of subscription, a
+future feature that does want live cross-cal data pays N subscriptions, and that
+is the moment to remember this note rather than discover it.

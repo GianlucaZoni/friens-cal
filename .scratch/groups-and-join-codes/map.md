@@ -261,6 +261,33 @@ that effort.
   same two fragments today, so this is a v1 defect per-viewer rendering merely
   makes common.
 
+- [06 — The Group dropdown in the app shell](issues/06-group-dropdown.md):
+  **the three dots survives**, against the recommendation, and the prototype's
+  work went into making it hittable rather than into replacing it. Branch
+  `prototype/06-group-dropdown`. Two variants: the brief literally, against a
+  pure switcher with no row controls at all. The measurement that changed the
+  build: at `icon-xs` the dots is **24x24 in a 40-tall row** — 5.8% of its area,
+  12px of horizontal slack — and a click 16px left of centre, driven at 375px,
+  **switched cal instead**; `-my-2 h-10 w-9` makes it 34 wide by the row's full
+  height, killing the vertical miss entirely for about one character of name. It
+  also needs **three propagation guards** (`pointerdown`, `click`, `keydown`),
+  because Base UI menus act on the press. **The cost is recorded rather than
+  solved: the dots cannot be reached by keyboard** — `Tab` closes the menu,
+  `ArrowRight` does nothing, and both escapes were tried (a submenu trigger *is*
+  the item, so the row would stop switching; two items in one row breaks the
+  one-dimensional arrow model). So **ticket 10's §8 is answered: two surfaces,
+  two menus, overlapping on rename** — the dots holds Rename and View code, `/`'s
+  overflow holds Leave and Rename, and the build sentence is *the dropdown's
+  menu is the shortcut, `/` is the complete set*. Leave stays off the dropdown.
+  Three things settled by grilling before building: the list is **alphabetical**
+  on both surfaces (05's handoff), names **cap at 40** where they are typed, and
+  the phone bar gets **no cal name** — with the drawer shut, *which cal am I in*
+  is answered by the Friends on the grid. **A menu inside the sheet turned out
+  to be a non-issue** (it portals above the sheet's focus trap and positions
+  correctly), and the menu stays **pinned to the trigger's width** rather than
+  growing to fit. `CONTEXT.md` needed no change, and that was checked rather
+  than assumed.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went

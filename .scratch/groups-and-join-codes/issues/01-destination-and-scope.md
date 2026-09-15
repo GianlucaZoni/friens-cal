@@ -199,3 +199,24 @@ named **"spiritually unemployed"**. Every existing Friend is a Member of it.
 Every existing `availability` and `hangout` row is backfilled to it with a
 single `update`, because there is exactly one Group to backfill to. Every
 existing `allowlist` row gets `invited_by` set to the human.
+
+## Amendment — the Time zone section is reversed by ticket 08
+
+[Ticket 08](08-whose-time-zone.md) resolved, and it reverses this ticket's
+**Time zone** answer. The split it drew was right and remains the useful way to
+think about the question: the Group's zone is what the Group *means* by
+Saturday, the viewer's zone is what the viewer's grid draws. What did not
+survive is the closing claim, "Either way the column is not wasted."
+
+The grid draws the **viewer's** zone. Ticket 08 then went looking for the reader
+of the Group's zone and found none: Candidates run on instants, every date
+string goes through `whenOf(start, end, zone)` with the viewer's, `floorOfView`
+is a per-viewer floor, the month lattice is the viewer's calendar, and a Hangout
+is a stored range rendered per viewer. Under per-viewer rendering there is
+nothing that ever asks what the Group means by Saturday, because each Friend
+means their own thing and that is the whole point of the choice.
+
+So `cal.time_zone` is dropped rather than added, and `CONTEXT.md`'s Group entry
+now says a Group has **no clock of its own**. The device zone this ticket was
+asked about lands on the **Friend** instead, as a mirror of the device written
+on sign-in, read only by other people's rosters.

@@ -17,7 +17,8 @@ that effort.
 
 ## Notes
 
-- **Domain**: `CONTEXT.md` at the repo root, updated by this effort's ticket 01.
+- **Domain**: `CONTEXT.md` at the repo root, updated by this effort's tickets 01
+  and 08.
   **Group** is redefined — no longer singular and implicit, now many, named and
   joinable — and **Code**, **Membership** and **Invite** are new terms. Use them
   exactly. Three words became two in ticket 04: the glossary concept is
@@ -42,11 +43,13 @@ that effort.
   auth. Live project `mvvxyzqbdkkauxkltavw` (EU).
 - **The human is new to Supabase.** Any session touching it explains the core
   concepts as it goes rather than assuming them.
-- **This effort touches every table but one.** Per-Group Availability (ticket
-  01, Q4) means `availability`, `hangout` and `hangout_participant` all change
-  their policies, and the first two change their keys. **`friend` does not**:
-  ticket 04 kept its `using (true)` read policy, because identity is global by
-  decision. There is no new-table-only version of this.
+- **This effort touches every table.** Per-Group Availability (ticket 01, Q4)
+  means `availability`, `hangout` and `hangout_participant` all change their
+  policies, and the first two change their keys. There is no new-table-only
+  version of this. **`friend` changes least and for a different reason**: ticket
+  04 kept its `using (true)` read policy, because identity is global by
+  decision, and ticket 08 then gave it a `time_zone` column that is a mirror of
+  the device rather than a setting. Its policies do not move.
 - **There is live data.** The migration is real, but small: one Group,
   "spiritually unemployed", everybody in it, every existing row backfilled.
 
@@ -185,6 +188,30 @@ that effort.
   `lower(btrim(email))`, because the old one let a trailing space through and
   that row would match the hook never. One file, `11-invite.sql`. `CONTEXT.md`
   needed no change, and that was checked rather than assumed.
+- [08 — Whose time zone does the grid draw](issues/08-whose-time-zone.md): the
+  grid draws **the viewer's zone**, against the recommendation, and **`cal.time_zone`
+  is dropped before it is ever written** — once every grid is its own, nothing
+  asks what the cal means by Saturday, so ticket 01's "either way the column is
+  not wasted" turns out to be the one part of its split that did not survive.
+  Two things were found by looking rather than reasoning. **A hybrid already
+  ships and nobody chose it**: `startOfDayInZone` has always read the *device's*
+  civil date and only reinterpreted it in Rome, so per-viewer is the only
+  position consistent with what is deployed. And **overlap is exact-instant
+  matching**, which makes a `:45` zone silently produce no Candidates and then
+  fail `hangout_on_the_slot_grid` on confirm — so slots are pinned to the
+  absolute `epoch % 1800 = 0` grid and `availability.slot_start` gains the check
+  `hangout` already has (→ ticket 04's file `09`). A Friend's zone is a
+  **mirror** of the device, written on sign-in, never a setting, and read only
+  by other people: the roster shows `8h ahead` when it differs. A time string
+  names its frame as **`GMT+2`** — `CEST` is unusable, because `Intl`'s `short`
+  is locale-*inverted* (`en-GB` gives Rome `CEST` and New York `GMT-4`; `en-US`
+  gives the reverse) — and only when the cal actually spans zones, so every cal
+  today shows nothing. DST needed nothing built and that was checked. **No ADR**:
+  the whole decision is what the words mean, so it lands in `CONTEXT.md`, where
+  **Group** loses its clock, **Slot** becomes an instant, and **Availability**
+  gains the write side. Reverses the v1 map's per-viewer out-of-scope line, the
+  second of its rulings this effort has overturned.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went
@@ -234,5 +261,3 @@ that effort.
 - **Forbidding cross-Group double-booking.** Ticket 09 warns *you*. Actually
   preventing it needs the cross-Group read that per-Group Availability exists to
   prevent.
-- **Per-viewer time zone rendering** is *not* here — it is a live question, see
-  ticket 08.

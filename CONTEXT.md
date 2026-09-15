@@ -28,8 +28,13 @@ and Hangouts belong to exactly one Group and are invisible outside it. A Friend
 in two Groups states their Availability in each separately, and neither can see
 what the other knows — including when the same Friend is committed in both.
 
-A Group keeps one fixed time zone. It is never deleted: a Group nobody is left
-in simply persists, and its Code still works.
+A Group has **no clock of its own**. Every Friend's grid is drawn in their own
+time zone, so there is no such thing as what the Group means by Saturday: there
+is only what each Friend means by it, and the overlap between them is what a
+Candidate is.
+
+A Group is never deleted: a Group nobody is left in simply persists, and its
+Code still works.
 
 ## Member
 
@@ -60,8 +65,14 @@ thing anybody can say anything about: nothing in the product refers to a moment
 finer than a Slot, and every Availability, Candidate and Hangout begins and ends
 on one.
 
-A day is **not** always forty-eight Slots. The Group keeps one fixed time zone,
-and twice a year that zone gives a day twenty-three hours or twenty-five.
+A Slot is an **instant**, not a wall clock. Two Friends read different times
+off the same Slot and both are right: a Slot that says 20:00 in Rome says 03:00
+the next morning in Tokyo, and it is one Slot.
+
+A day is **not** always forty-eight Slots, and which day is short is a fact
+about the **viewer**, not about the Group. Twice a year a zone gives a day
+twenty-three hours or twenty-five; two Friends can have their short day on
+different dates, and one week can hold both.
 
 ## Availability
 
@@ -72,6 +83,11 @@ those belong to a Hangout.
 It is scoped to its Group and says nothing anywhere else. A Friend free on
 Saturday in two Groups has said so twice, and a Friend who is busy in one Group
 is silent rather than unavailable in the other.
+
+Drawing happens in the drawer's own time zone, and nothing is ever translated.
+A Friend in London who draws Saturday evening has claimed those instants; a
+Friend in Rome reads the same claim as Saturday night. There is no third clock
+to translate either of them into.
 
 Availability is **binary**: a Slot is drawn or it is not. There is no "maybe",
 and there is no half a Slot.
@@ -131,5 +147,10 @@ writes the Availability to cover it — joining is a statement that you are free
 
 An explicit marker that a Friend removed themselves from a Hangout. It outranks
 Availability permanently: a Friend who Left is never re-added by drawing
-Availability, and is never re-offered automatically. Leaving does not erase the
-Availability underneath.
+Availability, and is never re-offered automatically.
+
+Leaving a Hangout does not erase the Availability underneath. Leaving the
+**Group** does — and it marks you Left on every Hangout there that has not yet
+happened. The ones that already happened keep you as a Participant: a past
+Hangout is a record of who was there, and leaving a Group says nothing about
+where you were.

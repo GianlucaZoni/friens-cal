@@ -374,3 +374,40 @@ do not move. Only the names do.
 - **Whose time zone the grid draws.** Ticket 08's. See §11.
 - **What leaving marks on Hangouts.** Ticket 10's. See §3.
 - **Whether double-booking warns.** Ticket 09's, now unblocked.
+
+## Amendment — ticket 08 deletes §11 and adds one constraint
+
+[Ticket 08](08-whose-time-zone.md) resolved. Two changes land in this ticket's
+files, and the discipline of §11 is what makes the first one free.
+
+**§11 is deleted. `cal.time_zone` is never created.** §11 added the column,
+validated it against `pg_timezone_names`, and deliberately left it unread so
+that ticket 08 stayed open rather than being decided by implementation. Ticket
+08 chose per-viewer rendering and then found the column has no reader at all.
+Because `supabase/` still stops at `07-allowlist.sql`, files `08`–`10` are spec
+and not migration, so this removes a paragraph rather than requiring an
+eleventh file. `create_cal` keeps its single `name` argument, and ADR-0003 needs
+no further amendment.
+
+**`availability.slot_start` gains the constraint `hangout` already has.** File
+`09` adds
+
+```sql
+constraint availability_on_the_slot_grid check (
+  date_part('epoch', slot_start - '1970-01-01 00:00:00+00'::timestamptz)::bigint % 1800 = 0
+)
+```
+
+spelled exactly as `hangout_on_the_slot_grid` is, and for the same reason §5 of
+`05-hangout.sql` gives: the naive `extract(minute from slot_start) in (0, 30)`
+is accepted by Postgres and is wrong, because `timestamptz` field extraction is
+not immutable.
+
+This ticket did not need the constraint. Under one shared zone the client could
+not produce an off-grid instant, so the invariant was a property of
+`slotsOfDay`. Per-viewer rendering makes it producible: a viewer in a `:45` zone
+drawing on their own local-midnight grid writes instants that no European
+Friend's timeline contains, so overlap silently counts zero and **no Candidate
+ever appears**. Ticket 08 pins slot rows to the absolute `epoch % 1800 = 0`
+grid to prevent that in the client; this constraint is what stops it being only
+a client promise.

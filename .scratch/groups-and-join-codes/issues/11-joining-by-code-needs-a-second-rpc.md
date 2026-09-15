@@ -1,7 +1,7 @@
 # 11 — Joining by Code needs a second exposed `security definer` RPC
 
 Type: grilling
-Status: open
+Status: claimed
 
 ## Question
 

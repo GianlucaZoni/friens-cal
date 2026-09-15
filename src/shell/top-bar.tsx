@@ -285,8 +285,9 @@ const FriendMenu = () => {
           }
         >
           {identity ? (
-            // Always, for this one avatar (ticket 18 decision 3). The roster's
-            // animate on sidebar hover instead, and that is issue 04's.
+            // Always, for this one avatar (ticket 18 decision 3) — and the
+            // roster's are always on too now, so nothing in the shell starts or
+            // stops animating as the cursor moves.
             <FriendBlob identity={identity} className="size-7" animate title={name} />
           ) : (
             /*

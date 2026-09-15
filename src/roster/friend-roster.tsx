@@ -32,7 +32,6 @@ import { EyeIcon, EyeOffIcon, UserRoundIcon } from 'lucide-react'
 export const FriendRoster = ({
   roster,
   silent,
-  animate,
 }: {
   roster: RosterState
   /**
@@ -43,8 +42,6 @@ export const FriendRoster = ({
    * reaching for them. `AppShell` holds both.
    */
   silent: ReadonlySet<string>
-  /** Blobatars animate while the cursor is over the sidebar (ticket 12 d9). */
-  animate: boolean
 }) => {
   const { friends, visible, hidden, toggleHidden, status } = roster
 
@@ -78,7 +75,6 @@ export const FriendRoster = ({
               friend={friend}
               hidden={hidden.has(friend.id)}
               silent={silent.has(friend.id)}
-              animate={animate}
               onToggle={() => toggleHidden(friend.id)}
             />
           ))
@@ -134,14 +130,12 @@ const RosterRow = ({
   friend,
   hidden,
   silent,
-  animate,
   onToggle,
 }: {
   friend: RosterFriend
   hidden: boolean
   /** No Availability anywhere in the current view. */
   silent: boolean
-  animate: boolean
   onToggle: () => void
 }) => {
   const Eye = hidden ? EyeOffIcon : EyeIcon
@@ -183,7 +177,7 @@ const RosterRow = ({
                 className="h-5 w-0.5 shrink-0 rounded-full"
                 style={{ background: friendColour(friend.identity.hue) }}
               />
-              <FriendBlob identity={friend.identity} size="sm" animate={animate} />
+              <FriendBlob identity={friend.identity} size="sm" animate />
             </>
           )}
           <span className="min-w-0 flex-1 truncate text-[13px]">{friend.name}</span>

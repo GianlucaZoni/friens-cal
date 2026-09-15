@@ -38,9 +38,10 @@ export const CustomisePanel = ({
 }) => (
   <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
     <div className="flex shrink-0 flex-col items-center gap-3">
-      {/* `animate` here and in the top-right cluster, nowhere else yet: an
-          animated blobatar is inline SVG rather than one `<img>`, and this is
-          the single-avatar case that pays for it (ticket 18 decision 3). */}
+      {/* `animate`, like the top-right cluster and the roster rows: an animated
+          blobatar is inline SVG rather than one `<img>`, and this is the
+          single-avatar case that most obviously pays for it (ticket 18
+          decision 3). */}
       <FriendBlob
         identity={identity}
         size="xl"

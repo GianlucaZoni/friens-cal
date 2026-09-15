@@ -233,6 +233,34 @@ that effort.
   on **`/`**, which **collides with ticket 05's two-target row** and is handed to
   06 rather than decided. `CONTEXT.md`'s **Left** gained the Group case.
 
+- [13 — Prototype: a run that crosses the viewer's midnight](issues/13-midnight-straddle-prototype.md):
+  **an open edge and a chevron, and nothing else** — the composite, the month
+  and the Candidate card all come back untouched. Branch
+  `prototype/13-midnight-straddle`, which mounts the real grid twice over one
+  store. Two findings outrank the five questions. **This ticket's own premise is
+  wrong**: a run splits only where the far viewer's midnight lands *inside* it,
+  an offset of about +0:30 to +4:00, so "far enough away" is backwards — past
+  four hours the evening stops fragmenting and instead lands **whole on a day
+  nobody drew on**, which is commoner and which nothing can mark, because
+  Availability is slot rows and there is no stored fact that a run has a home
+  day. And where it does split it splits into a **30-minute sliver** that reads
+  as a mis-click, with the two fragments ~960px apart in the scroller so no
+  scroll position shows both. That sliver is what beats *nothing*. The named
+  variant lost because its label **truncates at week-column width**, the width
+  where splits are commonest, and the card already says it. **The off-screen
+  case dissolved**: a chevron pointing *down* is not an arrow at a column, so
+  the lie lived in a spelling nobody built — though continuation is still asked
+  of the **store** and not of the columns on screen, which is the part the build
+  must carry. The month gains a **phantom day** — one more than the drawer's,
+  holding a 2½-hour tail and painted as dark as a whole evening, because
+  `peakOf` is concurrency and ticket 15 forbade a second channel — **accepted**.
+  The Candidate card needed nothing and turns out to be the **authority** the
+  split grid defers to: `scanCandidates` runs on instants, so both zones hold
+  byte-identical windows and only the words move. Worth building, and **not
+  gated on the cal spanning zones**: a Rome Friend drawing 22:00–01:00 gets the
+  same two fragments today, so this is a v1 defect per-viewer rendering merely
+  makes common.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went

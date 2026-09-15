@@ -1,7 +1,7 @@
 # 13 — Prototype: a run that crosses the viewer's midnight
 
 Type: prototype
-Status: open
+Status: claimed
 
 ## Question
 

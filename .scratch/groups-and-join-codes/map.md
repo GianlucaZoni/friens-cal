@@ -24,11 +24,12 @@ that effort.
   exactly. Three words became two in ticket 04: the glossary concept is
   **Group**, the identifier is **`cal`** (`group` is reserved in Postgres),
   and the UI string is "friens cal".
-- **Decisions**: `docs/adr/0001` (Supabase), `docs/adr/0002` (cross-Friend
-  availability writes, plus its 2026-09-02 amendment), and **`docs/adr/0003`
-  (exposed `security definer` RPCs), written by this effort** — read it before
-  adding any function the browser can call. ADR-0002's RPC must gain a Group —
-  see ticket 04.
+- **Decisions**: `docs/adr/0001` (Supabase) and `docs/adr/0002` (cross-Friend
+  availability writes, plus its 2026-09-02 amendment). **Two more were written by
+  this effort**: `docs/adr/0003` (exposed `security definer` RPCs), to read
+  before adding any function the browser can call, and `docs/adr/0004`
+  (broadcast for cal-scoped Realtime), to read before touching a subscription or
+  a publication. ADR-0002's RPC must gain a Group — see ticket 04.
 - **The v1 map is the prior art and is still binding**:
   `.scratch/shared-availability-calendar/map.md`. Nineteen resolved tickets. Do
   not re-decide anything it settled; zoom into the ticket instead. Its
@@ -315,6 +316,34 @@ that effort.
   `CONTEXT.md` change and no ADR, both checked rather than assumed. Invisible
   until somebody is in two cals.
 
+- [12 — Realtime, scoped per cal: filter, or broadcast](issues/12-realtime-scoped-per-group.md):
+  **broadcast, and the three tables leave the `supabase_realtime`
+  publication** — which is the load-bearing half, because the DELETE exemption is
+  a property of the publication and not of our hooks, so any holder of the
+  publishable key could have subscribed and received every delete whatever the
+  client did. Two findings outrank the choice. **It was never only a leak**: on
+  *insert* RLS works correctly and still breaks the product, because a Friend in
+  two cals is authorised to read both and the client's two-part `slotKey` cannot
+  tell them apart, so cal B's Saturday paints onto cal A's grid. And the tables
+  are **three, not two** — `hangout_participant` is published too — across **two
+  hooks, not three**. The research corrected both earlier tickets: the filter
+  reads the **WAL identity**, not the trimmed payload, so `availability` never
+  needed `replica identity full` and **ticket 04 §6's cost note is backwards**;
+  but under a filter the browser gets a pkey-only delete payload and **has
+  nothing to check**, which is what decided it. **Ticket 02's open item 2 is
+  answered**: `postgres_changes` authorization is *not* cached, so mid-session
+  joins work — and the inverse, channel-policy caching, lands on **ticket 10's
+  leave** instead, defused only because Leave routes you out of `/g/:id`. Policy
+  is **`select` only**, so no client can forge an event. `setAuth` and
+  `replica identity full` were **costs that did not exist**; `replay` is an
+  upside found and deliberately unused. Graduates
+  **[ADR-0004](../../docs/adr/0004-broadcast-for-cal-scoped-realtime.md)** and a
+  new file `11-realtime-per-cal.sql` riding ticket 04's outage. **The roster read
+  is broken and nobody owned it** (→ [ticket 14](issues/14-roster-read-scoping.md));
+  its *subscription* stays table-wide on `postgres_changes`, so the product runs
+  both mechanisms deliberately. `CONTEXT.md` needed no change, checked rather
+  than assumed.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went
@@ -339,6 +368,13 @@ that effort.
   coming, because with invites self-serve "who is in this product, who vouched
   for them, and how do I undo that typo" is a question somebody will ask from
   inside the app.
+
+- **Closing the gap between a hook's read and its subscription.** Ticket 12 left
+  v1's window where it found it: an event landing between the two is missed, and
+  a missed delete leaves a phantom row until reload. Broadcast's three-day
+  retention makes `replay: { since }` available for the first time, but choosing
+  `since` after a reconnect is a client-state question with no bearing on any
+  security decision. Revisit if somebody actually sees a phantom.
 
 ## Out of scope
 

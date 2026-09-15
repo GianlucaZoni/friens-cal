@@ -46,3 +46,31 @@ Ticket 03 may find Input OTP does not fit `base-lyra`; if it has not reported
 yet, prototype with whatever is at hand and note the assumption.
 
 Prototypes live on a `prototype/` branch, not on `main`. Link it here.
+
+## From ticket 03, which is now resolved
+
+[03](03-input-otp-research.md) confirms Input OTP fits, so prototype with it
+rather than around it. Four defaults are wrong for a join Code and all four are
+one prop each:
+
+- **`pattern` must admit both cases**, e.g.
+  `^[2-9A-HJKMNP-TV-Za-hjkmnp-tv-z]+$`. It compiles with no flags and is tested
+  against the raw value *before* `onChange` fires, so uppercasing in the handler
+  cannot rescue a lower-case keystroke — the character never arrives. Ticket 01
+  said pasting a lower-case code must work, and this is the line that decides it.
+- **`pasteTransformer`** runs before the pattern test and also strips dashes and
+  spaces the pattern would otherwise reject in silence.
+- **`inputMode="text"`** — it defaults to `numeric`, a number pad for a code
+  made of letters.
+- **`autoComplete="off"`** — it defaults to `one-time-code`, which invites an
+  SMS autofill that will never arrive for a code pasted from a group chat.
+
+Two things to raise with the human while prototyping, not to decide alone:
+
+- The CLI writes `import { cn } from "cn"` and installs a `cn` package, where
+  the other 27 files in `src/components/ui/` import from `@/lib/utils`. Ticket
+  03 confirmed this is the registry item rather than a CLI bug to wait out.
+- Accessibility is thin: `aria-placeholder` is the only ARIA attribute and the
+  slot divs are not `aria-hidden`, so the six characters sit in the
+  accessibility tree on top of the input's own value. Worth hearing with a
+  screen reader before this ships.

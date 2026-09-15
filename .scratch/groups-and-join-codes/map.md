@@ -74,6 +74,21 @@ that effort.
   Realtime-delete reasoning does not survive per-Group Availability** (→ ticket
   12). Four items recorded as could-not-confirm rather than inferred.
 
+- [03 — Does `base-lyra` ship Input OTP](issues/03-input-otp-research.md): **it
+  does, and ticket 01's choice stands.** One file, `input-otp@^1.5.0`, zero
+  runtime dependencies, so the Radix-versus-Base-UI worry dissolves — it draws
+  its own slots from theme tokens and never touches this project's `Input`. The
+  work is in **four defaults that are all wrong for a join Code**: `pattern`
+  compiles with no flags and is tested *before* `onChange`, so uppercasing in the
+  handler cannot rescue a lower-case keystroke and the pattern must admit both
+  cases; `pasteTransformer` is a prop that runs before the pattern test;
+  `inputMode` defaults to `numeric` for an alphanumeric code; and `autoComplete`
+  defaults to `one-time-code`, inviting an SMS autofill that will never come.
+  Accessibility is thin. Two things left for the human: the CLI writes
+  `import { cn } from "cn"` against this repo's 27-file `@/lib/utils` convention,
+  and **Base UI has shipped its own OTP Field** since 1.4.0, one `normalizeValue`
+  prop where this is three, behind a bump from the locked 1.2.0.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went
@@ -84,6 +99,11 @@ that effort.
   so the taken-hue bias sees an empty roster and you may land on a colour the
   cal you join already has. Collisions are cosmetic now (v1 ticket 15 took
   per-Friend colour off the grid), so this is a nicety, not a defect.
+- **Base UI's own OTP Field, and the `@base-ui/react` bump behind it.** Ticket
+  03 found it does in one prop what `input-otp` needs three to do, but it sits
+  behind a version bump that every other `base-lyra` component in the project
+  rides on. Not worth deciding for one component; worth revisiting the next time
+  anything else wants that bump.
 - **Whether the allowlist ever gets a reading screen.** Ticket 07 designs
   writing to it. Reading it back is still the SQL Editor, and with invites
   self-serve, "who is in this product and who vouched for them" becomes a

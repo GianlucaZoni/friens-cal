@@ -43,3 +43,27 @@ The open questions:
    once, and say if the duplication starts to look like a mistake.
 
 Prototypes live on a `prototype/` branch, not on `main`. Link it here.
+
+## From ticket 05, which is now resolved
+
+[05](05-join-or-create-page.md) settled the list, so §5's "same data rendered
+twice" is now a concrete constraint rather than a worry:
+
+- **The row shape is fixed**: name on the left, Code right-aligned in
+  `muted-foreground`, and a **trailing copy button** that flips to a tick. The
+  row is deliberately *not* one button, because a button cannot contain a button
+  and a row that navigates cannot also be drag-selected.
+- **That copy button is a direct challenge to the three dots.** If the Code is
+  one press away on the landing page, "view code" as a menu item behind a nested
+  dropdown is carrying a lot of structure for something a copy button already
+  does. Consider whether the three dots can be **rename only**, which would
+  dissolve §1's competing-hit-targets problem instead of solving it.
+- **Do not build new dialogs.** The join dialog and the two create dialogs exist
+  on branch `prototype/05-join-or-create`. "Join another via code" and "Create a
+  new friens cal" open the same two flows, so the duplication §5 asks about is
+  the *list*, not the actions.
+- **No member count.** C proposed one and lost; the dropdown does not need it
+  either, and it would be a read nothing else on the page performs.
+- **The list order is unset and is now yours.** 05 used insertion order because
+  three rows made it moot. This ticket renders the same list, so it settles the
+  order for both surfaces.

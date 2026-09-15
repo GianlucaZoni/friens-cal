@@ -137,6 +137,25 @@ that effort.
   `08`–`10`. `CONTEXT.md` needed no change, and that was checked rather than
   assumed.
 
+- [05 — Prototype: the join-or-create page, and the Code's three dialogs](issues/05-join-or-create-page.md):
+  three variants built and driven, and **the brief survives contact on all five
+  questions**. The empty state reads as *not yet* rather than as nothing,
+  because it is the same card a Friend keeps forever. **Two dialogs in a row on
+  create stand**: the modal earns its place as the one moment the Code is
+  unmissable, and a Friend who dismisses it still has the Code on the list
+  behind it. **Input OTP beat a plain formatted input**, built alongside it
+  precisely so the comparison was real: six boxes say *six characters, exactly*,
+  and the verification-code feeling is roughly true for a Code somebody just
+  sent you. One thing changed: **the Code gets a copy button, and the list row
+  stops being a single button to make room for it** — a row that navigates
+  swallows any attempt to drag-select the Code inside it, so select-and-copy was
+  never on offer in the first place. Ticket 03's `input-otp` corrections are now
+  **verified rather than inferred**: lower-case typing survives the two-case
+  pattern, and `aria-hidden` cleans the accessibility tree. Three things the
+  build must carry: the registry rewrites the `cn` import on every
+  `shadcn add`, the screen-reader pass is still owed, and the list has no
+  ordering rule — which **ticket 06 now settles for both surfaces**.
+
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went

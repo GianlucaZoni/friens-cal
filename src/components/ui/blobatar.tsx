@@ -59,9 +59,18 @@ export function Blobatar({ name, src, alt, blobatar, ...props }: BlobatarProps) 
         `size-full` overrides the width/height attributes the blobatar renders
         from its `size`, so the picture follows the Avatar's box — `size-8` by
         default, whatever you pass otherwise — rather than fighting it.
+
+        It is `!` because of the *other* arm. A static blobatar is an `<img>`
+        and nothing in a shadcn layout is aiming at those; an animated one is
+        an inline `<svg>`, and `Button`, `DropdownMenuItem` and
+        `SidebarMenuButton` all carry `[&_svg]:size-4` to keep lucide icons in
+        line. That descendant selector outranks a plain `size-full` on the
+        element itself, so an animated blobatar dropped into any of them
+        renders at 16px while the static one beside it renders at 32 — the
+        avatar shrinking is how you find out it started animating.
       */}
       <AvatarFallback className="bg-transparent">
-        <Generated {...blobatar} name={name} className="size-full" />
+        <Generated {...blobatar} name={name} className="size-full!" />
       </AvatarFallback>
     </Avatar>
   );

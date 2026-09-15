@@ -1,7 +1,7 @@
 # 05 — Prototype: the join-or-create page, and the Code's three dialogs
 
 Type: prototype
-Status: open
+Status: claimed
 
 ## Question
 

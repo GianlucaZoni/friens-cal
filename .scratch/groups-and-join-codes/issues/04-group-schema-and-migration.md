@@ -58,3 +58,26 @@ the build is generated from.
 9. **`CONTEXT.md`** already carries the new terms from ticket 01. Check it still
    matches what this ticket decides, and that no implementation detail leaked
    into it.
+
+## From ticket 02, which is now resolved
+
+Read [02](02-membership-rls-research.md) before starting. Four findings land
+directly on this ticket:
+
+- **`membership` needs an index on `friend_id`.** Q2 above proposes the key
+  `(group_id, friend_id)`, and every helper filters on `friend_id`, which is the
+  key's trailing column. v1 ticket 07 §11's trap, for the third time in this
+  schema, and this time it sits inside every policy in the product.
+- **Give `hangout_participant` a `group_id`.** It is the one table the two
+  helpers do not cover cleanly; without the column its policy is a per-row
+  correlated join through `hangout`, which the performance guide says to rewrite.
+  One redundant column collapses it to the same shape as everything else.
+- **Never put `force row level security` on `membership`**, and create the
+  helpers in the SQL Editor so `postgres` owns them. A `security definer`
+  function only skips RLS when its owner can, so either of those breaks every
+  read in the product from a line that looks like hardening. It wants a comment
+  in the migration.
+- **Q6 (ADR-0002's RPC) has grown a sibling.** Joining by Code needs a second
+  exposed `security definer` function, which ends the ADR's "exactly one"
+  property. That is ticket 11, not this one, but the schema cannot be finished
+  without its answer.

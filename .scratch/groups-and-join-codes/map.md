@@ -60,16 +60,22 @@ that effort.
   join-or-create page. Codes are **six characters** in an unambiguous alphabet,
   entered through shadcn **Input OTP**.
 
+- [02 — Membership-aware RLS, without the recursion trap](issues/02-membership-rls-research.md):
+  the guide gained an **"Avoid recursive policies"** section after v1 asked, and
+  it settles the shape. Two helpers in a **`private`** schema, returning
+  **`setof uuid`** rather than a boolean — because a boolean takes the row's own
+  id as an argument and forfeits the per-statement `initPlan` caching. `friend`'s
+  policy needs an `id = (select auth.uid())` arm or **a new Friend cannot read
+  their own row on the join-or-create page**, which is every account's first
+  screen. `membership` becomes the hottest object in the schema and needs its own
+  index on `friend_id`. **ADR-0002's "unresolved sharp edge" is closed for policy
+  helpers** (`private` is not an exposed schema) and stays open for RPCs — which
+  matters, because joining by Code needs one (→ ticket 11). And **v1's
+  Realtime-delete reasoning does not survive per-Group Availability** (→ ticket
+  12). Four items recorded as could-not-confirm rather than inferred.
+
 ## Not yet specified
 
-- **Realtime, scoped per Group.** Today every subscription is table-wide
-  (`useRoster`, `useAvailability`, `useHangouts`). With many Groups a Friend
-  would receive every other Group's events and filter them client-side, which is
-  both wasteful and a disclosure. Whether the fix is a channel filter, an RLS
-  consequence, or a per-Group channel depends on what ticket 02 finds.
-- **Whether the membership helper is shared.** If ticket 02's `security definer`
-  helper works for `friend`, it probably works for the other four tables too —
-  but "probably" is why this is not a ticket yet.
 - **"Copy my availability from another cal."** Born the moment Availability went
   per Group: a Friend in three cals draws the same Saturday three times. A
   sibling of the v1 map's "Copy last week", and deliberately not designed now —

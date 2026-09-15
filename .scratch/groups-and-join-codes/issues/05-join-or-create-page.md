@@ -74,3 +74,17 @@ Two things to raise with the human while prototyping, not to decide alone:
   slot divs are not `aria-hidden`, so the six characters sit in the
   accessibility tree on top of the input's own value. Worth hearing with a
   screen reader before this ships.
+
+## From ticket 11, which is now resolved
+
+- **Joining is immediate.** No preview of the cal's name or size before
+  committing — [11](11-joining-by-code-needs-a-second-rpc.md) ruled that out as
+  an enumeration oracle. Six characters, then straight to `/g/:id`.
+- **A bad Code raises**, so the dialog must **catch and replace** the Postgres
+  and PostgREST error text with one sentence of its own, exactly as the signup
+  screen already does. §5 of this ticket asked for that copy; it is now required
+  rather than optional.
+- **A Code for a cal you are already in is not an error** and needs no distinct
+  state: the call is idempotent and returns the Group, so the dialog routes
+  there as if it had been picked from the list. §5's second failure case
+  dissolves.

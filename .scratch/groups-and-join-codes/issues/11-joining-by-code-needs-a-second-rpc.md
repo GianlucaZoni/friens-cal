@@ -1,7 +1,7 @@
 # 11 — Joining by Code needs a second exposed `security definer` RPC
 
 Type: grilling
-Status: claimed
+Status: resolved
 
 ## Question
 
@@ -118,3 +118,112 @@ counting one never could.
 the documented intentional case. Suppress each with a comment naming the ADR
 that authorises it, rather than leaving two standing findings that train
 everybody to ignore the advisor.
+
+## Answer
+
+**First, a correction to this ticket's own framing**, because it changes the
+stakes. §1 and §3 above claim a second RPC would end ADR-0002's "exactly one
+such function exists in the whole project (it is now a security property, not
+just tidiness)". **That sentence is not in ADR-0002.** It came from a research
+summary's paraphrase and was written into this ticket without being checked
+against the source. What ADR-0002 actually says is:
+
+> There is one choke point to audit and test for "can someone else change my
+> calendar", instead of an open permission that any bug can walk through.
+
+That property is scoped to **cross-Friend Availability writes**. Neither new
+function touches `availability`, so **ADR-0002 is not threatened and is not
+amended.** The thing genuinely at stake was weaker: v1 ticket 07 §9's recorded
+judgement, which read the exposed-schema caution as scoped to policy helpers on
+the grounds that its own function "takes one argument, a hangout id, derives
+participants and range from stored rows".
+
+### 1. It is two new functions, not one
+
+`join_group(code)` **and** `create_group(name)`. Creating a Group is
+`insert into group` plus `insert into membership`, and if the second fails the
+first has orphaned a Group **nobody is in and nobody can ever reach** — you
+cannot join it without its Code, and you cannot read its Code because reads are
+membership-scoped. Those rows are unrecoverable outside the SQL Editor.
+PostgREST cannot span two statements and this project has no server, which is
+the same argument ADR-0002's own amendment used to give `retime_hangout` three
+arguments.
+
+`create_group` is also the natural home for generating the Code with
+retry-on-collision, which a column `default` cannot do for itself. That answers
+half of [ticket 04](04-group-schema-and-migration.md) Q3.
+
+### 2. `join_group` is a new category, and that is what forced an ADR
+
+`retime_hangout` is callable meaningfully only by somebody who can already see
+the Hangout. **`join_group` is callable by anyone holding an account, against a
+Group they cannot see, and its entire purpose is to grant access.** Ticket 07
+§9's "one argument, derives everything from stored rows" does not reach it, so
+the judgement had to be rewritten rather than extended.
+
+### 3. The rule, and where it lives: **[ADR-0003](../../../docs/adr/0003-exposed-security-definer-rpcs.md)**
+
+A new ADR, not an amendment. Four conditions, all required, of which the first
+is load-bearing: **the caller can never name another Friend** — every identity
+is derived from `auth.uid()` or from rows the function itself read, and
+arguments may say *what* and *where*, never *who*. That is ADR-0002's own
+argument against a `(friend_id, start, end)` signature, generalised from
+Availability to everything. All three functions satisfy it identically.
+
+Recorded honestly in the ADR: this is still a **judgement, not a carve-out**.
+The RLS guide's blanket "never" is unamended. Linter rule 0029 (found by the
+parallel session, see Comments) is evidence the docs contemplate the object,
+not permission to build it.
+
+### 4. Joining is immediate — no preview, no confirm step
+
+Type six characters, you are in, the app routes to `/g/:id`.
+
+A preview that resolves the Code and shows the Group's name and size before you
+commit **feels** more careful and is strictly worse: it is a pure enumeration
+oracle, letting somebody probe Codes and learn what exists **without leaving a
+Membership row behind**. Immediate join has no such gap — guessing right *joins*
+you, so there is no way to learn a Code is real without also appearing in a
+roster five friends look at. It also keeps ticket 01's code-in-you're-in
+decision, which a preview quietly reopens.
+
+The cost, accepted: a typo landing on a *real* other Group drops you into a
+stranger's calendar unannounced. With a handful of Groups in a 729-million space
+this is close to impossible, and ticket 01 made leaving free.
+
+### 5. Returns and the two failure cases
+
+- **Code matching nothing** — raise. It is the honest PostgREST shape and needs
+  no sentinel. There is no oracle to protect here, per §4.
+- **Code for a Group you are already in** — *not* an error.
+  `insert ... on conflict do nothing`, return the Group, route there as if it
+  had been picked from the list. This makes the whole call **idempotent**, so a
+  double-submit or a retry on a flaky connection is harmless.
+- **On success, return the Group row**, not just its id. The client needs the
+  name to route and to say something, and a second read would succeed anyway.
+
+Consequence for [ticket 05](05-join-or-create-page.md): raising means the error
+text is whatever Postgres and PostgREST produce, so the join dialog must catch
+and replace it — exactly as the signup screen already replaces every failure
+with one sentence.
+
+### 6. Brute force is accepted, and written down rather than waved past
+
+729 million codes, no per-user rate limit on the Data API by default. **No
+throttle, and no cap on how many Groups a Friend may create.**
+
+Two structural mitigations already exist, neither designed for this:
+
+1. **The allowlist.** Rule 0029 warns an exposed function is "effectively a
+   public API endpoint to anyone who can sign up". Here that population is
+   *people a Friend vouched for by name*. Ticket 01's decision to keep both
+   gates pays off somewhere nobody was looking.
+2. **A successful guess is loud.** The guesser appears in a roster with a
+   blobatar and a name. There is no quiet win.
+
+So an attacker must be someone you let in, spend days hammering, and then show
+up by name in your sidebar. A throttle is a table, a policy and a failure mode
+of its own, defending against a threat the membership model has already mostly
+removed.
+
+Status: resolved

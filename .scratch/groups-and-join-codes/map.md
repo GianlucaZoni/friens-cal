@@ -22,8 +22,10 @@ that effort.
   joinable — and **Code**, **Membership** and **Invite** are new terms. Use them
   exactly. The UI says "friens cal"; the code says Group.
 - **Decisions**: `docs/adr/0001` (Supabase), `docs/adr/0002` (cross-Friend
-  availability writes, plus its 2026-09-02 amendment). ADR-0002's RPC must gain
-  a Group — see ticket 04.
+  availability writes, plus its 2026-09-02 amendment), and **`docs/adr/0003`
+  (exposed `security definer` RPCs), written by this effort** — read it before
+  adding any function the browser can call. ADR-0002's RPC must gain a Group —
+  see ticket 04.
 - **The v1 map is the prior art and is still binding**:
   `.scratch/shared-availability-calendar/map.md`. Nineteen resolved tickets. Do
   not re-decide anything it settled; zoom into the ticket instead. Its
@@ -88,6 +90,25 @@ that effort.
   `import { cn } from "cn"` against this repo's 27-file `@/lib/utils` convention,
   and **Base UI has shipped its own OTP Field** since 1.4.0, one `normalizeValue`
   prop where this is three, behind a bump from the locked 1.2.0.
+
+- [11 — Joining by Code needs a second exposed `security definer` RPC](issues/11-joining-by-code-needs-a-second-rpc.md):
+  **two**, not one — `create_group(name)` as well, because a Group insert and a
+  Membership insert that are not atomic orphan a Group **nobody is in and nobody
+  can reach**, and PostgREST spans neither. It also houses Code generation with
+  retry-on-collision, which a column `default` cannot do for itself. **ADR-0002
+  turned out not to be threatened at all**: its property is scoped to
+  cross-Friend *Availability* writes and neither function touches
+  `availability` — this ticket's own framing misquoted it, and the correction is
+  recorded in the answer. The judgement instead graduates into
+  **[ADR-0003](../../docs/adr/0003-exposed-security-definer-rpcs.md)**, whose
+  load-bearing rule is **the caller can never name another Friend**: arguments
+  say *what* and *where*, never *who*. **Joining is immediate** — a
+  preview-then-confirm step is a pure enumeration oracle that lets somebody
+  probe Codes without leaving a Membership row. A bad Code raises, a Code you
+  already hold is **idempotent** rather than an error, and success returns the
+  Group row. **Brute force is accepted and recorded**: the allowlist means the
+  attacker must be someone a Friend vouched for by name, and a successful guess
+  appears in a roster.
 
 ## Not yet specified
 

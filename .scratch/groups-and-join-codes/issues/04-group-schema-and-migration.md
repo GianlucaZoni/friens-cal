@@ -81,3 +81,26 @@ directly on this ticket:
   exposed `security definer` function, which ends the ADR's "exactly one"
   property. That is ticket 11, not this one, but the schema cannot be finished
   without its answer.
+
+## From ticket 11, which is now resolved
+
+[11](11-joining-by-code-needs-a-second-rpc.md) answers the sibling it left open
+above, and adds one:
+
+- **Two new functions, both `security definer`, both exposed**:
+  `join_group(code)` and `create_group(name)`. They must satisfy all four
+  conditions of **[ADR-0003](../../../docs/adr/0003-exposed-security-definer-rpcs.md)**,
+  which this ticket's migration comments have to restate beside each one
+  (condition 4 requires it).
+- **Q3 is half-answered.** The Code is generated inside `create_group` with
+  retry-on-collision, not by a column `default`, because a `default` cannot
+  retry itself on a unique violation. What is left for this ticket is the
+  alphabet constant and where it lives.
+- **`create_group` is two inserts in one transaction.** A Group row and the
+  creator's Membership. Split across two statements it orphans a Group nobody
+  can reach or delete.
+- **`join_group` is `insert ... on conflict do nothing` and returns the Group
+  row**, so it is idempotent; a bad Code raises.
+- **Q6 is settled and ADR-0002 needs no amendment.** Its property is scoped to
+  cross-Friend Availability writes, which neither function touches.
+  `retime_hangout` still gains a Group, derived from the stored Hangout row.

@@ -2,7 +2,7 @@
 
 Type: prototype
 Blocked by: 05
-Status: open
+Status: claimed
 
 ## Question
 

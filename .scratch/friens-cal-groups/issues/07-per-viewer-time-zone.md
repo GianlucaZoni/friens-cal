@@ -1,6 +1,6 @@
 # 07 — The grid draws the viewer's time zone
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 01
 
 ## Parent

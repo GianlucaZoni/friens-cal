@@ -156,6 +156,35 @@ that effort.
   `shadcn add`, the screen-reader pass is still owed, and the list has no
   ordering rule — which **ticket 06 now settles for both surfaces**.
 
+- [07 — Inviting a Friend, and the enumeration leak it reopens](issues/07-inviting-and-the-leak.md):
+  eight answers, and two findings the ticket did not have when it was written.
+  **`allowlist` never had an `invited_by` column**, so this is a schema change
+  and the five seeded rows carry a null inviter forever. And **ADR-0003's
+  condition 1 cannot be met by an invite function**: its only meaningful
+  argument is a person's address, which is *who*. The rule was not widened.
+  **The function was not written**, and the audited set stays at exactly three
+  for the second time in this effort ([ADR-0003 amended
+  again](../../docs/adr/0003-exposed-security-definer-rpcs.md)). The lever was
+  the **read** side: "show me my own invites" was refused because it needs a
+  `select` path on the address table, and `07-allowlist.sql` is built end to end
+  on nothing there being readable by a publishable key. With no read, the write
+  is a **plain `insert` grant** plus `with check (invited_by = (select
+  auth.uid()))`, one verb wide, upserted `on conflict do nothing` with
+  `return=minimal` so the response cannot distinguish a new address from a known
+  one. The inviter therefore learns nothing about prior state, and the copy
+  states an outcome rather than an event: *"rob@gmail.com can now create an
+  account."* **A typo is a live door, not a mess**: `friend` is `using (true)`,
+  so a mistyped address buys a stranger the whole roster. No delete ships;
+  **confirm-before-write** is the mitigation, and the radius is recorded as
+  accepted alongside unlimited invite writes. The dialog lives in the blobatar
+  menu, is disabled until a Friend row exists (the FK, not ticket 18's reason),
+  and is shaped as **two steps whose second one is yours** — there is no email,
+  so it hands over a pasteable sentence carrying the origin and the current
+  cal's Code. **The row stays cal-free**: ticket 01's ruling governs what the
+  row holds, not what a human sends. The check constraint tightens to
+  `lower(btrim(email))`, because the old one let a trailing space through and
+  that row would match the hook never. One file, `11-invite.sql`. `CONTEXT.md`
+  needed no change, and that was checked rather than assumed.
 ## Not yet specified
 
 - **"Copy my availability from another cal."** Born the moment Availability went
@@ -171,10 +200,15 @@ that effort.
   behind a version bump that every other `base-lyra` component in the project
   rides on. Not worth deciding for one component; worth revisiting the next time
   anything else wants that bump.
-- **Whether the allowlist ever gets a reading screen.** Ticket 07 designs
-  writing to it. Reading it back is still the SQL Editor, and with invites
-  self-serve, "who is in this product and who vouched for them" becomes a
-  question somebody will eventually ask from inside the app.
+- **Whether the allowlist ever gets a reading screen.** Ticket 07 designed the
+  write and **refused the read**, and it now has a price rather than a shrug: a
+  screen needs a policy-scoped `select` on a table of personal addresses, which
+  is the one property `07-allowlist.sql` was built to hold. Removal rides along
+  with it, since ticket 07 shipped no delete and a row you cannot see is a row
+  you cannot remove. Still fog because nothing on the route needs it, and still
+  coming, because with invites self-serve "who is in this product, who vouched
+  for them, and how do I undo that typo" is a question somebody will ask from
+  inside the app.
 
 ## Out of scope
 

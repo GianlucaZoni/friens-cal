@@ -126,3 +126,42 @@ Leaving a Group looked like a fourth candidate and is not one: it is a plain
 the rest following from an `on delete cascade`. A function would have bought
 nothing the policies cannot express, and the auditable-as-a-set property in the
 Consequences above is the reason to notice that rather than write it.
+
+## Amendment (2026-09-16, from issue 07) — the fourth candidate was Invite, and it was refused
+
+Inviting a Friend needs a write to `public.allowlist`, a table whose whole
+design is that nothing holding a publishable key may read it. An
+`invite(email)` RPC was the obvious shape and is the first proposal in this
+project to fail **condition 1**, not at the margin but at its centre: its only
+meaningful argument is a person's email address, which is *who* and nothing
+else. No derivation from `auth.uid()` is available, because the entire point is
+to name somebody who does not have an account yet.
+
+Condition 1 was not widened to admit it. **The function was not written.**
+
+Issue 07 closed the read side instead ("show me my own invites" was refused for
+needing a `select` path on the address table), and once no read is needed the
+write is expressible as a plain `insert` grant with a `with check (invited_by =
+(select auth.uid()))` policy. The identity is asserted by the policy rather than
+trusted from an argument, which is condition 1's property arrived at from the
+other direction.
+
+**The audited set is still exactly three**, and this is the second time that
+property has paid for itself by making somebody notice a function did not need
+writing. Issue 04 caught leaving a Group, issue 07 caught inviting.
+
+Two things carry over to a grant even though it is not a function:
+
+- **Condition 4 applies unchanged.** The reasoning is a comment in
+  `11-invite.sql` beside the grant, because the file it contradicts
+  (`07-allowlist.sql`) says in prose that this table grants nothing to
+  `authenticated`, ever. A reader finding the grant without the comment will
+  read it as a mistake and be right to.
+- **Condition 3's spirit narrows the grant to one verb.** `insert` alone;
+  `select`, `update` and `delete` stay revoked, and the table's RLS goes from
+  no policies at all to exactly one.
+
+The lesson generalises past this table. **When condition 1 cannot be met, that
+is evidence the RPC is the wrong shape, not evidence the rule is too strict.**
+An argument naming a person is usually a read requirement in disguise; remove
+the read and the function tends to dissolve into a policy.

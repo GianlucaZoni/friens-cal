@@ -1,0 +1,160 @@
+-- friens-cal — groups issue 04: the roster's topic, `cal:<id>:members`
+--
+-- Paste this whole file into the Supabase SQL Editor and run it once, **after
+-- `11-realtime-per-cal.sql`**. It is idempotent: the trigger is dropped before
+-- it is created and nothing else here writes.
+--
+-- **It is safe to run at any time, including well before the client deploys.**
+-- Unlike `09` and `11` it starts no outage and silences nothing. All it does is
+-- write messages to a topic nobody has joined yet, and `realtime.messages`
+-- keeps them three days and forgets them. Running it early is the cautious
+-- order, not the risky one.
+--
+-- What it does:
+--   1. why `membership` needs a topic at all, which is not the reason the other
+--      three tables got one
+--   2. one trigger, reusing `11`'s function, on insert and delete only
+--   3. the policy that is already there, and why this file adds none
+--   4. `membership` does not join the publication, and must not
+--
+-- Decided in [ADR-0004](../docs/adr/0004-broadcast-for-cal-scoped-realtime.md),
+-- in its issue 14 amendment, and by
+-- [issue 14](../.scratch/groups-and-join-codes/issues/14-roster-read-scoping.md).
+--
+-- Rehearse against a local stack first: `supabase/README.md`.
+
+-- ---------------------------------------------------------------------------
+-- 1. WHY THIS TABLE NEEDS A TOPIC, AND WHY THE REASON IS A NEW ONE.
+--
+-- `11-realtime-per-cal.sql` moved three tables to broadcast because their reads
+-- had been scoped per cal and the publication was leaking every delete to
+-- everybody. **None of that applies here.** `membership` is a table `08` added
+-- and was never published, so nothing is being closed and no client is being
+-- silenced. This file adds liveness to a table that had none.
+--
+-- What makes it necessary is the roster. `use-roster.ts` now reads `membership`
+-- for the current cal and lists those Friends, so the act that puts somebody on
+-- your sidebar is a **`membership` insert** rather than the `friend` insert it
+-- used to be. Nothing subscribed to that, so without this trigger a Friend who
+-- joins your cal and starts drawing is a Friend the roster never heard of, and
+-- the hook's own comment names the cost: *"the wash counts `visible`, so a
+-- Friend the roster has not heard about is a Friend whose Availability arrives
+-- over Realtime and is then not counted. The grid would under-report by one,
+-- silently, until a reload."* That is the exact failure v1 built a subscription
+-- to prevent, arriving by a different road.
+--
+-- **The `friend` subscription is still required, and this does not replace it.**
+-- A brand-new account that signs up after your roster read and then joins your
+-- cal reaches your client as a `friend` INSERT on the table-wide
+-- `postgres_changes` subscription; this topic then makes them a Member. Two
+-- events on two mechanisms, both needed. Narrowing `friend` to match the
+-- Members set would leave this topic announcing a Member whose name nobody
+-- holds. `11` §4 says the same thing from the other end.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 2. ONE TRIGGER, AND NO NEW FUNCTION.
+--
+-- `public.broadcast_row_to_cal_topic()` from `11` §2 fits unchanged: it takes
+-- the topic suffix as `tg_argv[0]` and reads `cal_id` off whichever of `NEW`
+-- and `OLD` exists, and `membership`'s primary key is `(cal_id, friend_id)`, so
+-- the cal is on the row with no join. A fourth topic is a fourth
+-- `create trigger` and nothing else, which is what that argument was for.
+--
+-- The payload is the whole row, so a join carries `friend_id` and a leave
+-- carries it in `old_record`. The client folds an id into or out of a Set and
+-- re-derives the sidebar from the `friend` rows it already holds. It does not
+-- re-read.
+--
+-- **`insert or delete`, not `insert or update or delete`**, unlike the three
+-- triggers in `11`. Nothing updates this table and nothing can: `08` §5 grants
+-- `select, delete` and no `update`, because there is nothing on the row to
+-- change. An update branch here would be a handler for an event the schema
+-- cannot produce, and the client would need a third case to match it.
+--
+-- One cost, already named in ADR-0004 and unchanged by this: leaving a cal
+-- cascades every Availability row you hold in it, so a leave is thousands of
+-- messages on the availability topic plus, now, exactly one here. It does not
+-- move the number.
+-- ---------------------------------------------------------------------------
+drop trigger if exists membership_broadcasts on public.membership;
+create trigger membership_broadcasts
+  after insert or delete on public.membership
+  for each row
+  execute function public.broadcast_row_to_cal_topic('members');
+
+-- ---------------------------------------------------------------------------
+-- 3. THE POLICY IS ALREADY HERE. THIS FILE ADDS NONE, DELIBERATELY.
+--
+-- `11` §3's policy is written against the **first two segments of the topic**:
+--
+--   realtime.messages.extension = 'broadcast'
+--   and split_part(realtime.topic(), ':', 1) = 'cal'
+--   and split_part(realtime.topic(), ':', 2) in (select … private.my_cal_ids())
+--
+-- The third segment is not checked, and that file says so in as many words:
+-- *"A Member may read any topic in a cal they are in; with no insert policy
+-- there is nothing on an unused topic to read."* `cal:<id>:members` was an
+-- unused topic in a cal. It is a used one now, and the sentence that admitted
+-- it is the same sentence.
+--
+-- So a second `create policy` here would not be belt-and-braces, it would be a
+-- second policy on `realtime.messages` doing what the first already does.
+-- Policies on one command are OR'd, so the pair would never disagree in a way
+-- anybody noticed, and the day somebody tightened one the other would keep the
+-- door open. One policy, one boundary.
+--
+-- **`select` only still holds, and matters more here than anywhere.**
+-- `authenticated` holds an `insert` GRANT on `realtime.messages` from Supabase,
+-- and RLS with no insert policy is the only thing making the triggers the sole
+-- writer. On the other topics a forged message paints Availability that does
+-- not exist; on this one it would add a **Member** who does not exist, to
+-- everybody's sidebar, which then counts them in the heat denominator and in
+-- `groupSize`. Never add an insert policy to `realtime.messages`.
+--
+-- The one thing worth re-reading from `11` §3 before trusting this: channel
+-- authorization is cached for the life of the connection. A Friend who leaves a
+-- cal while connected keeps receiving its messages until they reconnect, and
+-- this topic is where they would watch themselves disappear from a sidebar they
+-- can no longer read. The Leave route unmounts the channel, so it is not
+-- exercised; it is recorded because it leans on a route change.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 4. AND `membership` DOES NOT JOIN THE PUBLICATION.
+--
+-- There is nothing to run here, which is the point of the section. `11` §4
+-- dropped three tables from `supabase_realtime` because a published table leaks
+-- every delete to every holder of the publishable key, RLS not applied. This
+-- table has a scoped read policy and has never been published, so the right
+-- thing to do about the publication is nothing at all.
+--
+-- **Do not add it.** `alter publication supabase_realtime add table
+-- public.membership` would hand anybody with the publishable key a feed of who
+-- leaves which cal, and buy nothing: the trigger above already delivers the
+-- same events to the Members who may see them.
+--
+-- The publication should still hold exactly one table:
+--
+--   select schemaname, tablename
+--   from pg_publication_tables
+--   where pubname = 'supabase_realtime'
+--   order by tablename;
+--
+-- Expect one row: `public.friend`.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- Confirm the trigger fires, from the SQL Editor:
+--
+--   -- as a Member of the cal, through `join_cal`, or by hand as `postgres`:
+--   insert into public.membership (cal_id, friend_id) values ('<cal>', '<friend>');
+--
+--   select topic, event, payload->>'table', payload->'record'->>'friend_id'
+--   from realtime.messages
+--   where topic = 'cal:<cal>:members'
+--   order by inserted_at desc;
+--
+-- Expect one INSERT row naming that Friend. Then delete the Membership and
+-- expect a DELETE row carrying the same id in `old_record`.
+-- ---------------------------------------------------------------------------

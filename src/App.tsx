@@ -1,5 +1,6 @@
 import { CompositorLossReadout } from '@/availability/compositor-loss-readout'
 import { AppRoutes } from '@/pages/AppRoutes'
+import { Analytics } from '@vercel/analytics/react'
 
 export const App = () => {
   return (
@@ -12,6 +13,7 @@ export const App = () => {
         month. It renders nothing at all unless the URL says `?touchlog`.
       */}
       <CompositorLossReadout />
+      <Analytics />
     </>
   )
 }

@@ -221,8 +221,11 @@ $ yarn lint
   fourth control.
 - **The cal list is read twice on a cal screen**, from slice 09 onward: the
   switcher calls `useCals` and so does `useElsewhere`. Two reads of a handful
-  of rows, no correctness problem, and worth one hook lifted into `AppShell`
-  when somebody is in there anyway.
+  of rows, and one visible consequence: they are separate hook instances, so a
+  rename in the switcher does not reach `useElsewhere`'s `namesById` and a
+  clash warning keeps naming the old cal until the next navigation. Both are
+  one hook lifted into `AppShell` by whoever is next in that file. Slice 03
+  did not do it, to stay out of `app-shell.tsx` while slice 09 was building.
 - **A cal called "g03 sandbox" is on the rehearsal stack** and cannot be
   removed, because `cal` has no delete grant (`08` §5). It was made to avoid
   renaming a cal another session was using.

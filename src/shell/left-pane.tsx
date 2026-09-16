@@ -7,6 +7,7 @@ import { SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader } from '
 import { useAppShell } from '@/shell/shell-context'
 import type { CalendarViewState } from '@/shell/use-calendar-view'
 import { ViewSelector } from '@/shell/view-selector'
+import { Link } from 'react-router'
 
 /**
  * The left pane: where the grid is pointed, then what a drag means, then whose
@@ -59,7 +60,22 @@ export const LeftPane = ({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <SidebarHeader className="h-12 shrink-0 justify-center border-b px-3">
-        <span className="text-sm font-semibold">friens</span>
+        {/*
+          The wordmark is the way out of a cal, which it did not need to be
+          while there was only one. It goes to `/`, the join-or-create page —
+          the complete list of cals and the only place their Codes are.
+
+          A `Link`, not a `window.location`: a full reload would throw away the
+          session read, the Friend row and both stores, and land on the same
+          page a client-side navigation reaches in one frame. Switching between
+          cals without coming back through here is ticket 03's dropdown.
+        */}
+        <Link
+          to="/"
+          className="rounded-sm text-sm font-semibold outline-hidden hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          friens
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         {isSheet ? (

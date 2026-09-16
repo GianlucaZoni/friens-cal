@@ -64,7 +64,19 @@ export const useLeaving = (
    */
   now: number
 ): LeavingState => {
-  const [read, setRead] = useState<{ rows: HangoutRow[] } | null>(null)
+  /**
+   * The rows, **tagged with the cal they were read for** — issue 04's shape,
+   * which `use-elsewhere.ts` carries for the same reason one table over.
+   *
+   * Nothing can reach it today: this hook lives in a dialog that is mounted on
+   * open and unmounted on close, so `calId` cannot change under it. The tag is
+   * here because the day something does change it, the failure is a dialog
+   * naming another cal's plans while somebody presses the destructive button,
+   * and this dialog's whole worth is that it is believed. Clearing the rows at
+   * the top of the effect would say the same thing and is a `setState` in an
+   * effect body, which the lint gate refuses.
+   */
+  const [read, setRead] = useState<{ calId: string; rows: HangoutRow[] } | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -96,7 +108,7 @@ export const useLeaving = (
         return
       }
       setFailed(false)
-      setRead({ rows: data })
+      setRead({ calId, rows: data })
     })
 
     return () => {
@@ -113,7 +125,8 @@ export const useLeaving = (
      * `RequireAuth`; what it must not do is spin forever.
      */
     if (failed || friendId === null) return { status: 'error', hangouts: NOTHING }
-    if (read === null) return { status: 'loading', hangouts: NOTHING }
+    // A read for another cal is not a slow answer about this one.
+    if (read === null || read.calId !== calId) return { status: 'loading', hangouts: NOTHING }
 
     /*
      * The embed flattened back out, because `hangoutsFrom` takes the two reads
@@ -125,7 +138,7 @@ export const useLeaving = (
       status: 'ready',
       hangouts: markedLeftBy(hangoutsFrom(read.rows, participants), friendId, now),
     }
-  }, [read, failed, friendId, now])
+  }, [read, failed, calId, friendId, now])
 }
 
 /** The empty list, as one constant, so a loading render is not a new identity. */

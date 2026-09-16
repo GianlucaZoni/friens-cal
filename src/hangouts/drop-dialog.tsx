@@ -1,4 +1,3 @@
-import { whenOf } from '@/candidates/when'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,8 +8,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { nameOf, wouldAutoCancel, type Hangout } from '@/hangouts/hangout'
-import { useViewerZone } from '@/shell/viewer-zone'
+import { type Hangout } from '@/hangouts/hangout'
+import { HangoutLine } from '@/hangouts/hangout-line'
 
 /**
  * Ticket 08 §10: **the erase that costs a plan, named before it happens.**
@@ -91,7 +90,7 @@ export const DropDialog = ({
 
       <ul className="flex min-h-0 flex-col gap-2 overflow-y-auto text-left text-xs">
         {dropping.map((hangout) => (
-          <DropLine key={hangout.id} hangout={hangout} viewerId={viewerId} now={now} />
+          <HangoutLine key={hangout.id} hangout={hangout} viewerId={viewerId} now={now} />
         ))}
       </ul>
 
@@ -109,44 +108,3 @@ export const DropDialog = ({
     </AlertDialogContent>
   </AlertDialog>
 )
-
-/**
- * One line: **the name, then when** — the hierarchy ticket 16 settled for the
- * card, so a Hangout is referred to the same way wherever it is named.
- *
- * `nameOf`, so an unnamed one reads as *"Hangout"* rather than leaving the
- * sentence with a hole in it. That default is why this dialog needs no null
- * case at all.
- *
- * **And the auto-cancel, where it applies.** `wouldAutoCancel` is the same
- * prediction `06-hangout-lifecycle.sql`'s trigger makes, and the difference it
- * describes is not a detail: leaving a plan and deleting it for everybody are
- * different acts, and only one of them is what this gesture looks like from the
- * outside. Ticket 08 §3 has no tombstone and no undo behind it.
- */
-const DropLine = ({
-  hangout,
-  viewerId,
-  now,
-}: {
-  hangout: Hangout
-  viewerId: string
-  now: number
-}) => {
-  const zone = useViewerZone()
-  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
-
-  return (
-    <li className="flex flex-col">
-      <span className="font-medium">{nameOf(hangout)}</span>
-      <span className="text-muted-foreground tabular-nums">
-        {when.date} · {when.range}
-      </span>
-      {wouldAutoCancel(hangout, viewerId, now) && (
-        <span className="text-destructive">
-          …and cancels it — you are the only one on it, and there is no undo.
-        </span>
-      )}
-    </li>
-  )
-}

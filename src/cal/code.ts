@@ -112,7 +112,7 @@ export const RENAME_UNAVAILABLE = 'Could not rename it just now. Try again in a 
  * told which — otherwise they assume the worst about the half they cannot see.
  */
 export const LEAVE_UNAVAILABLE =
-  'Could not leave just now. Nothing has changed — try again in a moment.'
+  'Could not leave just now. Nothing has changed. Try again in a moment.'
 
 /**
  * What the Join dialog shows, whatever came back.

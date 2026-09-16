@@ -3,7 +3,6 @@ import { CodeToShare } from '@/cal/copy-code'
 import { leavingConsequence } from '@/cal/leaving'
 import type { CalsState } from '@/cal/use-cals'
 import { useLeaving } from '@/cal/use-leaving'
-import { whenOf } from '@/candidates/when'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,11 +13,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { nameOf, wouldAutoCancel, type Hangout } from '@/hangouts/hangout'
+import { HangoutLine } from '@/hangouts/hangout-line'
 import { SaveError } from '@/identity/save-error'
 import { useSaveAction } from '@/identity/use-save-action'
 import type { Cal } from '@/lib/database.types'
-import { useViewerZone } from '@/shell/viewer-zone'
 import { useState } from 'react'
 
 /**
@@ -70,13 +68,11 @@ import { useState } from 'react'
  * **No type-to-confirm.** That ceremony exists nowhere in this product. The
  * named list is the friction, as it is for the erase.
  *
- * ## It takes its zone from the viewer, and on `/` there is no frame
- *
- * `useViewerZone` above the shell's provider answers the device's zone with no
- * `GMT+2` marker, which is right rather than a fallback: the frame fires when
- * another **Member** reads a different clock, and `/` has no roster to ask. A
- * leave dialog that hardcoded a cal's zone would be the last thing in the
- * product still believing a cal has a clock of its own.
+ * The lines are `HangoutLine`, shared with the erase's dialog, which is also
+ * where the zone is read: `useViewerZone` answers above the shell's provider
+ * too, and on `/` that is the device's clock with no `GMT+2` frame. A leave
+ * dialog that hardcoded a cal's zone would be the last thing in the product
+ * still believing a cal has a clock of its own.
  */
 export const LeaveCalDialog = ({
   cal,
@@ -112,12 +108,10 @@ export const LeaveCalDialog = ({
       }}
     >
       {/*
-        Bounded and scrollable for `drop-dialog.tsx`'s reason: a cal with a busy
-        month can name a dozen plans, and at 390px an unbounded list runs off
-        both ends of a dialog centred by `-translate-y-1/2`, taking the two
-        buttons with it. The one dialog whose whole job is to be read before it
-        is answered would become unanswerable. `svh` rather than `vh` so a
-        phone's collapsing address bar cannot put the footer under it.
+        The same cap as `drop-dialog.tsx`, which carries the measurement: a busy
+        month names a dozen plans, and unbounded they take the two buttons off
+        the bottom of a phone. Driven at 375x812 with nine: the content scrolls
+        and the footer's bottom edge lands at 761.
       */}
       <AlertDialogContent className="max-h-[calc(100svh-2rem)] grid-rows-[auto_1fr_auto]">
         <AlertDialogHeader>
@@ -135,7 +129,7 @@ export const LeaveCalDialog = ({
           {leaving.hangouts.length > 0 && (
             <ul className="flex flex-col gap-2">
               {leaving.hangouts.map((hangout) => (
-                <LeaveLine key={hangout.id} hangout={hangout} viewerId={viewerId} now={now} />
+                <HangoutLine key={hangout.id} hangout={hangout} viewerId={viewerId} now={now} />
               ))}
             </ul>
           )}
@@ -184,45 +178,5 @@ export const LeaveCalDialog = ({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
-}
-
-/**
- * One line: **the name, then when** — the hierarchy the Hangout card settled,
- * so a Hangout is referred to the same way wherever it is named.
- *
- * `nameOf`, so an unnamed one reads as *"Hangout"* rather than leaving the
- * sentence with a hole in it. That default is why this needs no null case.
- *
- * **And the auto-cancel, where it applies.** `wouldAutoCancel` is the same
- * prediction the database makes: the Left this trigger writes fires
- * `hangout_participant_autocancels`, which deletes a Hangout nobody is on any
- * more, and there is no tombstone and no undo behind it.
- */
-const LeaveLine = ({
-  hangout,
-  viewerId,
-  now,
-}: {
-  hangout: Hangout
-  /** Null is unreachable behind `RequireAuth`, and renders as no auto-cancel line. */
-  viewerId: string | null
-  now: number
-}) => {
-  const zone = useViewerZone()
-  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
-
-  return (
-    <li className="flex flex-col">
-      <span className="font-medium">{nameOf(hangout)}</span>
-      <span className="text-muted-foreground tabular-nums">
-        {when.date} · {when.range}
-      </span>
-      {viewerId !== null && wouldAutoCancel(hangout, viewerId, now) && (
-        <span className="text-destructive">
-          …and cancels it — you are the only one on it, and there is no undo.
-        </span>
-      )}
-    </li>
   )
 }

@@ -14,6 +14,9 @@ test('the switcher holds Rename and View code, in that order', () => {
 })
 
 test('a row on `/` holds Rename and Leave, in that order', () => {
+  // The order is the claim, not just the membership. It is the only friction a
+  // two-item menu has, and the row the pointer lands on first should not be the
+  // one-way door.
   assert.deepEqual(calMenu('list'), ['rename', 'leave'])
 })
 
@@ -52,11 +55,4 @@ test('View code is only on the switcher, because a row on `/` already shows the 
 test('every item a menu lists has a label to render', () => {
   const listed = new Set<CalAction>([...calMenu('switcher'), ...calMenu('list')])
   for (const action of listed) assert.equal(typeof CAL_ACTION_LABEL[action], 'string')
-})
-
-test('Leave is last on its menu, under the act that is not a one-way door', () => {
-  // Order is the only friction a two-item menu has. Rename first, Leave under
-  // it, so the destructive row is not where the cursor lands on the way in.
-  const list = calMenu('list')
-  assert.equal(list[list.length - 1], 'leave')
 })

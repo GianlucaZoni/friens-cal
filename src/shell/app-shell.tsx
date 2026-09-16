@@ -190,9 +190,9 @@ export const AppShell = () => {
       <CalsContext value={cals}>
         <ViewerZoneContext value={zone}>
           {/*
-          Above the columns, so it is a fact about the app rather than about the
-          calendar — see `OfflineBanner`.
-        */}
+            Above the columns, so it is a fact about the app rather than about
+            the calendar — see `OfflineBanner`.
+          */}
           <OfflineBanner />
           <div className="flex min-h-0 flex-1">
             <ShellSidebar side="left">
@@ -214,13 +214,13 @@ export const AppShell = () => {
                     availability={availability}
                     viewer={viewer}
                     /*
-                    Two sets, because the grid draws two different objects from
-                    them: the wash is `visible` (a query — the Members you are
-                    currently trying to meet) and a Hangout's faces come from
-                    `friendsById` (a fact — hiding never hides a Hangout, and
-                    neither does leaving the cal). The hook holds both, so
-                    nothing here can pick the wrong one.
-                  */
+                      Two sets, because the grid draws two different objects
+                      from them: the wash is `visible` (a query — the Members
+                      you are currently trying to meet) and a Hangout's faces
+                      come from `friendsById` (a fact — hiding never hides a
+                      Hangout, and neither does leaving the cal). The hook holds
+                      both, so nothing here can pick the wrong one.
+                    */
                     visible={roster.visible}
                     friendsById={roster.friendsById}
                     hangouts={hangouts.hangouts}
@@ -241,11 +241,13 @@ export const AppShell = () => {
           </div>
 
           {/*
-          One `Toaster` for the app. The manager it renders is the module-level
-          one in `toast-manager.ts`, so `useAvailability` can raise a failed
-          write from outside this tree — which it is, being a hook rather than a
-          component.
-        */}
+            One `Toaster` for the app, and the only one in it. The manager it
+            renders is the module-level one in `toast-manager.ts`, so
+            `useAvailability` can raise a failed write from outside this tree —
+            which it is, being a hook rather than a component. Nothing mounted
+            outside this shell can raise one at all: `/` is not inside it, which
+            is why the leave dialog reports its failure in the dialog.
+          */}
           <Toaster />
         </ViewerZoneContext>
       </CalsContext>

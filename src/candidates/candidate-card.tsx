@@ -2,12 +2,14 @@ import type { Candidate } from '@/candidates/candidates'
 import { insideLabel, whenOf } from '@/candidates/when'
 import { CardDetail } from '@/components/card-detail'
 import { Button } from '@/components/ui/button'
+import { BusyElsewhere, BusyMark } from '@/hangouts/busy-elsewhere'
+import { busySuffix, clashesWith, type Commitment } from '@/hangouts/elsewhere'
 import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
 import { useViewerZone } from '@/shell/viewer-zone'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 
 /**
@@ -66,6 +68,14 @@ import { Check, Loader2 } from 'lucide-react'
  * people's Availability*. Confirming writes none: a Candidate is by definition a
  * run in which every one of its Friends already holds Availability at every
  * Slot. Nothing has to be warned about, so nothing is.
+ *
+ * **Groups ticket 09 tested that rule and kept it.** Confirming a Candidate can
+ * now double-book you against a cal this one cannot see, and the obvious shape
+ * for the warning was a confirm-time modal: it would have been the first dialog
+ * on the one action deliberately built without one, and either eagerly fetched
+ * anyway or opened a round trip after the click. So the warning moved *earlier*,
+ * to where you are scanning rather than committing — a line in the card body,
+ * and nothing in the way of the tick.
  */
 export const CandidateCard = ({
   candidate,
@@ -73,6 +83,7 @@ export const CandidateCard = ({
   glowing,
   fullHouse,
   container,
+  commitments,
   onConfirm,
   pending,
   busy,
@@ -86,6 +97,14 @@ export const CandidateCard = ({
   fullHouse: boolean
   /** The Candidate this one sits inside, if any. */
   container: Candidate | null
+  /**
+   * The viewer's own commitments in their **other** cals (groups ticket 09).
+   *
+   * The whole list rather than the clashes, because **nested cards do not
+   * inherit**: each one computes from its own range, and a child Candidate that
+   * does not reach 20:00 is not conflicted and must not say it is.
+   */
+  commitments: readonly Commitment[]
   /** Turn this Candidate into a Hangout. */
   onConfirm: () => void
   /** **This** card's confirm is in flight: spinner, and held visible. */
@@ -104,6 +123,14 @@ export const CandidateCard = ({
   const [open, setOpen] = useState(false)
   const zone = useViewerZone()
   const when = whenOf(candidate.start, candidate.end, zone)
+
+  /*
+   * A Candidate is always something you could take on and never something you
+   * hold, so there is no `isOffered` test here: the moment you confirm it, it
+   * stops being a Candidate at all — its Slots are blanked out of the scan by
+   * the Hangout it became — and the mark goes with the card.
+   */
+  const clashes = useMemo(() => clashesWith(commitments, candidate), [commitments, candidate])
 
   /**
    * The card box, and **it is the detail's trigger** — ticket 16's route on
@@ -189,6 +216,13 @@ export const CandidateCard = ({
           {insideLabel(container, candidate, zone)}
         </span>
       )}
+
+      {/*
+        The mark, in the slot the container line already occupies — groups
+        ticket 09 §6. Inside the body button, so it is part of the accessible
+        name a screen reader hears before being told the card opens something.
+      */}
+      <BusyMark clashes={clashes} />
     </button>
   )
 
@@ -206,6 +240,7 @@ export const CandidateCard = ({
         <CandidateDetail
           friends={friends}
           container={container === null ? null : insideLabel(container, candidate, zone)}
+          clashes={clashes}
           busy={busy}
           pending={pending}
           onConfirm={() => {
@@ -244,10 +279,17 @@ export const CandidateCard = ({
           // flight does not light up six ticks.
           pending && 'opacity-100'
         )}
-        // The date and range, not "confirm" alone: the list is flat with no day
-        // headers, so a bare label would give a screen reader six identical
-        // buttons.
-        aria-label={`Confirm ${when.date}, ${when.range}`}
+        /*
+          The date and range, not "confirm" alone: the list is flat with no day
+          headers, so a bare label would give a screen reader six identical
+          buttons.
+
+          And the clash, when there is one (groups ticket 09 §10). The mark in
+          the card body is read when the body is read, and somebody tabbing
+          straight to this tick never hears it — which would hide the warning
+          from exactly the people who cannot glance at it.
+        */
+        aria-label={`Confirm ${when.date}, ${when.range}${busySuffix(clashes, zone)}`}
       >
         {pending ? (
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
@@ -275,15 +317,21 @@ export const CandidateCard = ({
  * settles it. On a card there is no room and the `title` carries it; here there
  * is.
  *
- * **And still no warning.** Retiming opens a Dialog because it writes other
- * people's Availability; confirming writes none — a Candidate is by definition
- * a run in which every one of its Friends already holds Availability at every
- * Slot. So this is a read that leads to a write, which is the shape ticket 16
- * asked for, and not a read that leads to a warning.
+ * **And still no dialog in front of the write.** Retiming opens a Dialog
+ * because it writes other people's Availability; confirming writes none — a
+ * Candidate is by definition a run in which every one of its Friends already
+ * holds Availability at every Slot. So this is a read that leads to a write,
+ * which is the shape ticket 16 asked for.
+ *
+ * **This is where the card's mark is spelled out**, though: the card carries a
+ * bare range because it is 17rem wide, and the naming is deferred exactly one
+ * tap, to here (groups ticket 09 §7). One tap on a surface that is already the
+ * route to everything is not a hunt.
  */
 const CandidateDetail = ({
   friends,
   container,
+  clashes,
   busy,
   pending,
   onConfirm,
@@ -291,6 +339,8 @@ const CandidateDetail = ({
   friends: readonly SetUpFriend[]
   /** The annotation naming the window this one sits inside, if any. */
   container: string | null
+  /** The viewer's own commitments elsewhere that this window collides with. */
+  clashes: readonly Commitment[]
   busy: boolean
   pending: boolean
   onConfirm: () => void
@@ -308,6 +358,8 @@ const CandidateDetail = ({
     </ul>
 
     {container !== null && <p className="text-[11px] text-muted-foreground">{container}</p>}
+
+    <BusyElsewhere clashes={clashes} />
 
     <Button size="sm" disabled={busy} onClick={onConfirm}>
       {pending ? (

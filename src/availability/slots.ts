@@ -44,6 +44,7 @@
  * what v1 drew. A `:45` zone (Kathmandu, Chatham, Eucla) gets a gutter reading
  * `00:15, 00:45` instead of a product that silently never works.
  */
+import { signedOffset } from '../shell/zone.ts'
 import { TZDate, tzOffset } from '@date-fns/tz'
 import { groupBy, times } from 'lodash-es'
 
@@ -159,7 +160,7 @@ export const slotsOfDay = (day: Date, timeZone: string): Slot[] => {
   return rows.map(({ offsetMinutes, ...row }, index) => ({
     ...row,
     opensHour: row.label.endsWith(':00'),
-    offset: byLabel[row.label].length > 1 ? formatOffset(offsetMinutes) : null,
+    offset: byLabel[row.label].length > 1 ? signedOffset(offsetMinutes) : null,
     // `index > 0` rather than a comparison against the day before: midnight has
     // no previous slot here, and a day that *begins* at a transition is not a
     // discontinuity anyone reading this column can see.
@@ -181,14 +182,6 @@ const pad = (value: number): string => String(value).padStart(2, '0')
 const wallClock = (instant: Date, timeZone: string): string => {
   const local = new TZDate(instant.getTime(), timeZone)
   return `${pad(local.getHours())}:${pad(local.getMinutes())}`
-}
-
-/** `+2`, `+1`, `-5`, and `+5:30` where a zone is not on the hour. */
-const formatOffset = (minutes: number): string => {
-  const sign = minutes < 0 ? '-' : '+'
-  const hours = Math.floor(Math.abs(minutes) / 60)
-  const rest = Math.abs(minutes) % 60
-  return rest === 0 ? `${sign}${hours}` : `${sign}${hours}:${pad(rest)}`
 }
 
 /**

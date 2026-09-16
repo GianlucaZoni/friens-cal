@@ -9,11 +9,17 @@
  *
  * ## The zone is read, not stored
  *
- * `deviceTimeZone` is asked on every render rather than held anywhere, so
- * travelling just works and there is no staleness to reconcile.
- * `friend.time_zone` is a **mirror** of that value, written on sign-in and read
- * only by *other people* — the roster's offset and the frame suppression
- * below. The grid never reads it (planning ticket 08 §4).
+ * `deviceTimeZone` is asked of the browser rather than held in any state, so
+ * there is nothing to invalidate and no setting to keep in step. What that buys
+ * is bounded, and the bound is worth stating: a screen picks up a changed
+ * device zone the next time something recomputes, which for the grid is the
+ * half-hour tick of the app's clock or the next navigation, not the instant a
+ * phone crosses a border. Nothing goes *wrong* in between, because Slots are
+ * instants and only the labels are behind.
+ *
+ * `friend.time_zone` is a **mirror** of the same value, written when a session
+ * resolves and read only by *other people* — the roster's offset and the frame
+ * suppression below. The grid never reads it (planning ticket 08 §4).
  *
  * ## Two idioms, deliberately
  *
@@ -74,11 +80,22 @@ export const deviceZone = (): ViewerZone => ({ timeZone: deviceTimeZone(), frame
  */
 export const zoneFrame = (timeZone: string, at: number): string => {
   const minutes = tzOffset(timeZone, new Date(at))
-  if (minutes === 0) return 'GMT'
+  return minutes === 0 ? 'GMT' : `GMT${signedOffset(minutes)}`
+}
 
-  const sign = minutes < 0 ? '-' : '+'
+/**
+ * A UTC offset in minutes, spelled: `+2`, `-5`, `+5:45`.
+ *
+ * Also what the week gutter writes beside the two 02:00 rows of an autumn
+ * Sunday (`slotsOfDay`), which is why it lives here rather than in either
+ * caller. `GMT+2` on a card and `+2` in the gutter are the same number in the
+ * same notation, and one of them growing a `:30` case without the other is a
+ * bug nobody would think to look for.
+ */
+export const signedOffset = (minutes: number): string => {
   const { hours, rest } = split(minutes)
-  return rest === 0 ? `GMT${sign}${hours}` : `GMT${sign}${hours}:${pad(rest)}`
+  const sign = minutes < 0 ? '-' : '+'
+  return rest === 0 ? `${sign}${hours}` : `${sign}${hours}:${pad(rest)}`
 }
 
 /**
@@ -97,9 +114,7 @@ export const zoneFrame = (timeZone: string, at: number): string => {
  * guessing would put a number on the row that is not a fact about anybody.
  */
 export const offsetLabel = (viewer: string, other: string | null, at: number): string | null => {
-  if (other === null) return null
-
-  const minutes = tzOffset(other, new Date(at)) - tzOffset(viewer, new Date(at))
+  const minutes = offsetBetween(viewer, other, at)
   if (minutes === 0) return null
 
   const { hours, rest } = split(minutes)
@@ -126,7 +141,39 @@ export const spansZones = (
   viewer: string,
   others: readonly (string | null)[],
   at: number
-): boolean => others.some((other) => offsetLabel(viewer, other, at) !== null)
+): boolean => others.some((other) => offsetBetween(viewer, other, at) !== 0)
+
+/**
+ * How far ahead of the viewer another zone's clock reads, in minutes — zero for
+ * a Friend on the same clock, and zero for one with no zone at all.
+ *
+ * The one piece of arithmetic under both the label and the predicate, so they
+ * cannot come to different conclusions about whether there is anything to say.
+ */
+const offsetBetween = (viewer: string, other: string | null, at: number): number =>
+  other === null ? 0 : tzOffset(other, new Date(at)) - tzOffset(viewer, new Date(at))
+
+/**
+ * The whole of what a screen needs: the zone it is drawn in, and the frame its
+ * time strings name.
+ *
+ * The suppression rule is applied **here and once**, rather than at each of the
+ * seven components that render a `whenOf` string, so they cannot drift apart
+ * about whether this cal spans zones. `others` is every *other* Member's
+ * mirrored zone; your own is left out, because a mirror can be a round trip
+ * behind the device it mirrors and you are never ahead of yourself.
+ *
+ * Note which offset the frame carries: **the viewer's own**. `GMT+2` on a card
+ * says what clock this card is in, not what clock the Friend abroad is in.
+ */
+export const viewerZoneAmong = (
+  timeZone: string,
+  others: readonly (string | null)[],
+  at: number
+): ViewerZone => ({
+  timeZone,
+  frame: spansZones(timeZone, others, at) ? zoneFrame(timeZone, at) : null,
+})
 
 const split = (minutes: number): { hours: number; rest: number } => ({
   hours: Math.floor(Math.abs(minutes) / 60),

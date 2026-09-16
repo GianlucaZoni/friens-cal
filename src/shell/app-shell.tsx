@@ -14,7 +14,7 @@ import { AppShellProvider, ShellInset, ShellSidebar } from '@/shell/shell'
 import { TopBar } from '@/shell/top-bar'
 import { useCalendarView } from '@/shell/use-calendar-view'
 import { ViewerZoneContext } from '@/shell/viewer-zone'
-import { deviceTimeZone, spansZones, zoneFrame, type ViewerZone } from '@/shell/zone'
+import { deviceTimeZone, viewerZoneAmong } from '@/shell/zone'
 import { useMemo } from 'react'
 
 /**
@@ -108,16 +108,15 @@ export const AppShell = () => {
    * of zones — Rome and New York are six hours apart most of the year and five
    * for the ten days the EU has moved and the US has not.
    */
-  const zone = useMemo<ViewerZone>(() => {
-    const timeZone = deviceTimeZone()
-    const others = roster.friends
-      .filter((friend) => !friend.isSelf)
-      .map((friend) => friend.timeZone)
-    return {
-      timeZone,
-      frame: spansZones(timeZone, others, now) ? zoneFrame(timeZone, now) : null,
-    }
-  }, [roster.friends, now])
+  const zone = useMemo(
+    () =>
+      viewerZoneAmong(
+        deviceTimeZone(),
+        roster.friends.filter((friend) => !friend.isSelf).map((friend) => friend.timeZone),
+        now
+      ),
+    [roster.friends, now]
+  )
 
   /**
    * Whose Availability the grid draws, and the one colour it draws in.

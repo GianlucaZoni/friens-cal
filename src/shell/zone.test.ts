@@ -11,7 +11,7 @@
  * `BETWEEN` sits in the ten days of autumn where the EU has moved and the US
  * has not.
  */
-import { deviceTimeZone, offsetLabel, spansZones, zoneFrame } from './zone.ts'
+import { deviceTimeZone, offsetLabel, spansZones, viewerZoneAmong, zoneFrame } from './zone.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -130,6 +130,29 @@ test('a cal can start and stop spanning zones as the clocks change', () => {
   // and sits thirty minutes ahead of it for the rest of the year.
   assert.equal(spansZones(SYDNEY, [LORD_HOWE], WINTER), false)
   assert.equal(spansZones(SYDNEY, [LORD_HOWE], SUMMER), true)
+})
+
+/* ================================================================== *
+ * What a whole screen is handed
+ * ================================================================== */
+
+test('a cal in one country hands the screen no frame at all', () => {
+  assert.deepEqual(viewerZoneAmong(ROME, [ROME, BERLIN, null], SUMMER), {
+    timeZone: ROME,
+    frame: null,
+  })
+})
+
+test('the frame a cal that spans zones carries is the offset of whoever reads it', () => {
+  // Not Bea's. `GMT+2` on a card says what clock the card is in.
+  assert.deepEqual(viewerZoneAmong(ROME, [TOKYO], SUMMER), {
+    timeZone: ROME,
+    frame: 'GMT+2',
+  })
+  assert.deepEqual(viewerZoneAmong(TOKYO, [ROME], SUMMER), {
+    timeZone: TOKYO,
+    frame: 'GMT+9',
+  })
 })
 
 /* ================================================================== *

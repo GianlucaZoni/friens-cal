@@ -5,12 +5,8 @@ import { useCallback, useMemo, useState } from 'react'
 export const WEEK_STARTS_ON: WeekStart = 1
 
 /*
- * `GROUP_TIME_ZONE` used to live here, beside `WEEK_STARTS_ON`, on the grounds
- * that they were the same kind of fact: the two conventions the grid's geometry
- * is built from. Only one of them still is. A cal has **no clock of its own**
- * (`CONTEXT.md`, **Group**) — every Friend's grid is drawn in their own zone,
- * so the row count now comes from the device rather than from a constant, and
- * `Europe/Rome` has no reader left anywhere in `src/`. See `@/shell/zone`.
+ * `GROUP_TIME_ZONE` used to sit beside it and no longer exists: a cal has no
+ * clock of its own, and every grid is drawn in the viewer's (`@/shell/zone`).
  */
 
 /**

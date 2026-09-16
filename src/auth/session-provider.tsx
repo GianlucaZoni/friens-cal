@@ -192,7 +192,7 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
    * beside their name on somebody else's roster, which is worth a line in the
    * console and not a word on screen.
    */
-  const mirroredZone = useRef<string | null>(null)
+  const mirroredFor = useRef<string | null>(null)
 
   useEffect(() => {
     if (userId === null || fetched === null || fetched.forUserId !== userId) return
@@ -200,8 +200,8 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
 
     const device = deviceTimeZone()
     const written = `${userId}|${device}`
-    if (fetched.friend.time_zone === device || mirroredZone.current === written) return
-    mirroredZone.current = written
+    if (fetched.friend.time_zone === device || mirroredFor.current === written) return
+    mirroredFor.current = written
 
     void supabase
       .from('friend')

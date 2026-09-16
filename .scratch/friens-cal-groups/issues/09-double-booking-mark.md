@@ -1,6 +1,6 @@
 # 09 — The double-booking mark
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 ## Parent

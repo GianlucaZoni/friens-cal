@@ -52,3 +52,28 @@ out of `/g/:id` back to `/`.
 
 - [02 — Join or create a cal at `/`](./02-join-or-create.md)
 - [03 — The cal dropdown in the app shell](./03-cal-dropdown.md)
+
+## Comments
+
+**From slice 03, which is built: your slot exists and Rename is already in
+it.** `/`'s row overflow is `CalOverflow` with `surface="list"`
+(`src/pages/JoinOrCreatePage.tsx`, third sibling after the `Link` and the copy
+button), and it holds Rename today.
+
+To add Leave, in order:
+
+1. `src/cal/cal-menu.ts`: add `'leave'` to `CalAction`, to the `list` array
+   (not to `switcher`, which slice 03 kept it off), and to `CAL_ACTION_LABEL`.
+2. `src/cal/cal-action-dialogs.tsx`: a third branch. The `satisfies never` at
+   the bottom will refuse to compile until you write it. It already takes the
+   whole `CalsState`, so a `leave` added to `use-cals.ts` reaches you with no
+   prop to thread through either call site.
+3. Leave's **destructive** treatment has nowhere to live yet.
+   `CAL_ACTION_LABEL` carries labels and nothing else, and
+   `DropdownMenuItem` takes `variant="destructive"`, so that is a second map
+   or a case in `src/cal/cal-overflow.tsx`.
+
+Also worth knowing before you drive it: the dots inside the **switcher** does
+not respond to synthetic events (`element.click()`, or a hand-dispatched
+pointerdown/click) and does respond to a real one from the browser harness.
+`/`'s dots, which is not nested in a menu, responds to both.

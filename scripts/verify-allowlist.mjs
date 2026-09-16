@@ -1,19 +1,37 @@
 /**
- * friens-cal — issue 14: prove the allowlist gate from a browser-shaped client.
+ * friens-cal, issue 14 extended by groups issue 06: prove the allowlist gate
+ * and the one verb that was opened in it, from a browser-shaped client.
  *
  *   node --env-file=.env scripts/verify-allowlist.mjs
  *
- * Run it AFTER pasting `supabase/07-allowlist.sql` into the SQL Editor, AFTER
- * registering the hook in the dashboard, and AFTER seeding at least one
- * address. `scripts/setup-allowlist.sh` walks that order.
+ * Run it AFTER pasting `supabase/07-allowlist.sql` and `supabase/13-invite.sql`
+ * into the SQL Editor, AFTER registering the hook in the dashboard, and AFTER
+ * seeding at least one address. `scripts/setup-allowlist.sh` walks that order
+ * for the first three.
  *
  * WHY IT IS ALL BEHAVIOUR AND NO READS. Every other verify script in this repo
- * checks a table by reading it. This one cannot: `allowlist` grants nothing to
- * `anon` or `authenticated`, which is the acceptance criterion, so a script
- * holding the publishable key is exactly as locked out as an attacker. What it
- * can do is push on each lock and confirm it does not move.
+ * checks a table by reading it. This one cannot: `allowlist` still grants no
+ * `select` to `anon` or `authenticated`, which is the acceptance criterion, so
+ * a script holding the publishable key is exactly as locked out as an attacker.
+ * What it can do is push on each lock and confirm it does not move.
  *
- * ONE CHECK HAS A COST, AND IT IS THE IMPORTANT ONE. §4 signs up an address
+ * WHAT GROUPS ISSUE 06 CHANGED, AND WHY THIS FILE RATHER THAN A NEW ONE.
+ * `13-invite.sql` grants `insert` to `authenticated` so a Friend can invite
+ * somebody from inside the app. That makes §2's old assertion false, the one
+ * that said an insert as `authenticated` is refused, and a second script would
+ * have left this one failing. The lock it describes is now half open, and the
+ * file that describes the lock is the file that has to say which half.
+ *
+ * IT LEAVES ONE ROW BEHIND, ON PURPOSE. §4 needs a new address to invite, and
+ * nothing holding a publishable key can delete one afterwards: `delete` is
+ * revoked and always will be. So the address is fixed rather than unique per
+ * run, and it is on `.invalid`, the TLD RFC 2606 reserves so that it can never
+ * resolve. Nobody can receive mail there, so nobody can ever prove ownership of
+ * it to the signup form: the row is a door onto a wall. Every run after the
+ * first one re-uses it and adds nothing. The statement that removes it is
+ * printed at the end.
+ *
+ * ONE CHECK HAS A COST, AND IT IS THE IMPORTANT ONE. §6 signs up an address
  * that is not on the list. If the hook is registered, that fails and nothing is
  * created — free, repeatable, run it as often as you like. If the hook is NOT
  * registered, the signup SUCCEEDS and a real `auth.users` row exists that
@@ -24,6 +42,12 @@
  *
  * There is no way to read a hook's registration back over the Data API, so this
  * is the only check there is. It is also, exactly, the criterion.
+ *
+ * AND IT IS ONLY HALF OF IT. "An invited address can then sign up" cannot be
+ * checked from here at all: proving it means creating a real account, and
+ * nothing in this repo can delete one. §4's probe address is on `.invalid`
+ * precisely so that nobody can ever sign up with it. That half is a human with
+ * a second address, once.
  */
 import { createClient } from '@supabase/supabase-js'
 
@@ -45,11 +69,15 @@ if (missing.length) {
 
 /**
  * Optional. A real Friend who already has an account — the same pair
- * `verify-friend-row.mjs` uses. Two checks need it and are skipped without it:
- * the authenticated half of the lock, and the already-registered address.
+ * `verify-friend-row.mjs` uses. Everything from §2 down needs it and is skipped
+ * without it: the whole `authenticated` half of the lock, the invite verbs, and
+ * the already-registered address.
  */
 const friendEmail = process.env.FRIEND_TEST_EMAIL
 const friendPassword = process.env.FRIEND_TEST_PASSWORD
+
+/** The one row this script writes. See the header. */
+const PROBE_ADDRESS = 'invite-probe@friens-cal.invalid'
 
 const ok = (m) => console.log(`✓ ${m}`)
 const skip = (m) => console.log(`· ${m}`)
@@ -65,23 +93,64 @@ const LEAK = 'not on the list'
 /** Ticket 18, draft A, first sentence — what `07-allowlist.sql` returns. */
 const DRAFT_A = 'We could not create an account with those details.'
 
+/* ---------------------------------------------------------------- *
+ * The raw response, because supabase-js is not where the leak would be.
+ *
+ * §4 has to compare two writes for sameness, and "same" has to mean the bytes
+ * on the wire rather than the shape the client library hands back. A status
+ * code or a header that differed would answer, for any address a Friend cares
+ * to type, whether that person already has an account here. That is the
+ * enumeration leak `07-allowlist.sql` §3 spends its rejection copy closing,
+ * walked in from the other side.
+ * ---------------------------------------------------------------- */
+
+/** Headers that differ between any two requests and say nothing about either. */
+const VOLATILE = new Set([
+  'date',
+  'x-kong-upstream-latency',
+  'x-kong-proxy-latency',
+  'cf-ray',
+  'cf-cache-status',
+  'sb-request-id',
+  'x-request-id',
+  'server-timing',
+  'alt-svc',
+  'report-to',
+  'nel',
+  'age',
+])
+
+let lastResponse = null
+
+const recordingFetch = async (input, init) => {
+  const response = await fetch(input, init)
+  const target = typeof input === 'string' ? input : input.url
+  if (target.includes('/rest/v1/allowlist')) {
+    const copy = response.clone()
+    lastResponse = {
+      status: response.status,
+      statusText: response.statusText,
+      headers: [...copy.headers]
+        .filter(([name]) => !VOLATILE.has(name.toLowerCase()))
+        .map(([name, value]) => `${name.toLowerCase()}: ${value}`)
+        .sort(),
+      body: await copy.text(),
+    }
+  }
+  return response
+}
+
 /**
- * Both locks on the table, pushed from whatever role `client` is holding.
- * Run twice: once anonymous, once as a signed-in Friend, because the grant was
- * revoked from both and a script that only tried `anon` would miss half of it.
+ * Both locks on reading, pushed from whatever role `client` is holding.
+ * Run twice: once anonymous, once as a signed-in Friend, because no read was
+ * ever opened to either and a script that only tried `anon` would miss half.
  */
-const proveTableIsShut = async (client, role) => {
+const proveReadsAreShut = async (client, role) => {
   const { data, error } = await client.from('allowlist').select('*')
   if (!error) {
     die(`\`allowlist\` IS READABLE BY \`${role}\` — it returned ${data?.length ?? 0} row(s)`)
   }
   ok(`select on \`allowlist\` as \`${role}\` is refused (${error.code})`)
-
-  const { error: insertErr } = await client
-    .from('allowlist')
-    .insert({ email: `smuggled-${Date.now()}@example.com` })
-  if (!insertErr) die(`\`${role}\` INSERTED A ROW INTO \`allowlist\` — the grant was not revoked`)
-  ok(`insert into \`allowlist\` as \`${role}\` is refused (${insertErr.code})`)
 }
 
 /**
@@ -112,32 +181,135 @@ const proveHookIsUncallable = async (client, role) => {
  * its own prove it is there. (`42501` would settle it, and means the same
  * thing.) What proves the table exists and holds the right addresses is the one
  * acceptance signup a human runs, which is step 6 of `setup-allowlist.sh`.
+ *
+ * `13-invite.sql` opened `insert` to `authenticated` and to nobody else, so an
+ * anonymous insert is still refused and that is checked here rather than
+ * assumed: signing up is the only thing a stranger may do to this project.
  * ---------------------------------------------------------------- */
-const anon = createClient(url, key)
-await proveTableIsShut(anon, 'anon')
+const anon = createClient(url, key, { global: { fetch: recordingFetch } })
+await proveReadsAreShut(anon, 'anon')
+
+const { error: anonInsert } = await anon
+  .from('allowlist')
+  .insert({ email: `smuggled-${Date.now()}@friens-cal.invalid`, invited_by: null })
+if (!anonInsert) die('`anon` INSERTED A ROW INTO `allowlist`, so the grant reaches too far')
+ok(`insert into \`allowlist\` as \`anon\` is refused (${anonInsert.code})`)
+
 await proveHookIsUncallable(anon, 'anon')
 
-/* ---------------------------------------------------------------- *
- * 2. And as a Friend, because being one of us buys no access either.
- * ---------------------------------------------------------------- */
-if (friendEmail && friendPassword) {
-  const signedIn = createClient(url, key)
-  const { error: signInErr } = await signedIn.auth.signInWithPassword({
-    email: friendEmail,
-    password: friendPassword,
-  })
-  if (signInErr) die('sign-in as FRIEND_TEST_EMAIL failed', signInErr)
-  ok(`signed in as ${friendEmail}`)
-
-  await proveTableIsShut(signedIn, 'authenticated')
-  await proveHookIsUncallable(signedIn, 'authenticated')
-  await signedIn.auth.signOut()
-} else {
-  skip('FRIEND_TEST_EMAIL / FRIEND_TEST_PASSWORD unset — the `authenticated` half is skipped')
+if (!friendEmail || !friendPassword) {
+  skip('FRIEND_TEST_EMAIL / FRIEND_TEST_PASSWORD unset, so everything from §2 down is skipped')
+  process.exit(0)
 }
 
 /* ---------------------------------------------------------------- *
- * 3. An address that is already registered.
+ * 2. And as a Friend, where exactly one verb is open.
+ * ---------------------------------------------------------------- */
+const signedIn = createClient(url, key, { global: { fetch: recordingFetch } })
+const { data: session, error: signInErr } = await signedIn.auth.signInWithPassword({
+  email: friendEmail,
+  password: friendPassword,
+})
+if (signInErr) die('sign-in as FRIEND_TEST_EMAIL failed', signInErr)
+const friendId = session.user.id
+ok(`signed in as ${friendEmail}`)
+
+await proveReadsAreShut(signedIn, 'authenticated')
+
+const { error: updateErr } = await signedIn
+  .from('allowlist')
+  .update({ note: 'mine now' })
+  .eq('email', friendEmail)
+if (!updateErr) die('`authenticated` UPDATED A ROW IN `allowlist`, and only `insert` was granted')
+ok(`update on \`allowlist\` as \`authenticated\` is refused (${updateErr.code})`)
+
+const { error: deleteErr } = await signedIn.from('allowlist').delete().eq('email', PROBE_ADDRESS)
+if (!deleteErr) die('`authenticated` DELETED FROM `allowlist`, and only `insert` was granted')
+ok(`delete on \`allowlist\` as \`authenticated\` is refused (${deleteErr.code})`)
+
+/* ---------------------------------------------------------------- *
+ * 3. The two ways an invite is refused, neither of which writes anything.
+ *
+ * The policy is `with check (invited_by = (select auth.uid()))`, so the only
+ * inviter a Friend can record is themselves. Provenance that could be forged
+ * would be worth nothing, and the column exists for no other reason.
+ *
+ * The constraint is `check (email = lower(btrim(email)))`. The old one let a
+ * trailing space through, and such a row matches the signup hook never. That is
+ * the one failure `07-allowlist.sql` §1 says nobody could debug from outside.
+ * Both probes use addresses that are NOT on the list, so a refusal here is the
+ * policy or the constraint speaking and not the duplicate trigger.
+ * ---------------------------------------------------------------- */
+const { error: forgedErr } = await signedIn.from('allowlist').insert({
+  email: `forged-${Date.now()}@friens-cal.invalid`,
+  note: 'verify-allowlist',
+  // Any uuid that is not this Friend's. A real one would need a second account;
+  // the policy compares to `auth.uid()` and does not care whether it exists.
+  invited_by: '00000000-0000-4000-8000-000000000000',
+})
+if (!forgedErr) die('A FRIEND RECORDED SOMEBODY ELSE AS THE INVITER, so the policy is not holding')
+ok(`inviting in another Friend's name is refused (${forgedErr.code})`)
+
+const { error: spacedErr } = await signedIn.from('allowlist').insert({
+  email: ` spaced-${Date.now()}@friens-cal.invalid `,
+  note: 'verify-allowlist',
+  invited_by: friendId,
+})
+if (!spacedErr) die('AN ADDRESS WITH A TRAILING SPACE WAS STORED. Run supabase/13-invite.sql')
+if (spacedErr.code !== '23514') {
+  die(
+    `a trailing space was refused by something other than the check constraint: ${spacedErr.code}`
+  )
+}
+ok(`an address with a trailing space is refused by the constraint (${spacedErr.code})`)
+
+/* ---------------------------------------------------------------- *
+ * 4. A new address and one already on the list, answered identically.
+ *
+ * This is the criterion the whole dialog's copy rests on. The inviter is told
+ * "rob@gmail.com can now create an account", a sentence that is true either
+ * way, and it is only honest because the round trip genuinely cannot tell the
+ * two cases apart.
+ *
+ * `friendEmail` is the address that is definitely already on the list: they
+ * signed up, so the hook found them there. `PROBE_ADDRESS` is definitely new on
+ * the first run of this script against a given project. On later runs it is
+ * there too, and the comparison still passes but stops being the interesting
+ * one. Delete the row, with the statement printed at the end, to get the strong
+ * version back.
+ * ---------------------------------------------------------------- */
+const invite = async (email) => {
+  lastResponse = null
+  const { error } = await signedIn
+    .from('allowlist')
+    .insert({ email, note: 'verify-allowlist', invited_by: friendId })
+  if (error) die(`inviting ${email} failed (${error.code}): ${error.message}`)
+  if (lastResponse === null) die('the response to the invite was not captured')
+  return lastResponse
+}
+
+const fresh = await invite(PROBE_ADDRESS)
+const listed = await invite(friendEmail)
+
+if (JSON.stringify(fresh) !== JSON.stringify(listed)) {
+  console.error('✗ THE RESPONSE TELLS A NEW ADDRESS FROM ONE ALREADY ON THE LIST')
+  console.error('')
+  console.error('  That is the enumeration leak, reopened from the invite side: a Friend can')
+  console.error('  ask, of any address they care to type, whether that person is one of us.')
+  console.error("  The dialog's copy cannot close it. See supabase/13-invite.sql §5.")
+  console.error('')
+  console.error(`  new:      ${JSON.stringify(fresh)}`)
+  console.error(`  existing: ${JSON.stringify(listed)}`)
+  process.exit(1)
+}
+ok(
+  `inviting is ${fresh.status} ${fresh.statusText || '(no reason)'} whether or not the address was already there`
+)
+if (fresh.body !== '') die(`the invite came back with a body: ${JSON.stringify(fresh.body)}`)
+ok('and it comes back with no body, so there is nothing to read either')
+
+/* ---------------------------------------------------------------- *
+ * 5. An address that is already registered.
  *
  * The criterion is that this looks identical to a rejection from the outside.
  * It cannot be checked here, because the sameness is imposed by the client
@@ -148,25 +320,26 @@ if (friendEmail && friendPassword) {
  *
  * Creates nothing: the account already exists.
  * ---------------------------------------------------------------- */
-if (friendEmail) {
-  const { data, error } = await createClient(url, key).auth.signUp({
-    email: friendEmail,
-    password: `verify-${Date.now()}`,
-  })
-  if (!error && data.session) die(`SIGNING UP AN EXISTING ADDRESS RETURNED A SESSION — ${friendEmail}`)
-  if (!error) {
-    // No error and no session is Supabase obfuscating a duplicate, which it
-    // only does when Confirm Email is on. Ticket 13 turned it off, and this
-    // whole slice is safe only because it stays off.
-    die('signing up an existing address returned neither a session nor an error — Confirm Email is on')
-  }
-  ok(`an already-registered address is refused (${error.code}: ${error.message})`)
-} else {
-  skip('FRIEND_TEST_EMAIL unset — the already-registered check is skipped')
+await signedIn.auth.signOut()
+
+const { data: dupe, error: dupeErr } = await createClient(url, key).auth.signUp({
+  email: friendEmail,
+  password: `verify-${Date.now()}`,
+})
+if (!dupeErr && dupe.session)
+  die(`SIGNING UP AN EXISTING ADDRESS RETURNED A SESSION: ${friendEmail}`)
+if (!dupeErr) {
+  // No error and no session is Supabase obfuscating a duplicate, which it
+  // only does when Confirm Email is on. Ticket 13 turned it off, and this
+  // whole slice is safe only because it stays off.
+  die(
+    'signing up an existing address returned neither a session nor an error, so Confirm Email is on'
+  )
 }
+ok(`an already-registered address is refused (${dupeErr.code}: ${dupeErr.message})`)
 
 /* ---------------------------------------------------------------- *
- * 4. An address that is not on the list. The one check with a cost.
+ * 6. An address that is not on the list. The one check with a cost.
  * ---------------------------------------------------------------- */
 const stranger = `allowlist-check-${Date.now()}@example.com`
 console.log(`\n· about to attempt a signup as ${stranger}`)
@@ -194,7 +367,7 @@ if (!strangerErr) {
 ok(`an unlisted address is refused (${strangerErr.code ?? strangerErr.status})`)
 
 /* ---------------------------------------------------------------- *
- * 5. And refused without saying why, which is the point of the copy.
+ * 7. And refused without saying why, which is the point of the copy.
  * ---------------------------------------------------------------- */
 if (strangerErr.message.toLowerCase().includes(LEAK)) {
   die(
@@ -215,4 +388,8 @@ if (strangerErr.message === DRAFT_A) {
 }
 
 console.log('\nAll checks passed. The allowlist is unreadable, the hook is unreachable,')
-console.log('and an address that is not on it cannot make an account.')
+console.log('an address that is not on it cannot make an account, and a Friend can add')
+console.log('one only in their own name.')
+console.log('\nThis run left one row behind, which is expected and cannot be removed from')
+console.log('here. From the SQL Editor:')
+console.log(`\n    delete from public.allowlist where email = '${PROBE_ADDRESS}';\n`)

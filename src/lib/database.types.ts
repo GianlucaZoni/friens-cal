@@ -91,6 +91,57 @@ export type Database = {
           },
         ]
       }
+      /**
+       * The addresses permitted to hold an account at all, which is the whole
+       * of this project's admission control (supabase/07-allowlist.sql).
+       *
+       * **The only table here nothing in the browser can read.** `select`,
+       * `update` and `delete` are revoked from `anon` and `authenticated` and
+       * have no policies, so the `Row` below is a shape no query in this app
+       * can ever produce. It is written out because the generated type has one
+       * and because the SQL Editor reads these columns, not because anything
+       * here will hold it. It is also the one table banned from the Realtime
+       * publication: RLS is not applied to DELETE events, so publishing it
+       * would broadcast an address.
+       */
+      allowlist: {
+        Row: {
+          email: string
+          note: string | null
+          added_at: string
+          /**
+           * The Friend who vouched. Null for the rows seeded by hand before
+           * the column existed (supabase/13-invite.sql §1), and null for
+           * anything added from the SQL Editor, where `auth.uid()` is null.
+           */
+          invited_by: string | null
+        }
+        /**
+         * The one thing a browser may do to this table, and the grant is one
+         * verb wide. `invited_by` is required here although the column is
+         * nullable and defaulted: the insert policy is
+         * `with check (invited_by = (select auth.uid()))`, so an insert that
+         * omits it relies on a default the policy will then re-check, and this
+         * type is what says to send it.
+         */
+        Insert: {
+          email: string
+          note?: string | null
+          added_at?: string
+          invited_by: string
+        }
+        /** Empty: there is no update grant and no update policy. */
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: 'allowlist_invited_by_fkey'
+            columns: ['invited_by']
+            isOneToOne: false
+            referencedRelation: 'friend'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       friend: {
         Row: {
           id: string

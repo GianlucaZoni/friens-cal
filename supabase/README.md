@@ -124,6 +124,9 @@ Finish with `npx -y supabase@latest stop`, which leaves nothing behind.
 | `10-lifecycle-per-cal.sql` | The lifecycle functions made cal-aware, and the Left that leaving writes. |
 | `11-realtime-per-cal.sql` | Broadcast triggers, the `realtime.messages` policy, the publication drops. |
 | `12-cal-members-topic.sql` | One more broadcast trigger, so the roster hears a join or a leave. |
+| `13-invite.sql` | `allowlist.invited_by`, a tighter email constraint, and the one `insert` grant that lets a Friend invite. |
 
 `08` through `11` are one cutover and are run in one sitting: `09` breaks the
 deployed client and `11` silences it, so the client deploy follows immediately.
+`13-invite.sql` is not part of that sitting. It touches only `allowlist`, which
+the cutover does not, so it can be run before or after.

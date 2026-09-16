@@ -13,6 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Separator } from '@/components/ui/separator'
 import { FriendBlob } from '@/identity/friend-blob'
 import { identityOf } from '@/identity/friend-row'
+import { canInvite } from '@/identity/invite'
+import { InviteDialog } from '@/identity/invite-dialog'
 import { ChangePasswordDialog, CustomiseDialog, ProfileDialog } from '@/identity/profile-dialogs'
 import { cn } from '@/lib/utils'
 import { MiniCalendar } from '@/shell/mini-calendar'
@@ -29,6 +31,7 @@ import {
   LogOutIcon,
   PaletteIcon,
   UserIcon,
+  UserPlusIcon,
 } from 'lucide-react'
 
 /**
@@ -264,7 +267,7 @@ const TopCluster = ({ calendar }: { calendar: CalendarViewState }) => {
  */
 const FriendMenu = () => {
   const { state, signOut } = useSession()
-  const [dialog, setDialog] = useState<'profile' | 'customise' | 'password' | null>(null)
+  const [dialog, setDialog] = useState<'profile' | 'customise' | 'password' | 'invite' | null>(null)
 
   if (state.status !== 'signed-in') return null
 
@@ -342,6 +345,22 @@ const FriendMenu = () => {
               <KeyRoundIcon /> Change password
             </DropdownMenuItem>
 
+            {/*
+            Admission is account-level, which is why it is in the account drawer
+            and not in the cal dropdown: an Invite carries no destination, and
+            one sitting beside the switcher would read as "invite to this cal".
+
+            **Disabled for a different reason from "How you look" above**, and a
+            reader finding two items disabled on one screen will otherwise
+            assume one cause. That one waits for a finished profile so nobody
+            keeps a colour they never chose. This one waits for the `friend` row
+            itself, because `allowlist.invited_by` references it and the write
+            is a `23503` until it lands. See `canInvite`.
+          */}
+            <DropdownMenuItem onClick={() => setDialog('invite')} disabled={!canInvite(friend)}>
+              <UserPlusIcon /> Invite a frien
+            </DropdownMenuItem>
+
             <DropdownMenuItem onClick={() => void signOut()}>
               <LogOutIcon /> Sign out
             </DropdownMenuItem>
@@ -374,6 +393,20 @@ const FriendMenu = () => {
 
       {dialog === 'password' ? (
         <ChangePasswordDialog email={user.email} onClose={() => setDialog(null)} />
+      ) : null}
+
+      {/*
+      `friend !== null` again rather than `canInvite(friend)`, because the
+      dialog needs `friend.id` and a boolean predicate does not narrow the
+      type. `friend-row.ts` does the same thing for the same reason, where
+      `identityOf` re-checks what `isSetupComplete` just decided.
+    */}
+      {dialog === 'invite' && friend !== null ? (
+        <InviteDialog
+          inviterId={friend.id}
+          inviterName={friend.display_name}
+          onClose={() => setDialog(null)}
+        />
       ) : null}
     </>
   )

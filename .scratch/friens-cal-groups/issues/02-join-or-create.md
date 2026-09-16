@@ -1,6 +1,6 @@
 # 02 — Join or create a cal at `/`
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 01
 
 ## Parent

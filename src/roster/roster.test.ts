@@ -1,5 +1,6 @@
 /**
- * The roster's four rules, asserted rather than argued.
+ * The roster's rules, asserted rather than argued: what order the Friends come
+ * in, whose row wins, who is Hidden, and which of them are the cal's Members.
  *
  * Runs on Node's own runner, like `identity.test.ts` — which is why the module
  * under test has **no imports at all**: a test file's specifiers have to
@@ -9,7 +10,17 @@
  *
  *     yarn test
  */
-import { mergeSelf, rosterOrder, toggled, withoutHidden } from './roster.ts'
+import {
+  byId,
+  membersOnly,
+  mergeSelf,
+  namesOf,
+  rosterOrder,
+  rosterStatus,
+  toggled,
+  withMember,
+  withoutHidden,
+} from './roster.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -125,4 +136,76 @@ test('withoutHidden is the Friends the viewer is currently trying to meet', () =
     withoutHidden(friends, new Set(['bruno'])).map((f) => f.id),
     ['ada']
   )
+})
+
+/* ================================================================== *
+ * The cal's Members
+ * ================================================================== */
+
+test("the roster is the cal's Members, out of every Friend in the product", () => {
+  const everyFriend = [entry('ada', 'Ada'), entry('bea', 'Bea'), entry('cyd', 'Cyd')]
+
+  assert.deepEqual(
+    membersOnly(everyFriend, new Set(['ada', 'cyd'])).map((f) => f.id),
+    ['ada', 'cyd']
+  )
+})
+
+test('a cal nobody is in is empty, not unfiltered', () => {
+  // The member set is null while its read is in flight and is never coerced;
+  // an empty one is an answer, and it means an empty sidebar.
+  assert.deepEqual(membersOnly([entry('ada', 'Ada')], new Set()), [])
+})
+
+test('a Friend who is no longer a Member keeps their name and their face', () => {
+  // The two maps are built from the full read, which is the whole reason the
+  // read stays unscoped. `facesOf` drops ids it does not know, so under a
+  // scoped read a Participant on a past Hangout goes missing from the face row
+  // rather than going nameless, and `nameFor` prints "someone else" for a
+  // live Friend.
+  const everyFriend = [entry('ada', 'Ada'), entry('bea', 'Bea')]
+  const members = new Set(['ada'])
+
+  assert.deepEqual(
+    membersOnly(everyFriend, members).map((f) => f.id),
+    ['ada']
+  )
+  assert.equal(namesOf(everyFriend).get('bea'), 'Bea')
+  assert.equal(byId(everyFriend).get('bea')?.id, 'bea')
+})
+
+test('names include the Friends who have not finished setup', () => {
+  // A face needs a hue (`setUpOnly`); a provenance line needs only a name.
+  assert.equal(namesOf([entry('new', 'Someone new', false)]).get('new'), 'Someone new')
+})
+
+test('a join folds in and a leave folds out, without touching the set given', () => {
+  const before = new Set(['ada'])
+  const joined = withMember(before, 'bea', true)
+
+  assert.deepEqual([...joined].sort(), ['ada', 'bea'])
+  assert.deepEqual([...withMember(joined, 'ada', false)], ['bea'])
+  assert.deepEqual([...before], ['ada'])
+})
+
+test('a join the roster already knows about changes nothing', () => {
+  // The read and the broadcast overlap by design: a Membership written between
+  // the read being issued and the channel joining arrives twice or not at all.
+  assert.deepEqual([...withMember(new Set(['ada']), 'ada', true)], ['ada'])
+})
+
+/* ================================================================== *
+ * Both reads
+ * ================================================================== */
+
+test('nothing is ready until both reads have returned', () => {
+  assert.equal(rosterStatus(null, null, false), 'loading')
+  assert.equal(rosterStatus([entry('ada', 'Ada')], null, false), 'loading')
+  assert.equal(rosterStatus(null, new Set(['ada']), false), 'loading')
+  assert.equal(rosterStatus([entry('ada', 'Ada')], new Set(['ada']), false), 'ready')
+})
+
+test('either read failing is an error', () => {
+  assert.equal(rosterStatus(null, null, true), 'error')
+  assert.equal(rosterStatus([entry('ada', 'Ada')], new Set(['ada']), true), 'error')
 })

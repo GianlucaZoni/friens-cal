@@ -64,7 +64,24 @@ export const useElsewhere = ({
   const { calId } = useCurrentCal()
   const { cals, status: calsStatus } = useCals()
 
-  const [rows, setRows] = useState<readonly ParticipationRow[]>([])
+  /**
+   * The rows, **tagged with the cal they were read for** — issue 04's shape,
+   * one table over.
+   *
+   * The tag is what keeps a snapshot read for the cal you just left from
+   * describing the one you just arrived at. Every row in it was chosen by
+   * `cal_id != <the cal it was read for>`, so held against a *different* cal it
+   * is not merely stale: it can contain that cal's own Hangouts, and the retime
+   * dialog would then have a plan colliding with itself.
+   *
+   * `setRows(null)` at the top of the effect would say the same thing and is a
+   * `setState` in an effect body, which the lint gate refuses. This also stops
+   * the hook leaning on slice 02's `key={calId}`, which remounts the tree and
+   * would hide the window rather than close it.
+   */
+  const [read, setRead] = useState<{ calId: string; rows: readonly ParticipationRow[] } | null>(
+    null
+  )
 
   /**
    * What has already been asked for — a **request log**, so it is a ref rather
@@ -74,15 +91,42 @@ export const useElsewhere = ({
    */
   const requested = useRef<{ key: string; from: number } | null>(null)
 
+  /**
+   * Which failure has already been said out loud.
+   *
+   * The effect's dependencies include the app's half-hour clock, so without
+   * this a failure that persists would raise a fresh `timeout: 0` toast every
+   * thirty minutes — a stack of identical complaints about one broken read.
+   * `useHangouts` needs no equivalent because nothing re-runs its effect on its
+   * own.
+   */
+  const reported = useRef<string | null>(null)
+
   useEffect(() => {
     if (userId === null) return
     /*
      * Waited for rather than raced, because the cal names are resolved against
      * this same list below: a row whose cal the list has not read yet would
      * render as a commitment in a cal with no name. One round trip, and it is
-     * the same one the join-or-create page already pays.
+     * the one the Candidate list is waiting on anyway — no card can be drawn
+     * before the Availability and Hangout reads land, and both are strictly
+     * larger than this.
      */
     if (calsStatus === 'loading') return
+    /*
+     * A failed cal list is a failed cross-cal read, and it has to say so.
+     * `useCals` logs its error to the console and hands back an empty list,
+     * which down here is indistinguishable from a Friend in one cal — and §1's
+     * rule is that an unmarked list is only honest when the marks were actually
+     * checked for.
+     */
+    if (calsStatus === 'error') {
+      if (reported.current !== CALS_FAILED) {
+        reported.current = CALS_FAILED
+        sayItFailed('Your cals could not be read, so nothing here can warn you about a clash.')
+      }
+      return
+    }
     /*
      * The whole feature, skipped. A Friend in one cal has no other cal to be
      * committed in, so the answer is known without asking — and asking anyway
@@ -91,6 +135,16 @@ export const useElsewhere = ({
      */
     if (cals.length < 2) return
 
+    /*
+     * Asked again when the cal on screen changes, and when what the viewer
+     * holds in it does — the four acts, as one value.
+     *
+     * The floor is compared as well as the key, the way `useHangouts` compares
+     * its own: `now` only ever advances, so a request already logged covers
+     * everything a later one would ask for. It is a comparison rather than a
+     * bare key match because the day it stops being true — a device clock going
+     * backwards — asking again is the right answer.
+     */
     const key = `${calId}|${held}`
     const alreadyRequested = requested.current
     if (alreadyRequested !== null && alreadyRequested.key === key && now >= alreadyRequested.from)
@@ -109,10 +163,21 @@ export const useElsewhere = ({
         // permanently (`CONTEXT.md`), so a Hangout you walked out of says
         // nothing about where you will be.
         .is('left_at', null)
-        // Every cal but this one. The cal on screen satisfies the predicate and
-        // can never fire in it — its own exclusion constraint makes the overlap
-        // impossible — so it is left out here rather than special-cased later,
-        // and one rule stays correct if that constraint ever moves.
+        /*
+         * Every cal but this one, and this is the one place the build departs
+         * from planning ticket 09 §3, which asked for the current cal to be
+         * *left in* rather than special-cased: it satisfies the predicate and
+         * can never fire in it, since its own exclusion constraint makes the
+         * overlap impossible, so one predicate would stay correct if that
+         * constraint ever moved.
+         *
+         * It is filtered out anyway because §8's retime arrived after §3 was
+         * written and breaks it: the plan being moved is a commitment of yours
+         * in the cal on screen, and the range the picker starts on is its own,
+         * so a snapshot holding it would open every retime dialog with the plan
+         * colliding with itself. Excluding it by id instead would be a second
+         * special case, in the one surface that recomputes.
+         */
         .neq('cal_id', calId)
         /*
          * `!inner` above is what lets this filter the rows rather than the
@@ -134,17 +199,21 @@ export const useElsewhere = ({
 
     void readEveryPage(page).then(({ data, error }) => {
       if (error) {
-        // Put the log back, or this key would never be asked for again.
-        requested.current = alreadyRequested
-        toast.add({
-          type: 'error',
-          title: "Couldn't check your other cals",
-          description: `${error.message} — nothing here can warn you about a clash with a plan of yours elsewhere. Reload to try again.`,
-          timeout: 0,
-        })
+        /*
+         * The log stays where it is, so this key is not asked for again. The
+         * retry is a reload, or the next cal, or the next act — never this
+         * effect firing itself on the half-hour tick, which would stack a
+         * second `timeout: 0` toast about the same broken read.
+         */
+        if (reported.current !== key) {
+          reported.current = key
+          sayItFailed(
+            `${error.message} — nothing here can warn you about a clash with a plan of yours elsewhere.`
+          )
+        }
         return
       }
-      setRows(data)
+      setRead({ calId, rows: data })
     })
   }, [userId, calId, held, now, cals.length, calsStatus])
 
@@ -156,6 +225,14 @@ export const useElsewhere = ({
    * from being right here too.
    */
   const namesById = useMemo(() => new Map(cals.map((cal) => [cal.id, cal.name])), [cals])
+
+  /*
+   * Nothing at all until a read for **this** cal has landed. A snapshot read
+   * for another one is not a slow answer about this cal, and marking nothing is
+   * the state this whole feature is built to be readable as: nothing is not an
+   * answer.
+   */
+  const rows = read !== null && read.calId === calId ? read.rows : NOTHING_READ
 
   return useMemo(
     () =>
@@ -176,6 +253,36 @@ export const useElsewhere = ({
     [rows, namesById]
   )
 }
+
+/** The key `reported` holds when the failure was the cal list rather than a read. */
+const CALS_FAILED = 'cals'
+
+/**
+ * The failure path, which is the Hangout read's: one toast that stays until it
+ * is dismissed.
+ *
+ * The Candidate list has no failure state of its own — `useHangouts` raises
+ * exactly this when its own read fails, for the reason that applies twice over
+ * here: a list rendered with no marks on it looks precisely like a list that was
+ * checked and found clear, and §1 says nothing in this feature may be readable
+ * as an all-clear.
+ */
+const sayItFailed = (description: string) =>
+  toast.add({
+    type: 'error',
+    title: "Couldn't check your other cals",
+    description: `${description} Reload to try again.`,
+    timeout: 0,
+  })
+
+/**
+ * The empty read, as one constant.
+ *
+ * A fresh `[]` would be a new identity every render, and this value is a
+ * dependency of every card's `clashesWith` memo — which is what makes it worth
+ * the name.
+ */
+const NOTHING_READ: readonly ParticipationRow[] = []
 
 /**
  * The embed, as one string.

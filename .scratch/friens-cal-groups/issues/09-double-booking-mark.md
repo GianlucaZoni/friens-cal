@@ -225,3 +225,59 @@ $ yarn lint
 Nothing. Every criterion was exercised against a migrated stack; the live
 project needs the human's SQL before any of it is reachable there, which is
 ticket 01's half rather than this one's.
+
+## After the review
+
+`/code-review` against `main` found five things worth acting on, and two worth
+recording rather than changing.
+
+Fixed:
+
+1. **The snapshot is tagged with the cal it was read for.** Every row in it was
+   chosen by `cal_id != <that cal>`, so the same rows held against a *different*
+   cal are not merely stale: they can contain that cal's own Hangouts, and the
+   retime dialog would then show a plan colliding with itself. Slice 02's
+   `key={calId}` remounts the tree and hides that window today; issue 04 already
+   decided not to lean on it, and this is the same tag one table over.
+2. **A failed cal list now says so.** `useCals` logs its error and hands back an
+   empty list, which down here was indistinguishable from a Friend in one cal —
+   an unmarked list drawn without checking, which is precisely §1's failure.
+3. **A failure is said once.** The effect's dependencies include the app's
+   half-hour clock, so a persistent failure stacked a fresh `timeout: 0` toast
+   every thirty minutes. The request log now stays put on a failure and a ref
+   records what has already been reported.
+4. **Rejoin and the detail's Join carry the clash in their own labels.** §10
+   asks for it on `Join?` *and* Rejoin by name, and the block above a button is
+   exactly what somebody tabbing to it never hears.
+5. The comment on `.neq('cal_id', calId)` argued the opposite of §3, which asked
+   for the current cal to be left in rather than special-cased. It now says what
+   is true: §8's retime arrived after §3 and breaks it, because the plan being
+   moved is a commitment of yours in the cal on screen and the picker starts on
+   its own range. Excluding it by id instead would be a second special case, in
+   the one surface that recomputes. **This is the slice's one deviation from a
+   settled decision**, and what it costs is §3's durability: if the per-cal
+   exclusion constraint ever moved, this predicate would need the change §3 was
+   trying to avoid.
+
+Recorded, not changed:
+
+- **`commitments` is drilled through three layers** on each side
+  (`RightPane → CandidateList → CandidateCard → CandidateDetail`, and the
+  Hangout equivalent), where `useViewerZone` is the repo's precedent for an
+  ambient viewer-scoped fact. Props were chosen because the peek and the list
+  already thread every store by hand and because the call site is where you can
+  see which card got which list; a context whose only provider sits in the
+  component that would otherwise pass the prop buys hiding, not less code.
+- **`Commitment` is a type name, not a glossary term.** §11 looked for a
+  CONTEXT.md addition and found none needed: this is an affordance over
+  Participant, Hangout and Group as they already stand. The name is local to
+  `elsewhere.ts` and its callers, and nothing in the UI says the word.
+- **The read waits for the cal list rather than racing it**, which §9's "third
+  parallel fetch" did not anticipate. The cost is one round trip, and no card
+  can be drawn before the Availability and Hangout reads land — both strictly
+  larger — so the mark still arrives with the first card rather than after it.
+
+Re-verified on the rehearsal stack afterwards: the Rejoin button announces
+`Rejoin — you are busy 20:00 – 23:00 elsewhere`, and forcing the cal list to
+`403` raises *"Couldn't check your other cals"* once, over a list that carries
+on working.

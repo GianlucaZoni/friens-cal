@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { BusyElsewhere } from '@/hangouts/busy-elsewhere'
-import type { Commitment } from '@/hangouts/elsewhere'
+import { busySuffix, type Commitment } from '@/hangouts/elsewhere'
 import {
   facesOf,
   isPast,
@@ -388,6 +388,18 @@ const Ways = ({
   const overlaps = missing.length < slotStartsOf(hangout).length
   const lastOne = wouldAutoCancel(hangout, viewerId, now)
 
+  /**
+   * The clash, in the two buttons' own names — groups ticket 09 §10, which asks
+   * for it on `Join?` and on Rejoin by name.
+   *
+   * The block above says the same thing at more length, and somebody arriving
+   * on this button by keyboard has not been anywhere near it. `undefined` when
+   * there is nothing to add, so the ordinary button keeps its own text as its
+   * accessible name rather than a label repeating it.
+   */
+  const suffix = busySuffix(clashes, useViewerZone())
+  const nameWith = (label: string) => (suffix === '' ? undefined : `${label}${suffix}`)
+
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-2">
       {/*
@@ -427,6 +439,7 @@ const Ways = ({
           variant="outline"
           size="sm"
           className="justify-start"
+          aria-label={nameWith('Rejoin')}
           disabled={saving}
           onClick={() =>
             void run(
@@ -445,6 +458,7 @@ const Ways = ({
             variant="outline"
             size="sm"
             className="justify-start"
+            aria-label={nameWith('Join')}
             disabled={saving}
             onClick={() =>
               void run(

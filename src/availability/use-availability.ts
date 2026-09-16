@@ -317,9 +317,9 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
     const channel = supabase
       .channel(calTopic(calId, 'availability'), { config: { private: true } })
       .on('broadcast', { event: 'INSERT' }, ({ payload }) => {
-        const insert = rowChange<SlotRow>(payload, 'availability')
-        if (insert?.record == null) return
-        change((current) => mergeSlots(current, [insert.record as SlotRow]))
+        const drawn = rowChange<SlotRow>(payload, 'availability')?.record
+        if (drawn == null) return
+        change((current) => mergeSlots(current, [drawn]))
       })
       .on('broadcast', { event: 'DELETE' }, ({ payload }) => {
         const removed = rowChange<SlotRow>(payload, 'availability')?.old_record

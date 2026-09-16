@@ -77,3 +77,24 @@ export const CopyCode = ({ code, label }: { code: string; label?: string }) => {
     </Button>
   )
 }
+
+/**
+ * The Code written out with its copy button — **one presentation of six
+ * characters in the product**, so the thing a Friend was told to send looks the
+ * same wherever they come back to it.
+ *
+ * It was three copies of the same five lines before this: the create flow's
+ * second dialog, the View code dialog, and now the leave dialog, which shows
+ * the Code because leaving is the moment it becomes unreachable to you and, if
+ * you are the last Member, there is nobody left to ask for it.
+ *
+ * Here rather than in a file of its own because it is `CopyCode` plus the
+ * characters the button copies, and splitting those two across files would make
+ * the second one a component that exists to hold a `tracking` value.
+ */
+export const CodeToShare = ({ code }: { code: string }) => (
+  <div className="flex items-center justify-between gap-2 border border-border p-3">
+    <span className="font-mono text-sm tracking-[0.3em]">{code}</span>
+    <CopyCode code={code} label="Copy" />
+  </div>
+)

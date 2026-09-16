@@ -1,4 +1,10 @@
-import { CAL_ACTION_LABEL, calMenu, type CalAction, type CalMenuSurface } from '@/cal/cal-menu'
+import {
+  CAL_ACTION_LABEL,
+  CAL_ACTION_VARIANT,
+  calMenu,
+  type CalAction,
+  type CalMenuSurface,
+} from '@/cal/cal-menu'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -114,7 +120,14 @@ export const CalOverflow = ({
         className="w-auto min-w-28"
       >
         {calMenu(surface).map((action) => (
-          <DropdownMenuItem key={action} onClick={() => onAction(action)}>
+          <DropdownMenuItem
+            key={action}
+            // Both maps come from `cal-menu.ts`, so this component still renders
+            // what that table says and decides nothing. Leave is the only
+            // destructive one today, and it is the table that says so.
+            variant={CAL_ACTION_VARIANT[action]}
+            onClick={() => onAction(action)}
+          >
             {CAL_ACTION_LABEL[action]}
           </DropdownMenuItem>
         ))}

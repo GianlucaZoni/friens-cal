@@ -1,5 +1,5 @@
 import { CAL_NAME_MAX } from '@/cal/cals'
-import { CopyCode } from '@/cal/copy-code'
+import { CodeToShare } from '@/cal/copy-code'
 import type { CalsState } from '@/cal/use-cals'
 import { Button } from '@/components/ui/button'
 import {
@@ -86,10 +86,7 @@ export const CreateCalDialogs = ({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="flex items-center justify-between gap-2 border border-border p-3">
-                <span className="font-mono text-sm tracking-[0.3em]">{made.code}</span>
-                <CopyCode code={made.code} label="Copy" />
-              </div>
+              <CodeToShare code={made.code} />
 
               <DialogFooter>
                 <DialogClose render={<Button variant="ghost" />}>Later</DialogClose>

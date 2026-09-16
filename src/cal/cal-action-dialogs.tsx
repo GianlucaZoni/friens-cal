@@ -1,5 +1,6 @@
 import type { CalAction } from '@/cal/cal-menu'
 import { CalCodeDialog } from '@/cal/code-dialog'
+import { LeaveCalDialog } from '@/cal/leave-dialog'
 import { RenameCalDialog } from '@/cal/rename-dialog'
 import type { CalsState } from '@/cal/use-cals'
 import type { Cal } from '@/lib/database.types'
@@ -20,12 +21,13 @@ export type CalActing = { action: CalAction; cal: Cal }
  * start from the row as it is now with no effect to reset it.
  *
  * Both surfaces render this, so the two menus cannot answer the same item
- * differently. Ticket 05 adds the Leave dialog here, as a third branch.
+ * differently — and only one of them ever asks for Leave, which is
+ * `cal-menu.ts`'s business rather than this file's.
  *
- * It takes the whole `CalsState` rather than the one write it needs today,
- * which is the difference between ticket 05 adding a branch and ticket 05
- * threading a second prop through both call sites. This component is the
- * dispatcher for every act on a cal, so the cal state is its input.
+ * It takes the whole `CalsState` rather than the writes it needs, which is what
+ * made Leave a branch here instead of a second prop threaded through both call
+ * sites. This component is the dispatcher for every act on a cal, so the cal
+ * state is its input.
  */
 export const CalActionDialogs = ({
   acting,
@@ -42,9 +44,10 @@ export const CalActionDialogs = ({
   if (action === 'rename')
     return <RenameCalDialog cal={cal} rename={cals.rename} onClose={onClose} />
   if (action === 'view-code') return <CalCodeDialog cal={cal} onClose={onClose} />
+  if (action === 'leave') return <LeaveCalDialog cal={cal} leave={cals.leave} onClose={onClose} />
 
-  // Unreachable while `CalAction` has two members, and a compile error the day
-  // it has three without a branch here. `satisfies never` rather than a
+  // Unreachable while `CalAction` has three members, and a compile error the
+  // day it has four without a branch here. `satisfies never` rather than a
   // `default:` that quietly renders nothing.
   action satisfies never
   return null

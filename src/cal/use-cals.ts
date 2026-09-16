@@ -1,6 +1,12 @@
 import { useSession } from '@/auth/use-session'
 import { calOrder, withCal } from '@/cal/cals'
-import { CREATE_UNAVAILABLE, RENAME_UNAVAILABLE, joinErrorMessage, normaliseCode } from '@/cal/code'
+import {
+  CREATE_UNAVAILABLE,
+  LEAVE_UNAVAILABLE,
+  RENAME_UNAVAILABLE,
+  joinErrorMessage,
+  normaliseCode,
+} from '@/cal/code'
 import { CurrentCalContext } from '@/cal/use-current-cal'
 import type { Cal } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
@@ -33,11 +39,28 @@ export type CalsState = {
    * by ADR-0003.
    */
   rename: (calId: string, name: string) => Promise<CalResult>
+  /**
+   * Leaving, which is **one statement**: `delete from membership`, under
+   * `using (friend_id = auth.uid())` (`08-cal-and-membership.sql` §5).
+   *
+   * Not an RPC, and that is the reason ADR-0003's audited set is still three
+   * rather than four. Everything the act is famous for is consequence, in the
+   * same transaction and in this order (`10-lifecycle-per-cal.sql` §4): the
+   * `before delete` trigger marks the leaver Left on the cal's future Hangouts,
+   * that update fires the existing auto-cancel so a future Hangout they were
+   * alone on goes, the row is deleted, `availability` cascades, and the drop
+   * trigger then skips everything because the Membership it looks for is gone.
+   *
+   * A **sentence or null** rather than `CalResult`, which every other write
+   * here returns: there is no row to hand back, the cal is the one thing that
+   * is now gone. It is also the exact shape `useSaveAction`'s `run` takes.
+   */
+  leave: (calId: string) => Promise<string | null>
 }
 
 /**
- * Every cal the signed-in Friend is in, the two RPCs that change that set, and
- * the one update that changes a name.
+ * Every cal the signed-in Friend is in, the two RPCs that change that set, the
+ * one update that changes a name, and the one delete that takes a cal off it.
  *
  * ## It reads `cal`, and the Membership is the policy
  *
@@ -56,7 +79,8 @@ export type CalsState = {
  * There is no Realtime on this list and no poll. A Membership only changes
  * because this Friend did something, in this tab — nobody can add you to a cal
  * and nobody can remove you (CONTEXT.md) — so there is no remote write to hear
- * about.
+ * about. Leaving is the same fact read the other way: it is this Friend, in
+ * this tab, so `leave` folds the removal in where `withCal` folds an arrival.
  *
  * A **rename** is the one thing here that another Friend can change under you,
  * and slice 03 left it that way rather than closing it: `cal` has no broadcast
@@ -177,6 +201,48 @@ export const useCals = (): CalsState => {
     [renamed]
   )
 
+  const leave = useCallback(
+    async (calId: string): Promise<string | null> => {
+      if (userId === null) return LEAVE_UNAVAILABLE
+
+      const { error } = await supabase
+        .from('membership')
+        .delete()
+        .eq('cal_id', calId)
+        // Said as well as policed. `using (friend_id = (select auth.uid()))`
+        // already narrows this to the caller's own row, so the predicate
+        // changes no outcome — it is here so that a reader of this line knows
+        // the statement cannot empty a cal, without going to find the policy.
+        .eq('friend_id', userId)
+      if (error) {
+        console.error('Could not leave a cal:', error.code, error.message)
+        return LEAVE_UNAVAILABLE
+      }
+
+      /*
+       * Dropped from the list **after** the delete has landed rather than
+       * optimistically, and folded locally rather than re-read. Both halves
+       * follow what `withCal` already does one line up: the list is local state
+       * after the first read, and a statement that came back without an error
+       * is the whole answer — a re-read would be a round trip to learn what the
+       * first one already said, on a page that is nothing but this list.
+       *
+       * Optimism buys nothing here. There is no navigation waiting on it (the
+       * control is on `/`, which is where leaving leaves you), so the only
+       * thing a pre-emptive removal would win is the round trip, in exchange
+       * for a row that vanishes and comes back when a grant is missing.
+       *
+       * A delete that matched **no** row is not an error and is not treated as
+       * one: it means the Membership was already gone, most likely from another
+       * tab, and "this cal is not one of yours" is precisely the state this
+       * line is trying to reach.
+       */
+      setCals((held) => (held ?? []).filter((cal) => cal.id !== calId))
+      return null
+    },
+    [userId]
+  )
+
   return useMemo(
     () => ({
       cals: cals ?? [],
@@ -184,7 +250,8 @@ export const useCals = (): CalsState => {
       create,
       join,
       rename,
+      leave,
     }),
-    [cals, failed, create, join, rename]
+    [cals, failed, create, join, rename, leave]
   )
 }

@@ -1,5 +1,5 @@
 import { useSession } from '@/auth/use-session'
-import { useCals } from '@/cal/use-cals'
+import { useSharedCals } from '@/cal/use-cals'
 import { useCurrentCal } from '@/cal/use-current-cal'
 import { toast } from '@/components/ui/toast-manager'
 import type { Commitment } from '@/hangouts/elsewhere'
@@ -62,7 +62,13 @@ export const useElsewhere = ({
   const { state } = useSession()
   const userId = state.status === 'signed-in' ? state.user.id : null
   const { calId } = useCurrentCal()
-  const { cals, status: calsStatus } = useCals()
+  /*
+   * The shell's one instance. It used to be a `useCals()` of its own, which was
+   * a second read of the same rows on every cal screen and, worse, a separate
+   * state: a rename in the switcher did not reach `namesById` below, so a clash
+   * warning kept naming the cal by the name it no longer had.
+   */
+  const { cals, status: calsStatus } = useSharedCals()
 
   /**
    * The rows, **tagged with the cal they were read for** — issue 04's shape,

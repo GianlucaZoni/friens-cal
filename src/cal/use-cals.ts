@@ -10,7 +10,7 @@ import {
 import { CurrentCalContext } from '@/cal/use-current-cal'
 import type { Cal } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 /**
  * What a Join, a Create or a Rename came back with: the cal, or one sentence.
@@ -254,4 +254,39 @@ export const useCals = (): CalsState => {
     }),
     [cals, failed, create, join, rename, leave]
   )
+}
+
+/**
+ * The shell's one cal list, for the two things under it that want it.
+ *
+ * `AppShell` calls `useCals` once and puts the result here, beside the zone it
+ * already computes the same way. The switcher in the left pane and
+ * `useElsewhere` in the right one then read the same instance.
+ *
+ * **It was two hook instances**, and that cost two things rather than one. A
+ * cal screen issued the same query twice, for a handful of rows; and because
+ * they were separate states, a rename in the switcher never reached
+ * `useElsewhere`'s `namesById`, so a double-booking warning kept naming the
+ * cal by its old name until the next navigation. Slice 03 recorded both and
+ * left them, to stay out of `app-shell.tsx` while slice 09 was building in it.
+ *
+ * **Only the shell provides it.** `/` calls `useCals` directly, because it is
+ * the only reader there and a context with one consumer is a longer way of
+ * writing a variable.
+ */
+export const CalsContext = createContext<CalsState | null>(null)
+
+/**
+ * The shell's cal list, from the provider.
+ *
+ * It throws rather than falling back to a fresh `useCals()`, for exactly the
+ * reason the fallback is tempting: a silent second instance is the bug this
+ * replaced, and a fallback would let it back in, invisibly, the first time
+ * somebody rendered one of these outside the shell. The same shape
+ * `useCurrentCal` uses one file over.
+ */
+export const useSharedCals = (): CalsState => {
+  const value = useContext(CalsContext)
+  if (!value) throw new Error('useSharedCals must be used inside <AppShell>, which provides it')
+  return value
 }

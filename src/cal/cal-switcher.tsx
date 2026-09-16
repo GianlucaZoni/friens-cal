@@ -4,7 +4,7 @@ import { CalOverflow } from '@/cal/cal-overflow'
 import { calPath, withCal } from '@/cal/cals'
 import { CreateCalDialogs } from '@/cal/create-dialogs'
 import { JoinDialog } from '@/cal/join-dialog'
-import { useCals } from '@/cal/use-cals'
+import { useSharedCals } from '@/cal/use-cals'
 import { useCurrentCal } from '@/cal/use-current-cal'
 import { Button } from '@/components/ui/button'
 import {
@@ -61,7 +61,12 @@ import { CheckIcon, ChevronDownIcon, PlusIcon, TicketIcon } from 'lucide-react'
  */
 export const CalSwitcher = () => {
   const { cal: current } = useCurrentCal()
-  const cals = useCals()
+  /*
+   * The shell's one instance, not a second read. `AppShell` holds it because
+   * `useElsewhere` in the other pane wants the same list, and two instances
+   * meant a rename made here never reached its cal names.
+   */
+  const cals = useSharedCals()
   const navigate = useNavigate()
 
   const [acting, setActing] = useState<CalActing | null>(null)

@@ -1,6 +1,7 @@
 import { useSession } from '@/auth/use-session'
 import { useAvailability } from '@/availability/use-availability'
 import { useDrawingTools } from '@/availability/use-drawing-tools'
+import { CalsContext, useCals } from '@/cal/use-cals'
 import { useSlotClock } from '@/candidates/use-slot-clock'
 import { Toaster } from '@/components/ui/toast'
 import { useHangouts } from '@/hangouts/use-hangouts'
@@ -70,6 +71,24 @@ export const AppShell = () => {
   const availability = useAvailability(calendar.days)
   const hangouts = useHangouts(calendar.days)
   const tools = useDrawingTools()
+
+  /**
+   * Every cal this Friend is in — **one instance, read by both side panes**.
+   *
+   * The switcher in the left pane shows the list; `useElsewhere` in the right
+   * one resolves the double-booking mark's cal names against it. Both called
+   * `useCals` for themselves until this line, which cost a second query on
+   * every cal screen and, worse, meant a rename in the switcher never reached
+   * the other one's `namesById`: the clash warning kept naming the cal by the
+   * name it no longer had, until the next navigation.
+   *
+   * Here rather than in a provider of its own for the reason everything else in
+   * this component is here — one hook each, in the one place that is above
+   * every reader. Nothing is threaded down, because the two readers are seven
+   * and three layers away and the value is a fact about the viewer, not about
+   * any column.
+   */
+  const cals = useCals()
 
   /**
    * The start of the Slot containing now — **the app's one clock**.
@@ -168,26 +187,33 @@ export const AppShell = () => {
 
   return (
     <AppShellProvider>
-      <ViewerZoneContext value={zone}>
-        {/*
+      <CalsContext value={cals}>
+        <ViewerZoneContext value={zone}>
+          {/*
           Above the columns, so it is a fact about the app rather than about the
           calendar — see `OfflineBanner`.
         */}
-        <OfflineBanner />
-        <div className="flex min-h-0 flex-1">
-          <ShellSidebar side="left">
-            <LeftPane calendar={calendar} roster={roster} silent={silent} now={now} tools={tools} />
-          </ShellSidebar>
+          <OfflineBanner />
+          <div className="flex min-h-0 flex-1">
+            <ShellSidebar side="left">
+              <LeftPane
+                calendar={calendar}
+                roster={roster}
+                silent={silent}
+                now={now}
+                tools={tools}
+              />
+            </ShellSidebar>
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <TopBar calendar={calendar} saving={availability.saving} />
-            <div className="flex min-h-0 flex-1">
-              <ShellInset>
-                <Calendar
-                  calendar={calendar}
-                  availability={availability}
-                  viewer={viewer}
-                  /*
+            <div className="flex min-w-0 flex-1 flex-col">
+              <TopBar calendar={calendar} saving={availability.saving} />
+              <div className="flex min-h-0 flex-1">
+                <ShellInset>
+                  <Calendar
+                    calendar={calendar}
+                    availability={availability}
+                    viewer={viewer}
+                    /*
                     Two sets, because the grid draws two different objects from
                     them: the wash is `visible` (a query — the Members you are
                     currently trying to meet) and a Hangout's faces come from
@@ -195,33 +221,34 @@ export const AppShell = () => {
                     neither does leaving the cal). The hook holds both, so
                     nothing here can pick the wrong one.
                   */
-                  visible={roster.visible}
-                  friendsById={roster.friendsById}
-                  hangouts={hangouts.hangouts}
-                  now={now}
-                  tools={tools}
-                />
-              </ShellInset>
-              <ShellSidebar side="right">
-                <RightPane
-                  roster={roster}
-                  availability={availability}
-                  hangouts={hangouts}
-                  now={now}
-                />
-              </ShellSidebar>
+                    visible={roster.visible}
+                    friendsById={roster.friendsById}
+                    hangouts={hangouts.hangouts}
+                    now={now}
+                    tools={tools}
+                  />
+                </ShellInset>
+                <ShellSidebar side="right">
+                  <RightPane
+                    roster={roster}
+                    availability={availability}
+                    hangouts={hangouts}
+                    now={now}
+                  />
+                </ShellSidebar>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/*
+          {/*
           One `Toaster` for the app. The manager it renders is the module-level
           one in `toast-manager.ts`, so `useAvailability` can raise a failed
           write from outside this tree — which it is, being a hook rather than a
           component.
         */}
-        <Toaster />
-      </ViewerZoneContext>
+          <Toaster />
+        </ViewerZoneContext>
+      </CalsContext>
     </AppShellProvider>
   )
 }

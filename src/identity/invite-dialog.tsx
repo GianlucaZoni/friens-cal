@@ -200,10 +200,21 @@ const InviteForm = ({
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="invite-email">Their email address</FieldLabel>
+          {/*
+            `autoComplete="off"` because this is somebody else's address and
+            offering the Friend their own is how the wrong one gets invited.
+            `autoCapitalize` and `spellCheck` for the phone, which otherwise
+            capitalises the first letter of a field it has no other hints
+            about. `type="email"` strips surrounding whitespace itself, so a
+            pasted address arrives here already trimmed and `normaliseAddress`
+            is left holding the case.
+          */}
           <Input
             id="invite-email"
             type="email"
             autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
             autoFocus
             required
             value={email}

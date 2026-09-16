@@ -1,3 +1,6 @@
+import type { CalActing } from '@/cal/cal-action-dialogs'
+import { CalActionDialogs } from '@/cal/cal-action-dialogs'
+import { CalOverflow } from '@/cal/cal-overflow'
 import { calPath } from '@/cal/cals'
 import { CopyCode } from '@/cal/copy-code'
 import { CreateCalDialogs } from '@/cal/create-dialogs'
@@ -45,7 +48,7 @@ import { TriangleAlertIcon } from 'lucide-react'
  * the other, which is why there is no `stopPropagation` here to go stale.
  */
 export const JoinOrCreatePage = () => {
-  const { cals, status, create, join } = useCals()
+  const { cals, status, create, join, rename } = useCals()
   const navigate = useNavigate()
   const [joining, setJoining] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -79,7 +82,7 @@ export const JoinOrCreatePage = () => {
           </CardHeader>
 
           <CardContent>
-            <CalList cals={cals} status={status} />
+            <CalList cals={cals} status={status} rename={rename} />
           </CardContent>
 
           {/*
@@ -108,7 +111,22 @@ export const JoinOrCreatePage = () => {
 }
 
 /** The list, or the one sentence standing in for it. */
-const CalList = ({ cals, status }: { cals: Cal[]; status: CalsState['status'] }) => {
+const CalList = ({
+  cals,
+  status,
+  rename,
+}: {
+  cals: Cal[]
+  status: CalsState['status']
+  rename: CalsState['rename']
+}) => {
+  /*
+    Which row's menu asked for what, held for the list rather than per row. The
+    dialogs have to be mounted outside the menu that opened them, and one piece
+    of state is also one dialog on screen at a time.
+  */
+  const [acting, setActing] = useState<CalActing | null>(null)
+
   if (status === 'loading') {
     return (
       <p role="status" aria-live="polite" className="p-4 text-center text-xs text-muted-foreground">
@@ -141,24 +159,45 @@ const CalList = ({ cals, status }: { cals: Cal[]; status: CalsState['status'] })
   }
 
   return (
-    <ul className="flex flex-col">
-      {cals.map((cal) => (
-        <li key={cal.id} className="flex items-center gap-1 border-b border-border last:border-b-0">
-          <Link
-            to={calPath(cal.id)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-3 py-2.5 text-left text-xs outline-hidden hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
+    <>
+      <ul className="flex flex-col">
+        {cals.map((cal) => (
+          <li
+            key={cal.id}
+            className="flex items-center gap-1 border-b border-border last:border-b-0"
           >
-            <span className="truncate">{cal.name}</span>
-            <span className="shrink-0 font-mono text-muted-foreground">{cal.code}</span>
-          </Link>
-          <CopyCode code={cal.code} />
-          {/*
-            Ticket 05's overflow menu (Leave, Rename) goes here, as a third
-            sibling. Not built, and deliberately not stubbed: an empty slot of
-            fixed width would be a hole in the row until it lands.
+            <Link
+              to={calPath(cal.id)}
+              className="flex min-w-0 flex-1 items-center justify-between gap-3 py-2.5 text-left text-xs outline-hidden hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <span className="truncate">{cal.name}</span>
+              <span className="shrink-0 font-mono text-muted-foreground">{cal.code}</span>
+            </Link>
+            <CopyCode code={cal.code} />
+            {/*
+            The row's overflow, and **this is the complete set**: the switcher's
+            dots is the shortcut from inside a cal and holds Rename and View
+            code, and this one holds Rename and, from ticket 05, **Leave**.
+            Which items are where is `cal-menu.ts`, and ticket 05 adds Leave to
+            the `list` line there rather than to this file.
+
+            No propagation guard, because nothing contains anything: a button
+            cannot contain a button, so this is a third sibling beside the
+            `Link` and the copy button. The switcher's dots needs three guards
+            for exactly the reason this one needs none.
           */}
-        </li>
-      ))}
-    </ul>
+            <CalOverflow
+              cal={cal}
+              surface="list"
+              onAction={(action) => setActing({ action, cal })}
+            />
+          </li>
+        ))}
+      </ul>
+
+      {/* Outside the list, because a dialog inside the menu that opened it
+          unmounts on the click that opened it. */}
+      <CalActionDialogs acting={acting} rename={rename} onClose={() => setActing(null)} />
+    </>
   )
 }

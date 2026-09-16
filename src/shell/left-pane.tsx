@@ -1,5 +1,6 @@
 import { DrawingControls } from '@/availability/drawing-controls'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
+import { CalSwitcher } from '@/cal/cal-switcher'
 import { FriendRoster } from '@/roster/friend-roster'
 import type { RosterState } from '@/roster/use-roster'
 import { MiniCalendar } from '@/shell/mini-calendar'
@@ -59,7 +60,7 @@ export const LeftPane = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <SidebarHeader className="h-12 shrink-0 justify-center border-b px-3">
+      <SidebarHeader className="h-12 shrink-0 flex-row items-center gap-2 border-b px-3">
         {/*
           The wordmark is the way out of a cal, which it did not need to be
           while there was only one. It goes to `/`, the join-or-create page —
@@ -67,15 +68,22 @@ export const LeftPane = ({
 
           A `Link`, not a `window.location`: a full reload would throw away the
           session read, the Friend row and both stores, and land on the same
-          page a client-side navigation reaches in one frame. Switching between
-          cals without coming back through here is ticket 03's dropdown.
+          page a client-side navigation reaches in one frame.
+
+          **It keeps its place beside the switcher rather than being replaced
+          by it**, which is where this build departs from the prototype: groups
+          ticket 06 was drawn before ticket 02 made this the route to `/`, and
+          ticket 05 puts Leave there next. A switcher filling the header would
+          leave the complete set of cals reachable only by typing the address.
+          The cost is about six characters of visible name.
         */}
         <Link
           to="/"
-          className="rounded-sm text-sm font-semibold outline-hidden hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 rounded-sm text-sm font-semibold outline-hidden hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           friens
         </Link>
+        <CalSwitcher />
       </SidebarHeader>
       <SidebarContent>
         {isSheet ? (

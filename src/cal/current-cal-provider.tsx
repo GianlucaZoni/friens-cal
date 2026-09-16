@@ -1,11 +1,21 @@
 import { useSession } from '@/auth/use-session'
 import { isCalId } from '@/cal/cals'
 import { CurrentCalContext } from '@/cal/use-current-cal'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import type { Cal } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
+
+/**
+ * A resolved read, tagged with which id it answers.
+ *
+ * The tag is what separates "we have not asked about this cal yet" from "there
+ * is no such cal", which is the same split `FetchedFriend` makes in
+ * `session-provider.tsx` and for the same reason: without it, routing from one
+ * cal to another renders the cal you just left until the new read lands.
+ */
+type Fetched = { forCalId: string; cal: Cal | null; failed: boolean }
 
 /**
  * The cal named by `/g/:id`, and the gate on everything under it.
@@ -45,16 +55,6 @@ import { Link, useParams } from 'react-router'
  * spend that round trip drawing an empty week that is indistinguishable from a
  * week nobody drew in.
  */
-/**
- * A resolved read, tagged with which id it answers.
- *
- * The tag is what separates "we have not asked about this cal yet" from "there
- * is no such cal", which is the same split `FetchedFriend` makes in
- * `session-provider.tsx` and for the same reason: without it, routing from one
- * cal to another renders the cal you just left until the new read lands.
- */
-type Fetched = { forCalId: string; cal: Cal | null; failed: boolean }
-
 export const CurrentCalProvider = ({ children }: { children: React.ReactNode }) => {
   const { state } = useSession()
   const userId = state.status === 'signed-in' ? state.user.id : null
@@ -129,9 +129,19 @@ export const CurrentCalProvider = ({ children }: { children: React.ReactNode }) 
           That is not one of your friens cals. Either the address is wrong, or you need its
           six-character code.
         </p>
-        <Button variant="outline" size="sm" render={<Link to="/" />}>
+        {/*
+          `buttonVariants` on a `Link`, not `Button render={<Link/>}`. Base UI's
+          Button defaults `nativeButton` to true and warns when what it renders
+          is not a `<button>`; turning that off makes it write
+          `role="button"` onto an `<a>`, which is worse than the warning — this
+          control goes somewhere, and a link that claims to be a button loses
+          the middle-click, the context menu and the "open in new tab" a Friend
+          staring at a dead end is quite likely to want. So it stays a link and
+          only borrows the look.
+        */}
+        <Link to="/" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
           Your friens cals
-        </Button>
+        </Link>
       </DeadEnd>
     )
   }

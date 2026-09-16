@@ -12,7 +12,7 @@
  *
  * The grid draws seven columns and the store holds every instant anybody has
  * ever drawn. A Sunday evening whose remainder lands on the following Monday
- * has no neighbouring column to ask — the week view stops at Sunday — so a
+ * has no neighbouring column to ask, because the week view stops at Sunday. A
  * marker derived from what is on screen could not exist for the case that
  * raised the ticket in the first place. Asking the store costs one probe per
  * column edge and answers off-screen and on-screen alike.
@@ -38,8 +38,8 @@
  * thirty minutes is the Monday's first row, exactly as an ordinary day's is.
  * Nothing here reads a wall clock, so nothing here has a spring or an autumn.
  *
- * **No `@/` imports, deliberately** — the same split `slots.ts` and
- * `segments.ts` already make, so `yarn test` can reach this under plain Node.
+ * **No `@/` imports, deliberately.** The same split `slots.ts` and `segments.ts`
+ * already make, so `yarn test` can reach this under plain Node.
  */
 import { SLOT_MS, type Run } from './slots.ts'
 
@@ -60,7 +60,7 @@ export type ContinuedRun = Run & {
  * All a column's Slots are asked for here: when each of them begins.
  *
  * Structural rather than `Slot`, so the rule cannot come to depend on a label
- * or a DST flag — the two instants it needs are the first row's and the last
+ * or a DST flag. The two instants it needs are the first row's and the last
  * row's, and everything else on a `Slot` is a reading of the wall clock.
  */
 type ColumnSlot = { start: Date }
@@ -68,7 +68,7 @@ type ColumnSlot = { start: Date }
 /**
  * Mark the runs of one column that carry on past it.
  *
- * `isHeld` is the store, narrowed to one Friend — `isFree(viewer.id, …)` at the
+ * `isHeld` is the store, narrowed to one Friend: `isFree(viewer.id, …)` at the
  * call site. The two probes are taken once per column rather than once per run,
  * which is what the column's edges being the only candidates buys.
  */

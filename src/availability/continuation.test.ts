@@ -3,7 +3,7 @@
  *
  *     yarn test
  *
- * Node's own runner, like `slots.test.ts` and `segments.test.ts` — so
+ * Node's own runner, like `slots.test.ts` and `segments.test.ts`, so
  * `continuation.ts` imports only bare specifiers, never `@/`.
  *
  * Every date here is `new Date(y, m, d)`, a *civil date* that reads the same in

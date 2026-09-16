@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 const ROME = 'Europe/Rome'
-/** +5:30, so +3:30 from Rome in summer — inside the band where an evening splits. */
+/** +5:30, so +3:30 from Rome in summer: inside the band where an evening splits. */
 const KOLKATA = 'Asia/Kolkata'
 /** Monday, the same as the grid's. */
 const MONDAY = 1
@@ -137,7 +137,7 @@ test('a tail across the viewer’s midnight gives the month a day nobody drew on
   // Prototype 13 §3, pinned rather than argued about. Three Rome Friends are
   // free 20:00–23:30 on the Sunday: one evening, one dark cell. A Friend at
   // +3:30 reads the same instants as 23:30 Sunday plus 02:30 of Monday, so
-  // their month holds ONE MORE DAY than the drawers' — alone in the next row,
+  // their month holds ONE MORE DAY than the drawers', alone in the next row,
   // holding nothing but the tail.
   //
   // And it is painted exactly as dark as the whole evening, because `peakOf` is

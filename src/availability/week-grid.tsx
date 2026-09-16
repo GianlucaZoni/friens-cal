@@ -503,8 +503,8 @@ const ringOf = (run: ContinuedRun, colour: string): string =>
 /**
  * What the open edge says to a reader who cannot see it.
  *
- * The chevron is `aria-hidden` — a glyph sitting in a boundary is not a thing
- * to announce — so the block's own sentence is where the crossing has to land.
+ * The chevron is `aria-hidden`, because a glyph sitting in a boundary is not a
+ * thing to announce, so the block's own sentence is where the crossing lands.
  * Without it the 30-minute sliver at the foot of a column reads out as *"You
  * are free 23:30 to 24:00"*, which is exactly the mis-click the marker exists
  * to stop.
@@ -605,7 +605,7 @@ const DayColumn = ({
    * **And each run is told whether the evening carries on past this column**
    * (issue 08), which is asked of the store and not of the draft. A draft's
    * cells are keyed by column (`draftCell`), so this column cannot see what its
-   * neighbour's half of an over-midnight drag holds — the cost, stated: a drag
+   * neighbour's half of an over-midnight drag holds. The cost, stated: a drag
    * that crosses midnight grows its chevrons when it commits rather than under
    * the pointer. Everything else about the block does follow the draft, which
    * is why `withContinuation` is given the *drawn* runs and then declines to
@@ -762,8 +762,8 @@ const DayColumn = ({
                   this grid, and a drag begun on your own Availability must reach
                   the column beneath, not stop on a div with no handler.
 
-                  An edge the evening carries on through loses its cap — no
-                  radius, no border, no bar of the ring — so the block reads as
+                  An edge the evening carries on through loses its cap: no
+                  radius, no border, no bar of the ring, so the block reads as
                   cut rather than as closed (issue 08).
                 */
                 className={cn(
@@ -961,7 +961,7 @@ const HeatWash = ({ band, hue, outOf }: { band: Band; hue: number; outOf: number
  *
  * Sat **inside** the block rather than beside it: the column has no margin, and
  * a marker in one would land on its neighbour's border. 11px tall, so it fits
- * the 30-minute sliver that is the commonest thing it marks — at `SLOT_PX` that
+ * the 30-minute sliver that is the commonest thing it marks. At `SLOT_PX` that
  * sliver is a 20px block with a cap at each end, and prototype 13 measured it
  * reading as a mis-click rather than as the start of an evening.
  *

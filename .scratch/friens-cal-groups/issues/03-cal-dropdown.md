@@ -1,6 +1,6 @@
 # 03 — The cal dropdown in the app shell
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 ## Parent

@@ -1,6 +1,6 @@
 # 04 — The roster is the cal's Members, and it stays live
 
-Status: ready-for-human
+Status: claimed
 Blocked by: 01, 02
 
 ## Parent

@@ -1,6 +1,6 @@
 # 06 — Inviting a Friend
 
-Status: ready-for-human
+Status: claimed
 Blocked by: 02
 
 ## Parent

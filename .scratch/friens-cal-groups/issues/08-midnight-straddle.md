@@ -63,10 +63,10 @@ merely makes common.
 
 One new module and one component changed. Nothing else in `src/` moved.
 
-- **`src/availability/continuation.ts`** — pure, `@/`-free, tested under plain
+- **`src/availability/continuation.ts`.** Pure, `@/`-free, tested under plain
   Node. `withContinuation(runs, slots, isHeld)` decorates a column's runs with
   `continuesBefore` / `continuesAfter`, which is the whole of the logic.
-- **`src/availability/week-grid.tsx`** — the run's ring became four directional
+- **`src/availability/week-grid.tsx`.** The run's ring became four directional
   inset shadows so a single edge can be dropped, an edge that continues loses
   its radius and its border, and `ContinuationMark` puts a 10px chevron inside
   it.
@@ -102,13 +102,13 @@ once and then ANDed with the run's position. On a week that is fourteen
 drop a single side, and an open edge that kept its bar reads as a closed block
 with a gap in its border. With both edges capped the four shadows are the same
 two pixels, so every run that does not cross midnight is drawn exactly as
-before — checked side by side against the old spread before the change went in.
+before, checked side by side against the old spread before the change went in.
 
 **5. The words go in the `aria-label`, and nowhere else.** The grid stays
 wordless: prototype 13 measured the named variant truncating to `to …` at
 week-column width, which is the width where splits are commonest. But the
 chevron is `aria-hidden`, and without a change the sliver reads out as *"You are
-free 23:30 to 24:00"* — which is the mis-click reading, in words, to the one
+free 23:30 to 24:00"*, which is the mis-click reading, in words, to the one
 reader who cannot see the marker. So the block's own sentence carries it:
 `…, carrying on into the next day`. This is the one place the slice added text
 that the ticket's "no label" could be read as forbidding. It is not variant C:
@@ -123,14 +123,14 @@ the time-zone framing.
 ### What was not touched, deliberately
 
 The composite (`HeatWash`), the Candidate card, the month lattice and
-`day-panel.tsx` are byte-identical. A band has no identity to preserve —
+`day-panel.tsx` are byte-identical. A band has no identity to preserve.
 `CONTEXT.md` is explicit that a band is not a run, `answerAt` answers per
 segment, and marking it would double the marker density to answer a question
 nobody asks of the wash.
 
 **The phantom day needed no code.** It is a consequence of ticket 07: every
 month cell is already swept against the viewer's own day. What this slice added
-is a test saying so out loud, including the part that is dishonest — `peakOf` is
+is a test saying so out loud, including the part that is dishonest. `peakOf` is
 peak concurrency, so a day holding a 2½-hour tail at peak 3 is painted exactly
 as dark as a day holding a whole evening at peak 3. Ticket 15 spent opacity and
 forbade a second channel, so that is accepted, and the test is there so the next
@@ -141,8 +141,8 @@ person finds the decision instead of a bug.
 Unit tests for the rule, and the real `WeekGrid` in a browser for the pixels.
 
 Nothing was run against the live database. For the visual check the grid was
-mounted on `/design-system` over an in-memory store — a temporary edit to
-`src/pages/DesignSystem.tsx`, reverted before the branch was reported, and the
+mounted on `/design-system` over an in-memory store: a temporary edit to
+`src/pages/DesignSystem.tsx`, reverted before the branch was reported. That
 route is outside both gates. The store's `draw` and `erase` were no-ops.
 
 Four blocks on one week, in Rome, at `SLOT_PX`:

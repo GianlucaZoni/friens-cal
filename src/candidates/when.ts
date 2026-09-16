@@ -104,6 +104,6 @@ const endLabel = (end: number, timeZone: string): string => closingLabel(wallClo
 const crossesMidnight = (start: number, end: number, timeZone: string): boolean =>
   civilDay(end - 1, timeZone) !== civilDay(start, timeZone)
 
-/** The civil date in the group's zone, as a comparable string. */
+/** The civil date in the viewer's zone, as a comparable string. */
 const civilDay = (instant: number, timeZone: string): string =>
   format(zoned(instant, timeZone), 'yyyy-MM-dd')

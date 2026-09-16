@@ -50,11 +50,11 @@ import { groupBy, times } from 'lodash-es'
 const SLOT_MINUTES = 30
 export const SLOT_MS = SLOT_MINUTES * 60_000
 
-/** One row of the grid: half an hour, in the group's time zone. */
+/** One row of the grid: half an hour, on the absolute grid. */
 export type Slot = {
   /** The instant it begins — a true point in time, which is what Postgres stores. */
   start: Date
-  /** Its wall clock in the group time zone, `HH:mm`. */
+  /** Its wall clock in the viewer's zone, `HH:mm`. */
   label: string
   /** True when it opens a wall-clock hour. The gutter labels these and no others. */
   opensHour: boolean
@@ -80,13 +80,18 @@ export type Slot = {
 }
 
 /**
- * Midnight, in the group's time zone, on the calendar date this `Date` names.
+ * Midnight, in the viewer's zone, on the calendar date this `Date` names.
  *
  * It reads the **civil date** — `getFullYear`/`getMonth`/`getDate`, the
  * viewer's own calendar — and not the instant. That is the right contract for
  * everything upstream: `useCalendarView` hands out system-local midnights that
- * *mean* "Sunday the 25th", and a viewer east of Rome would otherwise see the
- * 24th, because their midnight is still yesterday afternoon in Rome.
+ * *mean* "Sunday the 25th", and reading the instant would put a viewer whose
+ * civil date runs ahead of the zone's on a column the zone has not reached.
+ *
+ * v1 read the device's civil date and reinterpreted it in the cal's zone, which
+ * was a hybrid nobody chose: *which* dates were on screen came from the device
+ * and *what instants a date covered* came from Rome. Now that the zone handed
+ * in is the device's too, the two halves agree.
  */
 export const startOfDayInZone = (day: Date, timeZone: string): Date =>
   civilMidnight(day.getFullYear(), day.getMonth(), day.getDate(), timeZone)

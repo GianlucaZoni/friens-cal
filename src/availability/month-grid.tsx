@@ -16,7 +16,7 @@ import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import { setUpOnly, type RosterFriend, type SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import { useCallback, useMemo, useRef } from 'react'
 import { format, isSameDay, isSameMonth, isToday } from 'date-fns'
 import { PinIcon } from 'lucide-react'
@@ -226,6 +226,8 @@ export const MonthGrid = ({
    * The same shape `AppShell` uses for `silentAmong`, and for the same reason.
    */
   const { isFree } = availability
+  /* Every day on the lattice is the viewer's own day — see `useViewerZone`. */
+  const { timeZone } = useViewerZone()
 
   /**
    * Everything each cell draws, in one sweep of the lattice.
@@ -245,7 +247,7 @@ export const MonthGrid = ({
     const countedIds = counted.map((friend) => friend.id)
 
     return days.map((day) => {
-      const slots = slotsOfDay(day, GROUP_TIME_ZONE)
+      const slots = slotsOfDay(day, timeZone)
       const segments = segmentsOf(slots.length, countedIds, (friendId, row) =>
         isFree(friendId, slots[row].start)
       )
@@ -283,7 +285,7 @@ export const MonthGrid = ({
         held: viewer === null ? 0 : slots.filter((slot) => isFree(viewer.id, slot.start)).length,
       }
     })
-  }, [days, counted, isFree, hangouts, viewer])
+  }, [days, timeZone, counted, isFree, hangouts, viewer])
 
   /**
    * Whether a day is one of yours, **including whatever the gesture in flight is
@@ -851,6 +853,7 @@ const OpenDay = ({
   onClose: () => void
 }) => {
   const { day, slots, segments, peak, booked, held } = cell
+  const { timeZone } = useViewerZone()
 
   const windows = useMemo(() => windowsOf(segments, counted, slots), [segments, counted, slots])
 
@@ -861,7 +864,7 @@ const OpenDay = ({
    * half; and `requestErase` is handed the whole day, because a Slot the viewer
    * does not hold is one `droppedBy` already knows to ignore.
    */
-  const instants = useMemo(() => wholeDay(day, GROUP_TIME_ZONE), [day])
+  const instants = useMemo(() => wholeDay(day, timeZone), [day, timeZone])
 
   return (
     <DayPanel

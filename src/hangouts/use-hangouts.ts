@@ -14,7 +14,7 @@ import {
 import type { HangoutParticipantRow, HangoutRow } from '@/lib/database.types'
 import { PAGE_SIZE, readEveryPage } from '@/lib/paged-read'
 import { supabase } from '@/lib/supabase'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { deviceTimeZone, deviceZone } from '@/shell/zone'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type HangoutStore = {
@@ -168,7 +168,7 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
   const [confirming, setConfirming] = useState<string | null>(null)
 
   /** The floor both stores share, so neither can draw into a range the other has not read. */
-  const wantedFrom = useMemo(() => floorOfView(days, GROUP_TIME_ZONE), [days])
+  const wantedFrom = useMemo(() => floorOfView(days, deviceTimeZone()), [days])
 
   /**
    * How far back Postgres has already been asked — a **request log**, so it is
@@ -714,7 +714,13 @@ type Landed = {
  * half stays synchronous.
  */
 const performConfirm = async (candidate: Candidate, userId: string): Promise<Landed> => {
-  const when = whenOf(candidate.start, candidate.end, GROUP_TIME_ZONE)
+  /*
+   * `deviceZone()` — the viewer's zone with **no frame**. Every string built in
+   * this function goes into a toast, and a toast names no zone: it is gone in
+   * four seconds and nobody screenshots one (planning ticket 08 §6). It is also
+   * outside the tree the zone provider covers, being a plain async function.
+   */
+  const when = whenOf(candidate.start, candidate.end, deviceZone())
   const range = `${when.date}, ${when.range}`
 
   const { data: hangout, error } = await supabase
@@ -850,7 +856,7 @@ const joinTheWinner = async (
   const booked = whenOf(
     new Date(winner.starts_at).getTime(),
     new Date(winner.ends_at).getTime(),
-    GROUP_TIME_ZONE
+    deviceZone()
   )
 
   /*

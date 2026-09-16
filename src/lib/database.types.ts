@@ -18,6 +18,19 @@ export type Database = {
           hue: number | null
           tone: number | null
           expression: string | null
+          /**
+           * A **mirror of the device**, not a setting — written from
+           * `Intl.DateTimeFormat().resolvedOptions().timeZone` on sign-in and
+           * whenever the device disagrees with it. There is no picker and no
+           * edit path.
+           *
+           * The grid never reads it: it reads the live device on every render,
+           * so travelling just works. This column exists for the two readers
+           * that are other people — the roster's `8h ahead`, and whether the
+           * cal spans zones at all. Null for a Friend who has not signed in
+           * since the column existed.
+           */
+          time_zone: string | null
           created_at: string
         }
         /**
@@ -32,6 +45,7 @@ export type Database = {
           hue?: number | null
           tone?: number | null
           expression?: string | null
+          time_zone?: string | null
           created_at?: string
         }
         /** `id` and `created_at` are absent: the update grant excludes them. */
@@ -41,6 +55,7 @@ export type Database = {
           hue?: number | null
           tone?: number | null
           expression?: string | null
+          time_zone?: string | null
         }
         Relationships: []
       }

@@ -6,7 +6,7 @@ import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import { useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 
@@ -102,7 +102,8 @@ export const CandidateCard = ({
   busy: boolean
 }) => {
   const [open, setOpen] = useState(false)
-  const when = whenOf(candidate.start, candidate.end, GROUP_TIME_ZONE)
+  const zone = useViewerZone()
+  const when = whenOf(candidate.start, candidate.end, zone)
 
   /**
    * The card box, and **it is the detail's trigger** — ticket 16's route on
@@ -185,7 +186,7 @@ export const CandidateCard = ({
       */}
       {container !== null && (
         <span className="text-[11px] text-muted-foreground">
-          {insideLabel(container, candidate, GROUP_TIME_ZONE)}
+          {insideLabel(container, candidate, zone)}
         </span>
       )}
     </button>
@@ -204,7 +205,7 @@ export const CandidateCard = ({
       >
         <CandidateDetail
           friends={friends}
-          container={container === null ? null : insideLabel(container, candidate, GROUP_TIME_ZONE)}
+          container={container === null ? null : insideLabel(container, candidate, zone)}
           busy={busy}
           pending={pending}
           onConfirm={() => {

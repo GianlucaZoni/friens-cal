@@ -22,7 +22,7 @@ import { FriendBlob } from '@/identity/friend-blob'
 import { friendColour, friendColourAlpha } from '@/identity/ui-colour'
 import { cn } from '@/lib/utils'
 import { setUpOnly, type RosterFriend, type SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import { Fragment, useCallback, useMemo, useRef, type CSSProperties } from 'react'
 import { groupBy, maxBy } from 'lodash-es'
 import { format, isToday } from 'date-fns'
@@ -108,8 +108,11 @@ export type Viewer = { id: string; hue: number }
  *
  * ## The row axis is the time zone's, not 48
  *
- * Each column asks the group time zone how many half hours its day holds, so
+ * Each column asks the **viewer's** zone how many half hours its day holds, so
  * the autumn Sunday renders 50 rows and the spring one 46 (ticket 07 §5).
+ * Which Sunday that is is now a fact about whoever is looking rather than about
+ * the cal, so one week can hold two Friends' short days on two different dates —
+ * each of them seeing only their own.
  *
  * That breaks the one thing a week grid normally takes for granted: **on a DST
  * week the seven days genuinely disagree about what time it is**, so no single
@@ -182,9 +185,17 @@ export const WeekGrid = ({
    */
   onPage: (direction: -1 | 1) => void
 }) => {
+  /*
+   * The viewer's own zone, and the frame the gutter header names when the cal
+   * spans zones. Every column's row count comes out of it — which day is short
+   * is now a fact about whoever is looking (`CONTEXT.md`, **Slot**), so two
+   * Friends can have theirs on different dates in one week.
+   */
+  const zone = useViewerZone()
+
   const columns = useMemo(
-    () => days.map((day) => ({ day, slots: slotsOfDay(day, GROUP_TIME_ZONE) })),
-    [days]
+    () => days.map((day) => ({ day, slots: slotsOfDay(day, zone.timeZone) })),
+    [days, zone.timeZone]
   )
 
   /**
@@ -283,8 +294,22 @@ export const WeekGrid = ({
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       <div className="flex shrink-0 border-b">
-        {/* The gutter's width, so the columns line up with their headers. */}
-        <LoadState status={availability.status} className={cn(GUTTER_W, 'shrink-0')} />
+        {/*
+          The gutter's width, so the columns line up with their headers — and
+          the one place a **screenshot of the grid** can say whose clock it is
+          in. Every other frame in the product rides on a `whenOf` string, and
+          the grid has none: a photo of seven columns of `20:00` carries no
+          frame at all otherwise. Null in every cal today, so this is an empty
+          cell until somebody is abroad.
+        */}
+        <div className={cn(GUTTER_W, 'flex shrink-0 flex-col items-center justify-center')}>
+          <LoadState status={availability.status} className="h-1.5" />
+          {zone.frame !== null && (
+            <span className="pt-px text-[9px] leading-none tabular-nums text-muted-foreground/70">
+              {zone.frame}
+            </span>
+          )}
+        </div>
         {laidOut.map(({ day, ownGutter }) => (
           <Fragment key={day.toISOString()}>
             {/* Reserves the width of that day's own gutter, so its date stays
@@ -1037,7 +1062,7 @@ const HangoutBlock = ({
   const over = isPast(hangout, now)
   const faces = facesOf(hangout, friendsById)
 
-  const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+  const when = whenOf(hangout.startsAt, hangout.endsAt, useViewerZone())
 
   return (
     <div

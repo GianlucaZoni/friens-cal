@@ -21,9 +21,9 @@ import { TZDate } from '@date-fns/tz'
 import { createClient } from '@supabase/supabase-js'
 
 /**
- * The one group time zone (`GROUP_TIME_ZONE`, ticket 07 §5). Restated rather
- * than imported: `src/` is TypeScript, and `.nvmrc` pins a Node that needs a
- * flag to read it. Only the seed's wall clock depends on this — every check
+ * A zone to build the seed's wall clock in. The product has no one zone any
+ * more — every Friend's grid is drawn in their own — and nothing here depends
+ * on which one this is: only the seed's wall clock reads it, and every check
  * below is about instants and grants.
  */
 const ROME = 'Europe/Rome'

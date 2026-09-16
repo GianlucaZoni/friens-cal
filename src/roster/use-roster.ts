@@ -18,6 +18,14 @@ export type RosterFriend = {
    * Friend (`identityOf`, issue 03).
    */
   identity: Identity | null
+  /**
+   * Their device's zone, as last mirrored (`friend.time_zone`) — null for a
+   * Friend who has not signed in since the column existed.
+   *
+   * Read **only** to say how far their clock is from the viewer's. Nothing is
+   * ever drawn in it: every grid, card and time string is the viewer's own.
+   */
+  timeZone: string | null
   /** You are in the roster, and hideable like anyone else. */
   isSelf: boolean
 }
@@ -181,6 +189,7 @@ export const useRoster = (): RosterState => {
           // The one predicate for "has not finished setup", used by the order
           // and by the rendering both. `isSetupComplete` is what it is built on.
           identity: identityOf(row),
+          timeZone: row.time_zone,
           isSelf: row.id === userId,
         }))
       ),

@@ -17,7 +17,7 @@ import {
 import { toast } from '@/components/ui/toast-manager'
 import { PAGE_SIZE, readEveryPage } from '@/lib/paged-read'
 import { supabase } from '@/lib/supabase'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { deviceTimeZone } from '@/shell/zone'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 /** Which way a gesture moved the store. The two write paths are symmetric. */
@@ -160,8 +160,13 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
   /**
    * The earliest instant the view needs — see `floorOfView`, which is shared
    * with `useHangouts` precisely so the two reads cannot disagree about it.
+   *
+   * `deviceTimeZone()` rather than `useViewerZone()`, here and at the two sites
+   * below: this hook is instantiated in `AppShell` *above* the zone provider,
+   * and it never renders a frame anyway. The zone itself is the same value
+   * either way — the provider puts this very function's answer in the context.
    */
-  const wantedFrom = useMemo(() => floorOfView(days, GROUP_TIME_ZONE), [days])
+  const wantedFrom = useMemo(() => floorOfView(days, deviceTimeZone()), [days])
 
   /**
    * How far back Postgres has already been asked. A ref, not state, because it
@@ -336,7 +341,7 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
    * Sunday holds 02:00 twice.
    */
   const viewInstants = useMemo(
-    () => days.flatMap((day) => slotsOfDay(day, GROUP_TIME_ZONE).map((slot) => slot.start)),
+    () => days.flatMap((day) => slotsOfDay(day, deviceTimeZone()).map((slot) => slot.start)),
     [days]
   )
 
@@ -412,7 +417,7 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
        */
       change((current) => withSlots(current, friendId, instants, kind === 'erase'))
 
-      const range = describeSlots(instants, GROUP_TIME_ZONE)
+      const range = describeSlots(instants, deviceTimeZone())
       /*
        * `raised.id` is filled in by the very next statement, and read only when
        * Retry is pressed. Base UI does **not** close a toast when its action is

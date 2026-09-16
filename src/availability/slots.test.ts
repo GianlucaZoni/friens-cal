@@ -266,13 +266,13 @@ test('an instant inside a slot floors to the start of that slot', () => {
   const nearlyTen = new Date(Date.UTC(2026, 8, 1, 7, 42, 17, 500))
 
   // 09:42 Rome (UTC+2) → the 09:30 slot.
-  assert.equal(slotContaining(nearlyTen, ROME).toISOString(), '2026-09-01T07:30:00.000Z')
+  assert.equal(slotContaining(nearlyTen).toISOString(), '2026-09-01T07:30:00.000Z')
 })
 
 test('an instant exactly on a boundary is its own slot', () => {
   const onTheHalf = new Date(Date.UTC(2026, 8, 1, 7, 30))
 
-  assert.equal(slotContaining(onTheHalf, ROME).getTime(), onTheHalf.getTime())
+  assert.equal(slotContaining(onTheHalf).getTime(), onTheHalf.getTime())
 })
 
 test('the horizon is on the absolute grid, in a quarter-hour zone as in any other', () => {

@@ -10,7 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { nameOf, wouldAutoCancel, type Hangout } from '@/hangouts/hangout'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 
 /**
  * Ticket 08 §10: **the erase that costs a plan, named before it happens.**
@@ -133,7 +133,8 @@ const DropLine = ({
   viewerId: string
   now: number
 }) => {
-  const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+  const zone = useViewerZone()
+  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
 
   return (
     <li className="flex flex-col">

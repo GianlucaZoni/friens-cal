@@ -27,6 +27,13 @@ import { useEffect, useState } from 'react'
  * than replaying them — and a DST transition, which moves the wall clock under
  * a lattice this hook never sees, needs no case of its own.
  *
+ * ## No zone
+ *
+ * It took one until ticket 07 of `friens-cal-groups` pinned a Slot to the
+ * absolute half-hour grid. The horizon is a point on that grid and nothing here
+ * reads a wall clock, so there is no longer a zone for this to be wrong about —
+ * which matters now that every Friend draws in their own.
+ *
  * ## Focus, for the sleeping laptop
  *
  * `setTimeout` does not fire while the machine is suspended and browsers
@@ -35,8 +42,8 @@ import { useEffect, useState } from 'react'
  * both resync — and both are nearly free, because a resync that lands in the
  * same Slot sets the same number and React bails out of the render.
  */
-export const useSlotClock = (timeZone: string): number => {
-  const [horizon, setHorizon] = useState(() => slotContaining(new Date(), timeZone).getTime())
+export const useSlotClock = (): number => {
+  const [horizon, setHorizon] = useState(() => slotContaining(new Date()).getTime())
 
   useEffect(() => {
     /*
@@ -49,7 +56,7 @@ export const useSlotClock = (timeZone: string): number => {
     let timer: ReturnType<typeof setTimeout>
 
     const resync = () => {
-      const slot = slotContaining(new Date(), timeZone).getTime()
+      const slot = slotContaining(new Date()).getTime()
       setHorizon(slot)
 
       clearTimeout(timer)
@@ -68,7 +75,7 @@ export const useSlotClock = (timeZone: string): number => {
       window.removeEventListener('focus', resync)
       document.removeEventListener('visibilitychange', resync)
     }
-  }, [timeZone])
+  }, [])
 
   return horizon
 }

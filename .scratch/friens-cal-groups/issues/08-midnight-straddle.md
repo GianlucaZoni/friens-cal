@@ -1,6 +1,6 @@
 # 08 — A run that crosses the viewer's midnight
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 07
 
 ## Parent

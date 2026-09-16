@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { BusyElsewhere } from '@/hangouts/busy-elsewhere'
+import { clashesWith, type Commitment } from '@/hangouts/elsewhere'
 import { covers, facesOf, nameOf, type Hangout } from '@/hangouts/hangout'
 import {
   dateValueOf,
@@ -85,6 +87,7 @@ export const RetimeDialog = ({
   hangout,
   friendsById,
   isFree,
+  commitments,
   onRetime,
   onClose,
 }: {
@@ -93,6 +96,14 @@ export const RetimeDialog = ({
   friendsById: ReadonlyMap<string, SetUpFriend>
   /** The Availability store's question, for the consequence line. */
   isFree: (friendId: string, slotStart: Date) => boolean
+  /**
+   * The viewer's own commitments in their other cals (groups ticket 09).
+   *
+   * The list rather than the clashes, because the question this dialog asks of
+   * it changes under the picker: it is about the range currently selected, not
+   * about the one this Hangout is leaving.
+   */
+  commitments: readonly Commitment[]
   /** Resolves to a message to show, or null once the Hangout has moved. */
   onRetime: (startsAt: number, endsAt: number) => Promise<string | null>
   onClose: () => void
@@ -134,6 +145,23 @@ export const RetimeDialog = ({
       (friend) => !covers(range, (slotStart) => isFree(friend.id, new Date(slotStart)))
     )
   }, [hangout, friendsById, isFree, startsAt, endsAt])
+
+  /**
+   * The viewer's own commitments elsewhere that the **proposed** range hits.
+   *
+   * Groups ticket 09 §8: this is the best instance of the whole feature, and
+   * the reason is that every other surface comments on a time somebody else
+   * proposed while this one steers you off the collision with the control still
+   * in your hand. Everything it needs is already in memory, so it recomputes as
+   * the picker moves rather than a round trip behind it.
+   *
+   * The Hangout being moved is in the cal on screen and the list holds no rows
+   * from it, so a retime can never collide with itself.
+   */
+  const clashes = useMemo(
+    () => clashesWith(commitments, { start: startsAt, end: endsAt }),
+    [commitments, startsAt, endsAt]
+  )
 
   const proposed = whenOf(startsAt, endsAt, zone)
   const current = whenOf(hangout.startsAt, hangout.endsAt, zone)
@@ -190,6 +218,19 @@ export const RetimeDialog = ({
           ordinary edit to an ordinary field.
         */}
         <Consequence friends={writingTo} when={`${proposed.date} · ${proposed.range}`} />
+
+        {/*
+          Directly under the consequence, and **the live region is this
+          wrapper rather than the block inside it**. The block cannot be
+          rendered when there is nothing to say — there is no all-clear
+          anywhere in this feature — and a live region that mounts together
+          with its first content is one most screen readers never announce.
+          An empty one that is always here announces both the arrival and the
+          departure as the picker moves.
+        */}
+        <div aria-live="polite">
+          <BusyElsewhere clashes={clashes} />
+        </div>
 
         <FieldGroup>
           <Field>

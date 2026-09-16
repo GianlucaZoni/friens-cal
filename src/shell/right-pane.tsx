@@ -6,8 +6,10 @@ import { containerOf, glows, isFullHouse } from '@/candidates/candidates'
 import type { CandidateList as List } from '@/candidates/use-candidates'
 import { friendsIn, useCandidates } from '@/candidates/use-candidates'
 import { Skeleton } from '@/components/ui/skeleton'
+import { heldKey, type Commitment } from '@/hangouts/elsewhere'
 import { facesOf, pinned } from '@/hangouts/hangout'
 import { HangoutCard, PinnedHangouts, type HangoutControls } from '@/hangouts/hangout-card'
+import { useElsewhere } from '@/hangouts/use-elsewhere'
 import type { HangoutStore } from '@/hangouts/use-hangouts'
 import type { RosterState, SetUpFriend } from '@/roster/use-roster'
 import { DrawerFill } from '@/shell/drawer-fill'
@@ -75,6 +77,25 @@ export const RightPane = ({
   const { friendsById, namesById } = roster
 
   /**
+   * The viewer's own commitments in their **other** cals, for the
+   * double-booking mark (groups ticket 09).
+   *
+   * Here rather than in `AppShell` because this pane is the only reader: the
+   * grid gets nothing. Faint shading of another cal's plans was considered and
+   * rejected — the grid is the cal's shared surface, per-cal blindness is the
+   * point of it, and another cal's commitments drawn on it however faintly make
+   * it no longer "what this cal knows".
+   *
+   * `heldKey` is the snapshot's refresh signal, and it is the four acts as one
+   * value: confirm, Join and Rejoin each add a Hangout the viewer is on, and a
+   * retime moves the times beside one. Computed out here because this is where
+   * the store is, and narrow on purpose — the store churns whenever anybody
+   * else does anything, and none of that moves this.
+   */
+  const held = useMemo(() => heldKey(hangouts.hangouts, viewerId), [hangouts.hangouts, viewerId])
+  const commitments = useElsewhere({ now, held })
+
+  /**
    * The five lifecycle writes, as one object.
    *
    * `useMemo` because it is a prop on every card in the pinned region and the
@@ -127,6 +148,7 @@ export const RightPane = ({
         namesById={namesById}
         viewerId={viewerId}
         now={now}
+        commitments={commitments}
         controls={controls}
       />
     )
@@ -142,6 +164,7 @@ export const RightPane = ({
             viewerId={viewerId}
             now={now}
             isFree={availability.isFree}
+            commitments={commitments}
             controls={controls}
           />
         )}
@@ -160,6 +183,7 @@ export const RightPane = ({
 
         <CandidateList
           list={list}
+          commitments={commitments}
           hangoutsPinned={hasPinned}
           hiddenCount={roster.hidden.size}
           onShowAll={roster.showAll}
@@ -231,6 +255,7 @@ const DrawerPeek = ({
   namesById,
   viewerId,
   now,
+  commitments,
   controls,
 }: {
   peek: Peek
@@ -249,6 +274,8 @@ const DrawerPeek = ({
   namesById: ReadonlyMap<string, string>
   viewerId: string | null
   now: number
+  /** The viewer's commitments elsewhere — the peek's one card marks too. */
+  commitments: readonly Commitment[]
   controls: HangoutControls
 }) => (
   <div className="flex min-h-0 flex-col gap-1 px-2 pt-0.5">
@@ -287,6 +314,7 @@ const DrawerPeek = ({
           viewerId={viewerId}
           now={now}
           isFree={isFree}
+          commitments={commitments}
           controls={controls}
         />
       </ul>
@@ -305,6 +333,7 @@ const DrawerPeek = ({
             of them, not among the one that happens to be on screen.
           */
           container={containerOf(peek.candidate, list.all)}
+          commitments={commitments}
           onConfirm={() => hangouts.confirm(peek.candidate)}
           pending={hangouts.confirming === peek.candidate.id}
           busy={hangouts.confirming !== null}

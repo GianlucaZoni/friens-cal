@@ -3,6 +3,7 @@ import { containerOf, glows, isFullHouse, type Candidate } from '@/candidates/ca
 import { friendsIn, type CandidateList as List } from '@/candidates/use-candidates'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { Commitment } from '@/hangouts/elsewhere'
 import { useState } from 'react'
 import { times } from 'lodash-es'
 
@@ -28,6 +29,7 @@ import { times } from 'lodash-es'
  */
 export const CandidateList = ({
   list,
+  commitments,
   hangoutsPinned,
   hiddenCount,
   onShowAll,
@@ -35,6 +37,17 @@ export const CandidateList = ({
   confirming,
 }: {
   list: List
+  /**
+   * The viewer's own commitments in their other cals, passed straight through
+   * to the cards (groups ticket 09).
+   *
+   * **The list never reorders around them**, which was available and is wrong:
+   * the order is an argument about the cal and your commitments are an argument
+   * about you, and folding one into the other makes a shared-looking list
+   * secretly personal, with no way to tell a Candidate that sank from one that
+   * was never there.
+   */
+  commitments: readonly Commitment[]
   /**
    * Whether the pinned Hangout region above has anything in it.
    *
@@ -84,6 +97,7 @@ export const CandidateList = ({
              * exactly the card that needs to say so.
              */
             container={containerOf(candidate, list.all)}
+            commitments={commitments}
             onConfirm={() => onConfirm(candidate)}
             pending={confirming === candidate.id}
             busy={confirming !== null}

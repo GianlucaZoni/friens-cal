@@ -1,5 +1,7 @@
 import { whenOf } from '@/candidates/when'
 import { CardDetail } from '@/components/card-detail'
+import { BusyMark } from '@/hangouts/busy-elsewhere'
+import { busySuffix, clashesWith, isOffered, type Commitment } from '@/hangouts/elsewhere'
 import {
   facesOf,
   isEdited,
@@ -16,7 +18,7 @@ import { FriendBlob } from '@/identity/friend-blob'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
 import { useViewerZone } from '@/shell/viewer-zone'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Pin, UserPlus } from 'lucide-react'
 
 /** The five lifecycle writes, as a card needs them. */
@@ -93,6 +95,7 @@ export const HangoutCard = ({
   viewerId,
   now,
   isFree,
+  commitments,
   controls,
 }: {
   hangout: Hangout
@@ -120,6 +123,14 @@ export const HangoutCard = ({
    * derived from it below.
    */
   isFree: (friendId: string, slotStart: Date) => boolean
+  /**
+   * The viewer's own commitments in their **other** cals (groups ticket 09).
+   *
+   * The whole list rather than the clashes, because the retime dialog below
+   * needs it too: its line is about the range its picker is currently on rather
+   * than about this Hangout's, and it recomputes as the picker moves.
+   */
+  commitments: readonly Commitment[]
   controls: HangoutControls
 }) => {
   const [open, setOpen] = useState(false)
@@ -140,6 +151,24 @@ export const HangoutCard = ({
   const happening = isHappening(hangout, now)
   const over = isPast(hangout, now)
   const joinable = mayJoin(hangout, viewerId, holds, now)
+
+  /**
+   * The clash, but **only while this is still an offer** (groups ticket 09 §4).
+   *
+   * A card offering `Join?` — or a detail offering Rejoin — is a commitment you
+   * could take on, and it carries the mark. The instant you are a Participant
+   * it is not an offer, and the mark is gone even though the clash is still
+   * true and now permanent: the warning was about a decision, and the decision
+   * is made. `Join?` is *not* the test, because Rejoin is the fourth act and
+   * lives one tap further in.
+   */
+  const clashes = useMemo(
+    () =>
+      isOffered(hangout, viewerId, now)
+        ? clashesWith(commitments, { start: hangout.startsAt, end: hangout.endsAt })
+        : [],
+    [commitments, hangout, viewerId, now]
+  )
 
   /*
    * **The name is always the headline and the time is always the second line**
@@ -210,6 +239,9 @@ export const HangoutCard = ({
           ))}
         </div>
       </div>
+
+      {/* The mark, when this is still something you could say yes to. */}
+      <BusyMark clashes={clashes} />
     </button>
   )
 
@@ -229,6 +261,7 @@ export const HangoutCard = ({
           viewerId={viewerId}
           now={now}
           holds={holds}
+          clashes={clashes}
           actions={controls}
           onEditTime={() => {
             setOpen(false)
@@ -262,7 +295,9 @@ export const HangoutCard = ({
             'hover:bg-accent hover:text-accent-foreground',
             'focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none'
           )}
-          aria-label={`Join ${nameOf(hangout)}, ${second}`}
+          // And the clash, when there is one: the mark in the card body is read
+          // when the body is read, and this button is reachable without it.
+          aria-label={`Join ${nameOf(hangout)}, ${second}${busySuffix(clashes, zone)}`}
         >
           <UserPlus aria-hidden className="size-3" /> Join?
         </button>
@@ -273,6 +308,7 @@ export const HangoutCard = ({
           hangout={hangout}
           friendsById={friendsById}
           isFree={isFree}
+          commitments={commitments}
           onRetime={(startsAt, endsAt) => controls.retime(hangout, startsAt, endsAt)}
           onClose={() => setEditing(false)}
         />
@@ -305,6 +341,7 @@ export const PinnedHangouts = ({
   viewerId,
   now,
   isFree,
+  commitments,
   controls,
 }: {
   hangouts: readonly Hangout[]
@@ -314,6 +351,8 @@ export const PinnedHangouts = ({
   viewerId: string
   now: number
   isFree: (friendId: string, slotStart: Date) => boolean
+  /** The viewer's own commitments in their other cals, for the mark. */
+  commitments: readonly Commitment[]
   controls: HangoutControls
 }) => (
   <ul aria-label="Confirmed hangouts" className="flex flex-col gap-1.5">
@@ -327,6 +366,7 @@ export const PinnedHangouts = ({
         viewerId={viewerId}
         now={now}
         isFree={isFree}
+        commitments={commitments}
         controls={controls}
       />
     ))}

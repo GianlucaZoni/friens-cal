@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { BusyElsewhere } from '@/hangouts/busy-elsewhere'
+import type { Commitment } from '@/hangouts/elsewhere'
 import {
   facesOf,
   isPast,
@@ -91,6 +93,7 @@ export const HangoutDetail = ({
   viewerId,
   now,
   holds,
+  clashes,
   actions,
   onEditTime,
   onCancel,
@@ -111,6 +114,11 @@ export const HangoutDetail = ({
   now: number
   /** Whether the viewer holds a given Slot — for the Join and its writes. */
   holds: (slotStart: number) => boolean
+  /**
+   * The viewer's own commitments elsewhere that this Hangout's range collides
+   * with — empty unless this is still an offer, which the card decides.
+   */
+  clashes: readonly Commitment[]
   actions: HangoutActions
   /** Opens the retime Dialog. The caller closes this surface first. */
   onEditTime: () => void
@@ -158,6 +166,7 @@ export const HangoutDetail = ({
           viewerId={viewerId}
           now={now}
           missing={missing}
+          clashes={clashes}
           actions={actions}
           onCancel={onCancel}
         />
@@ -350,6 +359,11 @@ const nameFor = (friendId: string, namesById: ReadonlyMap<string, string>): stri
  * multi-Hangout naming, which is a miscitation: that is §10's strict-drop
  * dialog and it lives on the grid. Cancelling from a card affects exactly one
  * Hangout, always.
+ *
+ * **Two of the four acts are in here**, which is why the mark is too: Join and
+ * Rejoin both make you a Participant, and Rejoin is the one that is easy to
+ * miss (groups ticket 09 §5). The naming sits above them, because the card
+ * outside carries the time alone and this is the tap that spells it out.
  */
 const Ways = ({
   hangout,
@@ -357,6 +371,7 @@ const Ways = ({
   viewerId,
   now,
   missing,
+  clashes,
   actions,
   onCancel,
 }: {
@@ -365,6 +380,7 @@ const Ways = ({
   viewerId: string
   now: number
   missing: readonly number[]
+  clashes: readonly Commitment[]
   actions: HangoutActions
   onCancel: () => void
 }) => {
@@ -374,6 +390,14 @@ const Ways = ({
 
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-2">
+      {/*
+        Above the way in, the way the retime dialog states its consequence
+        above its controls. It is empty for a Participant by construction —
+        the card's `isOffered` is what decides, so there is no second reading
+        of the rule down here to drift from the first.
+      */}
+      <BusyElsewhere clashes={clashes} />
+
       {state === 'participant' && (
         <>
           <Button

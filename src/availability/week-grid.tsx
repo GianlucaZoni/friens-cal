@@ -1062,7 +1062,8 @@ const HangoutBlock = ({
   const over = isPast(hangout, now)
   const faces = facesOf(hangout, friendsById)
 
-  const when = whenOf(hangout.startsAt, hangout.endsAt, useViewerZone())
+  const zone = useViewerZone()
+  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
 
   return (
     <div

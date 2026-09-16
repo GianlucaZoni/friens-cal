@@ -199,6 +199,11 @@ two Hangouts (one past, one future) with everyone on them. Then `08`–`11`.
 - The `realtime.messages` policy: a Friend in one cal sees their own topic,
   gets nothing on another cal's, nothing on junk, and no error on a malformed
   one.
+- Read scoping, from the third Friend's seat: he sees his own cal's 20
+  Availability rows and none of the other cal's, his own 3 Memberships, and all
+  3 `friend` rows, which is global on purpose. A write into a cal he is not in
+  comes back `42501` from the policy rather than `23503` from the foreign key,
+  which is what the write policies' second clause buys.
 - The publication holds exactly `public.friend`.
 - `availability_on_the_slot_grid` rejects an off-grid instant (`23514`).
 - **All four files re-run cleanly, twice**, which found two idempotence bugs

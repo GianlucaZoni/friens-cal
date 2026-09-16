@@ -29,7 +29,7 @@ import {
 import { SaveError } from '@/identity/save-error'
 import { useSaveAction } from '@/identity/use-save-action'
 import type { SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import { useMemo, useState } from 'react'
 
 /**
@@ -107,9 +107,12 @@ export const RetimeDialog = ({
   const [endsAt, setEndsAt] = useState(hangout.endsAt)
   const { error, saving, run } = useSaveAction()
 
-  const day = useMemo(() => dayFromValue(dateValueOf(startsAt, GROUP_TIME_ZONE)), [startsAt])
-  const starts = useMemo(() => (day === null ? [] : startChoices(day, GROUP_TIME_ZONE)), [day])
-  const ends = useMemo(() => endChoices(startsAt, GROUP_TIME_ZONE), [startsAt])
+  const zone = useViewerZone()
+  const { timeZone } = zone
+
+  const day = useMemo(() => dayFromValue(dateValueOf(startsAt, timeZone)), [startsAt, timeZone])
+  const starts = useMemo(() => (day === null ? [] : startChoices(day, timeZone)), [day, timeZone])
+  const ends = useMemo(() => endChoices(startsAt, timeZone), [startsAt, timeZone])
 
   /**
    * Whose calendars this will be written to — the Participants who do not
@@ -132,8 +135,8 @@ export const RetimeDialog = ({
     )
   }, [hangout, friendsById, isFree, startsAt, endsAt])
 
-  const proposed = whenOf(startsAt, endsAt, GROUP_TIME_ZONE)
-  const current = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+  const proposed = whenOf(startsAt, endsAt, zone)
+  const current = whenOf(hangout.startsAt, hangout.endsAt, zone)
   const moved = startsAt !== hangout.startsAt || endsAt !== hangout.endsAt
 
   /**
@@ -146,7 +149,7 @@ export const RetimeDialog = ({
   const onDay = (value: string) => {
     const picked = dayFromValue(value)
     if (picked === null) return
-    const nextStart = sameClockOn(startsAt, picked, GROUP_TIME_ZONE)
+    const nextStart = sameClockOn(startsAt, picked, timeZone)
     setEndsAt(nextStart + (endsAt - startsAt))
     setStartsAt(nextStart)
   }
@@ -199,9 +202,9 @@ export const RetimeDialog = ({
             <Input
               id="retime-date"
               type="date"
-              min={todayValue(GROUP_TIME_ZONE)}
+              min={todayValue(timeZone)}
               disabled={saving}
-              value={dateValueOf(startsAt, GROUP_TIME_ZONE)}
+              value={dateValueOf(startsAt, timeZone)}
               onChange={(event) => onDay(event.target.value)}
             />
           </Field>

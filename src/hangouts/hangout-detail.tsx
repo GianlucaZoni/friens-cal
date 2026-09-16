@@ -26,7 +26,7 @@ import { FriendBlob } from '@/identity/friend-blob'
 import { SaveError } from '@/identity/save-error'
 import { useSaveAction } from '@/identity/use-save-action'
 import type { SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import { TZDate } from '@date-fns/tz'
 import { useState } from 'react'
 import { format } from 'date-fns'
@@ -117,7 +117,8 @@ export const HangoutDetail = ({
   /** Opens the singular cancel warning. Same. */
   onCancel: () => void
 }) => {
-  const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+  const zone = useViewerZone()
+  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
   const over = isPast(hangout, now)
   const state = stateOf(hangout, viewerId)
   const faces = facesOf(hangout, friendsById)
@@ -291,6 +292,7 @@ const Provenance = ({
   hangout: Hangout
   namesById: ReadonlyMap<string, string>
 }) => {
+  const { timeZone } = useViewerZone()
   const confirmedBy = hangout.createdBy === null ? null : nameFor(hangout.createdBy, namesById)
   const editedBy = hangout.editedBy === null ? null : nameFor(hangout.editedBy, namesById)
   if (confirmedBy === null && editedBy === null) return null
@@ -309,7 +311,7 @@ const Provenance = ({
           */}
           {hangout.editedAt === null
             ? ''
-            : ` · ${format(new TZDate(hangout.editedAt, GROUP_TIME_ZONE), 'EEE d LLL, HH:mm')}`}
+            : ` · ${format(new TZDate(hangout.editedAt, timeZone), 'EEE d LLL, HH:mm')}`}
         </span>
       )}
     </div>
@@ -472,7 +474,8 @@ export const CancelDialog = ({
   onConfirm: () => Promise<string | null>
   onDismiss: () => void
 }) => {
-  const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+  const zone = useViewerZone()
+  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
   const names = facesOf(hangout, friendsById).map((friend) => friend.name)
   const { error, saving, run } = useSaveAction()
 

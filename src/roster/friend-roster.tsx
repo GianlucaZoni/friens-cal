@@ -10,6 +10,8 @@ import {
   SidebarMenuSkeleton,
   ShellMenuButton,
 } from '@/shell/shell'
+import { useViewerZone } from '@/shell/viewer-zone'
+import { offsetLabel } from '@/shell/zone'
 import { times } from 'lodash-es'
 import { EyeIcon, EyeOffIcon, UserRoundIcon } from 'lucide-react'
 
@@ -32,6 +34,7 @@ import { EyeIcon, EyeOffIcon, UserRoundIcon } from 'lucide-react'
 export const FriendRoster = ({
   roster,
   silent,
+  now,
 }: {
   roster: RosterState
   /**
@@ -42,8 +45,11 @@ export const FriendRoster = ({
    * reaching for them. `AppShell` holds both.
    */
   silent: ReadonlySet<string>
+  /** The app's one clock. See `offsetLabel` — the answer moves with the date. */
+  now: number
 }) => {
   const { friends, visible, hidden, toggleHidden, status } = roster
+  const { timeZone } = useViewerZone()
 
   return (
     <SidebarGroup>
@@ -75,6 +81,13 @@ export const FriendRoster = ({
               friend={friend}
               hidden={hidden.has(friend.id)}
               silent={silent.has(friend.id)}
+              /*
+                Only when their clock differs from yours, and never on your own
+                row — you are not ahead of yourself, and your stored zone is a
+                mirror that can be a round trip behind the device it mirrors.
+                Every cal in a single country shows nothing new.
+              */
+              offset={friend.isSelf ? null : offsetLabel(timeZone, friend.timeZone, now)}
               onToggle={() => toggleHidden(friend.id)}
             />
           ))
@@ -130,12 +143,23 @@ const RosterRow = ({
   friend,
   hidden,
   silent,
+  offset,
   onToggle,
 }: {
   friend: RosterFriend
   hidden: boolean
   /** No Availability anywhere in the current view. */
   silent: boolean
+  /**
+   * `8h ahead`, or null when this Friend reads the same clock as the viewer —
+   * which is every Friend in every cal today.
+   *
+   * Relative rather than absolute, because the question it answers is *why is
+   * Bea never free in my evening*, and `GMT+9` makes the reader do the
+   * arithmetic. It is deliberately a different idiom from the `GMT+2` a card
+   * carries: collapsing the two would make this row say `GMT+9`.
+   */
+  offset: string | null
   onToggle: () => void
 }) => {
   const Eye = hidden ? EyeOffIcon : EyeIcon
@@ -181,6 +205,14 @@ const RosterRow = ({
             </>
           )}
           <span className="min-w-0 flex-1 truncate text-[13px]">{friend.name}</span>
+          {offset !== null && (
+            <span
+              title={`${friend.name} is ${offset}`}
+              className="shrink-0 text-[10px] tabular-nums text-muted-foreground"
+            >
+              {offset}
+            </span>
+          )}
           {silent && <SilenceDot name={friend.name} />}
           {friend.isSelf && <span className="shrink-0 text-[10px] text-muted-foreground">you</span>}
         </span>

@@ -53,7 +53,9 @@
 import { TZDate } from '@date-fns/tz'
 import { createClient } from '@supabase/supabase-js'
 
-/** The one group time zone (`GROUP_TIME_ZONE`), restated as the other scripts do. */
+/** A zone to build the seed's wall clock in, as the other scripts do. The
+ *  product has no one zone any more — every Friend's grid is their own — and
+ *  every check below is about instants. */
 const ROME = 'Europe/Rome'
 
 const url = process.env.VITE_SUPABASE_URL

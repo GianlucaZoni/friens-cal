@@ -19,7 +19,7 @@
  * recompute, that the glow counts Hidden Friends in its denominator, and that
  * each of the three empty states is reached for its own reason.
  */
-import { SLOT_MS, type FreeSlot } from '../availability/slots.ts'
+import { SLOT_MS, slotsOfDay, type FreeSlot } from '../availability/slots.ts'
 import {
   containerOf,
   emptyReason,
@@ -30,6 +30,7 @@ import {
   type Candidate,
   type HangoutRange,
 } from './candidates.ts'
+import { whenOf } from './when.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -470,4 +471,63 @@ test('a Hangout that blanks the only overlap reads as no overlap, not as no Avai
 
 test('something to show is not an empty state', () => {
   assert.equal(emptyReason(4, { candidates: [four], anyAvailability: true }), null)
+})
+
+/* ================================================================== *
+ * One Candidate, two viewers, two zones
+ * ================================================================== */
+
+/**
+ * The rows of one calendar day in one zone, by wall clock.
+ *
+ * Both Friends pick their block off their **own** grid and nothing is ever
+ * translated — that is the whole of what per-viewer rendering means
+ * (`CONTEXT.md`, **Availability**).
+ */
+const drawnIn = (friendId: string, timeZone: string, labels: string[]): FreeSlot[] =>
+  slotsOfDay(new Date(2026, 8, 1), timeZone)
+    .filter((slot) => labels.includes(slot.label))
+    .map((slot) => ({ friendId, start: slot.start.getTime() }))
+
+test('a Candidate computed in one zone is byte-identical in the other', () => {
+  // Marco drags his Tuesday lunchtime in Rome. Bea, in Kathmandu, drags what
+  // her own gutter calls a quarter to four in the afternoon. They are the same
+  // four instants, because a Slot is an instant.
+  const marco = drawnIn('marco', 'Europe/Rome', ['12:00', '12:30', '13:00', '13:30'])
+  const bea = drawnIn('bea', 'Asia/Kathmandu', ['15:45', '16:15', '16:45', '17:15'])
+
+  assert.deepEqual(
+    marco.map((slot) => slot.start),
+    bea.map((slot) => slot.start)
+  )
+
+  const scan = scanCandidates({
+    slots: [...marco, ...bea],
+    visible: ['marco', 'bea'],
+    hangouts: NO_HANGOUTS,
+    from: 0,
+  })
+
+  assert.equal(scan.candidates.length, 1)
+  // Byte for byte: the render key, the two instants, and the ids in it.
+  assert.deepEqual(scan.candidates[0], {
+    id: `${Date.UTC(2026, 8, 1, 10)}|${Date.UTC(2026, 8, 1, 12)}|bea,marco`,
+    start: Date.UTC(2026, 8, 1, 10),
+    end: Date.UTC(2026, 8, 1, 12),
+    friendIds: ['marco', 'bea'],
+  })
+})
+
+test('the two of them read different wall clocks off that one Candidate', () => {
+  const start = Date.UTC(2026, 8, 1, 10)
+  const end = Date.UTC(2026, 8, 1, 12)
+
+  assert.equal(
+    whenOf(start, end, { timeZone: 'Europe/Rome', frame: 'GMT+2' }).range,
+    '12:00 – 14:00 GMT+2'
+  )
+  assert.equal(
+    whenOf(start, end, { timeZone: 'Asia/Kathmandu', frame: 'GMT+5:45' }).range,
+    '15:45 – 17:45 GMT+5:45'
+  )
 })

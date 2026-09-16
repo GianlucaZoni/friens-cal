@@ -1,8 +1,9 @@
 import { SIGNUP_FAILURE, SessionContext, type SessionValue } from '@/auth/use-session'
 import type { Friend, FriendUpdate } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
+import { deviceTimeZone } from '@/shell/zone'
 import type { AuthError, User } from '@supabase/supabase-js'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 /**
  * What Supabase has told us, and nothing more. Deliberately NOT `SessionState`:
@@ -162,6 +163,74 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
     },
     [userId]
   )
+
+  /**
+   * The Friend's zone, mirrored from the device.
+   *
+   * **A mirror, not a setting** (planning ticket 08 §4): there is no picker and
+   * no edit path, and the grid never reads this column — it reads the live
+   * device on every render, so travelling just works and there is no staleness
+   * to reconcile. The column exists for the two readers that are *other
+   * people*: the roster's `8h ahead`, and whether the cal spans zones at all.
+   *
+   * On the Friend row rather than on sign-in itself, because that is what
+   * covers the Friend who signed in once in March and has been on a session
+   * token ever since — this fires whenever a session resolves and the device
+   * disagrees with what is stored, which includes the sign-in that made it.
+   *
+   * **And again on focus**, which is what makes it follow a device that changed
+   * zone rather than only a session that resolved. A phone that lands and
+   * updates its clock does so with the tab in the background; `focus` and
+   * `visibilitychange` are the two events that fire when somebody comes back to
+   * it, and they are the same pair `useSlotClock` leans on for the sleeping
+   * laptop. Without them a Friend who flies stays on yesterday's zone in
+   * everybody else's roster until they reload.
+   *
+   * **Not through `saveFriend`**, and not into local state at all. Nothing on
+   * this screen reads your own mirrored zone — the grid reads the device and
+   * the roster never measures you against yourself — so writing it back would
+   * be a render for a value with no reader, which is also what
+   * `eslint-plugin-react-hooks` calls a cascading render. The ref is what keeps
+   * a second profile save from re-sending the same zone, and it holds the
+   * Friend as well as the zone so that signing out and back in as somebody else
+   * on one device still writes theirs.
+   *
+   * Nothing is shown when it fails and nothing retries. A Friend whose zone did
+   * not save reads exactly the same grid; what they lose is the `8h ahead`
+   * beside their name on somebody else's roster, which is worth a line in the
+   * console and not a word on screen.
+   */
+  const mirroredFor = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (userId === null || fetched === null || fetched.forUserId !== userId) return
+    const stored = fetched.friend
+    if (stored === null) return
+
+    const mirror = () => {
+      const device = deviceTimeZone()
+      const written = `${userId}|${device}`
+      if (stored.time_zone === device || mirroredFor.current === written) return
+      mirroredFor.current = written
+
+      void supabase
+        .from('friend')
+        .update({ time_zone: device })
+        .eq('id', userId)
+        .then(({ error }) => {
+          if (error) console.error('Could not mirror the time zone:', error.message)
+        })
+    }
+
+    mirror()
+    window.addEventListener('focus', mirror)
+    document.addEventListener('visibilitychange', mirror)
+
+    return () => {
+      window.removeEventListener('focus', mirror)
+      document.removeEventListener('visibilitychange', mirror)
+    }
+  }, [fetched, userId])
 
   const value = useMemo<SessionValue>(() => {
     // Matching on the user id rather than clearing on sign-out is what keeps a

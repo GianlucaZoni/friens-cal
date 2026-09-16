@@ -6,7 +6,7 @@ import { facesOf, isHappening, isPast, nameOf, type Hangout } from '@/hangouts/h
 import { FriendBlob } from '@/identity/friend-blob'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import type { ReactElement } from 'react'
 import { format } from 'date-fns'
 import { CalendarRangeIcon, EraserIcon, PinIcon, PlusIcon } from 'lucide-react'
@@ -214,7 +214,8 @@ const BookedLine = ({
 }) => {
   const happening = isHappening(hangout, now)
   const over = isPast(hangout, now)
-  const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+  const zone = useViewerZone()
+  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
   const faces = facesOf(hangout, friendsById)
 
   return (

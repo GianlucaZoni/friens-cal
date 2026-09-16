@@ -4,7 +4,7 @@ import { ARM_MS, pageDirection, preArmVerdict, reportCompositorLoss } from '@/av
 import type { AvailabilityStore } from '@/availability/use-availability'
 import type { DrawingTools } from '@/availability/use-drawing-tools'
 import type { Viewer } from '@/availability/week-grid'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
 /** What a gesture in flight is doing. A month drag cannot duplicate. */
@@ -169,6 +169,8 @@ export const useMonthGesture = ({
    */
   onPage: (direction: -1 | 1) => void
 }) => {
+  /* Whatever a day is worth in the *viewer's* zone — 46, 48 or 50 Slots. */
+  const { timeZone } = useViewerZone()
   const [draft, setDraft] = useState<MonthDraft | null>(null)
   /** Which day's panel is open, as an index into the lattice. */
   const [panel, setPanel] = useState<number | null>(null)
@@ -276,14 +278,14 @@ export const useMonthGesture = ({
          * spring one would otherwise be handed an instant that is not on the grid
          * at all.
          */
-        const instants = current.span.flatMap((index) => wholeDay(days[index], GROUP_TIME_ZONE))
+        const instants = current.span.flatMap((index) => wholeDay(days[index], timeZone))
         if (current.kind === 'erase') requestErase(instants)
         else availability.draw(instants)
       }
 
       abort()
     },
-    [days, availability, requestErase, abort, onPage]
+    [days, timeZone, availability, requestErase, abort, onPage]
   )
 
   /**
@@ -320,7 +322,7 @@ export const useMonthGesture = ({
        * erase drag has something to subtract, and requiring the whole day would
        * make the toggle silently inert on almost every real day.
        */
-      const held = wholeDay(days[day], GROUP_TIME_ZONE).some((instant) =>
+      const held = wholeDay(days[day], timeZone).some((instant) =>
         availability.isFree(viewer.id, instant)
       )
 
@@ -459,7 +461,7 @@ export const useMonthGesture = ({
         release,
       }
     },
-    [viewer, days, availability, tools.erasing, dayAt, abort, body]
+    [viewer, days, timeZone, availability, tools.erasing, dayAt, abort, body]
   )
 
   /**

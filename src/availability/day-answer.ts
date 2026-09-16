@@ -22,7 +22,7 @@ import type { SetUpFriend } from '@/roster/use-roster'
 
 /** One stretch of the day where the same Friends were free. */
 export type DayWindow = {
-  /** The wall clock it opens at, in the group's zone. */
+  /** The wall clock it opens at, in the viewer's zone. */
   from: string
   /** And closes at — `24:00` where that is midnight, never `00:00`. */
   to: string

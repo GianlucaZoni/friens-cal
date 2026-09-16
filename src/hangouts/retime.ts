@@ -130,7 +130,7 @@ export const sameClockOn = (startsAt: number, day: Date, timeZone: string): numb
 }
 
 /**
- * An instant as the date input's `yyyy-MM-dd`, in the group's zone.
+ * An instant as the date input's `yyyy-MM-dd`, in the viewer's zone.
  *
  * Read off the wall clock, not off the UTC date: a 00:30 Slot in Rome is the
  * *previous* day in UTC, and a date field that jumped back a day at half past
@@ -160,7 +160,7 @@ export const dayFromValue = (value: string): Date | null => {
 }
 
 /**
- * Today, in the group's zone, as the date field's `min`.
+ * Today, in the viewer's zone, as the date field's `min`.
  *
  * A hint rather than a rule: ticket 08 §2 makes retime **unrestricted**, and
  * §6 freezes a Hangout only once it is *Past*. Moving a live plan backwards

@@ -12,7 +12,9 @@ import { OfflineBanner } from '@/shell/offline-banner'
 import { RightPane } from '@/shell/right-pane'
 import { AppShellProvider, ShellInset, ShellSidebar } from '@/shell/shell'
 import { TopBar } from '@/shell/top-bar'
-import { GROUP_TIME_ZONE, useCalendarView } from '@/shell/use-calendar-view'
+import { useCalendarView } from '@/shell/use-calendar-view'
+import { ViewerZoneContext } from '@/shell/viewer-zone'
+import { deviceTimeZone, viewerZoneAmong } from '@/shell/zone'
 import { useMemo } from 'react'
 
 /**
@@ -84,7 +86,37 @@ export const AppShell = () => {
    * every one of those three answers changes on the :00 and the :30 and nowhere
    * in between.
    */
-  const now = useSlotClock(GROUP_TIME_ZONE)
+  const now = useSlotClock()
+
+  /**
+   * The zone this screen is drawn in, and the frame its time strings name.
+   *
+   * The zone is the **device's**, read fresh rather than stored, so a Friend
+   * who lands in another country sees their grid redraw with no setting to
+   * change and nothing to reconcile. A cal has no clock of its own to disagree
+   * with it (`CONTEXT.md`, **Group**).
+   *
+   * The frame is `GMT+2`, and it is null unless at least one *other* Member
+   * reads a different clock — so every cal in existence today renders exactly
+   * what v1 rendered, and the marker appears the moment somebody is abroad.
+   * Your own row is excluded because its `time_zone` is a mirror that may be a
+   * round trip behind the device it mirrors, which would otherwise make the
+   * frame flicker on for the beat after you land.
+   *
+   * Beside `now` because it is the same kind of fact and it is asked of the
+   * same instant: which clocks differ is a property of a moment, not of a pair
+   * of zones — Rome and New York are six hours apart most of the year and five
+   * for the ten days the EU has moved and the US has not.
+   */
+  const zone = useMemo(
+    () =>
+      viewerZoneAmong(
+        deviceTimeZone(),
+        roster.friends.filter((friend) => !friend.isSelf).map((friend) => friend.timeZone),
+        now
+      ),
+    [roster.friends, now]
+  )
 
   /**
    * Whose Availability the grid draws, and the one colour it draws in.
@@ -150,56 +182,59 @@ export const AppShell = () => {
 
   return (
     <AppShellProvider>
-      {/*
-        Above the columns, so it is a fact about the app rather than about the
-        calendar — see `OfflineBanner`.
-      */}
-      <OfflineBanner />
-      <div className="flex min-h-0 flex-1">
-        <ShellSidebar side="left">
-          <LeftPane calendar={calendar} roster={roster} silent={silent} tools={tools} />
-        </ShellSidebar>
+      <ViewerZoneContext value={zone}>
+        {/*
+          Above the columns, so it is a fact about the app rather than about the
+          calendar — see `OfflineBanner`.
+        */}
+        <OfflineBanner />
+        <div className="flex min-h-0 flex-1">
+          <ShellSidebar side="left">
+            <LeftPane calendar={calendar} roster={roster} silent={silent} now={now} tools={tools} />
+          </ShellSidebar>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar calendar={calendar} saving={availability.saving} />
-          <div className="flex min-h-0 flex-1">
-            <ShellInset>
-              <Calendar
-                calendar={calendar}
-                availability={availability}
-                viewer={viewer}
-                /*
-                  Two rosters, because the grid draws two different objects
-                  from them: the wash is `visible` (a query — who you are
-                  currently trying to meet) and a Hangout's faces come from
-                  `friendsById` (a fact — hiding never hides a Hangout).
-                */
-                visible={roster.visible}
-                friendsById={friendsById}
-                hangouts={hangouts.hangouts}
-                now={now}
-                tools={tools}
-              />
-            </ShellInset>
-            <ShellSidebar side="right">
-              <RightPane
-                roster={roster}
-                availability={availability}
-                hangouts={hangouts}
-                friendsById={friendsById}
-                now={now}
-              />
-            </ShellSidebar>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TopBar calendar={calendar} saving={availability.saving} />
+            <div className="flex min-h-0 flex-1">
+              <ShellInset>
+                <Calendar
+                  calendar={calendar}
+                  availability={availability}
+                  viewer={viewer}
+                  /*
+                    Two rosters, because the grid draws two different objects
+                    from them: the wash is `visible` (a query — who you are
+                    currently trying to meet) and a Hangout's faces come from
+                    `friendsById` (a fact — hiding never hides a Hangout).
+                  */
+                  visible={roster.visible}
+                  friendsById={friendsById}
+                  hangouts={hangouts.hangouts}
+                  now={now}
+                  tools={tools}
+                />
+              </ShellInset>
+              <ShellSidebar side="right">
+                <RightPane
+                  roster={roster}
+                  availability={availability}
+                  hangouts={hangouts}
+                  friendsById={friendsById}
+                  now={now}
+                />
+              </ShellSidebar>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/*
-        One `Toaster` for the app. The manager it renders is the module-level one
-        in `toast-manager.ts`, so `useAvailability` can raise a failed write from
-        outside this tree — which it is, being a hook rather than a component.
-      */}
-      <Toaster />
+        {/*
+          One `Toaster` for the app. The manager it renders is the module-level
+          one in `toast-manager.ts`, so `useAvailability` can raise a failed
+          write from outside this tree — which it is, being a hook rather than a
+          component.
+        */}
+        <Toaster />
+      </ViewerZoneContext>
     </AppShellProvider>
   )
 }

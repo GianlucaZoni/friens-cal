@@ -15,7 +15,7 @@ import { RetimeDialog } from '@/hangouts/retime-dialog'
 import { FriendBlob } from '@/identity/friend-blob'
 import { cn } from '@/lib/utils'
 import type { SetUpFriend } from '@/roster/use-roster'
-import { GROUP_TIME_ZONE } from '@/shell/use-calendar-view'
+import { useViewerZone } from '@/shell/viewer-zone'
 import { useCallback, useState } from 'react'
 import { Pin, UserPlus } from 'lucide-react'
 
@@ -135,7 +135,8 @@ export const HangoutCard = ({
     [isFree, viewerId]
   )
 
-  const when = whenOf(hangout.startsAt, hangout.endsAt, GROUP_TIME_ZONE)
+  const zone = useViewerZone()
+  const when = whenOf(hangout.startsAt, hangout.endsAt, zone)
   const happening = isHappening(hangout, now)
   const over = isPast(hangout, now)
   const joinable = mayJoin(hangout, viewerId, holds, now)

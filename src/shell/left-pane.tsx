@@ -39,12 +39,19 @@ export const LeftPane = ({
   calendar,
   roster,
   silent,
+  now,
   tools,
 }: {
   calendar: CalendarViewState
   roster: RosterState
   /** Ids of the Friends with no Availability in the current view (issue 07). */
   silent: ReadonlySet<string>
+  /**
+   * The app's one clock — the roster's offsets are read at it. How far another
+   * Friend's clock is from yours is a fact about a moment rather than about the
+   * pair of zones, so it has to be asked of the same instant everything else is.
+   */
+  now: number
   tools: DrawingTools
 }) => {
   const { isSheet } = useAppShell()
@@ -75,7 +82,7 @@ export const LeftPane = ({
           </div>
         )}
         <DrawingControls tools={tools} />
-        <FriendRoster roster={roster} silent={silent} />
+        <FriendRoster roster={roster} silent={silent} now={now} />
       </SidebarContent>
     </div>
   )

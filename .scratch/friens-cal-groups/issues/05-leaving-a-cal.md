@@ -1,6 +1,6 @@
 # 05 — Leaving a cal
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02, 03
 
 ## Parent

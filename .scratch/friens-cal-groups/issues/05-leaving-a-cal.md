@@ -309,3 +309,88 @@ Nothing. Every criterion was driven against a migrated local stack rather than
 described, and none of them needed the cutover. The live migration is still
 slice 01's: `08` to `13` are unrun against the live project, so nothing on this
 branch can work there until a human runs them.
+
+## After the review
+
+`/code-review` against `main`, both axes. Six things worth acting on, two worth
+recording, and one for the orchestrator rather than for this branch.
+
+Fixed:
+
+1. **The leave dialog had retyped `DropLine`.** Same `useViewerZone`/`whenOf`
+   pair, same three spans, same doc comment, and the same sentence down to the
+   ellipsis — *"…and cancels it — you are the only one on it, and there is no
+   undo."* Two dialogs describing the same database write in two strings is how
+   they come to describe it differently, which is the failure this whole slice
+   is built against. `src/hangouts/hangout-line.tsx` is now one `HangoutLine`
+   both import, taking a nullable viewer id. Same argument `DialogShell` makes
+   one directory over.
+2. **The scroll cap's six-line justification was a third copy.** It now points
+   at the measurement in `drop-dialog.tsx` and adds only what is new: the
+   numbers from driving it at 375x812.
+3. **`LEAVE_UNAVAILABLE` ended mid-sentence** — *"Nothing has changed — try
+   again in a moment."* — where its three siblings end with a capitalised
+   *"Try again in a moment."* `code.ts` claims in its own doc comment that
+   keeping every sentence in one file is what stops them drifting into a
+   different voice, and this was the drift. Now two full stops.
+4. **`useLeaving`'s read is tagged with the cal it answers**, the shape issue 04
+   settled and `use-elsewhere.ts` carries one table over. Nothing can reach it
+   today — the dialog is mounted on open and unmounted on close, so `calId`
+   cannot change under it — and it is there because the day something does, the
+   failure is this dialog naming another cal's plans under the destructive
+   button.
+5. **One test in `cal-menu.test.ts` was subsumed** by the `deepEqual` above it.
+   Its reasoning moved into that test's comment, where it belongs.
+6. **Three block comments in `app-shell.tsx` closed at the old indent** after
+   the `CalsContext` wrap. Prettier does not touch comment interiors, so it
+   passed and read crooked.
+
+Recorded, not changed:
+
+- **`use-cals.ts` now changes for four reasons** — the hook, the leave write,
+  the context and `useSharedCals`. Divergent change, and real. The lift was
+  scoped as a lift; splitting the context into its own module is the tidier
+  end state and is a decision for whoever next opens that file.
+- **Leaving is allowed when the naming failed.** The spec axis flagged that the
+  criterion *"the dialog names every future Hangout"* becomes contingent on a
+  second query succeeding. It does. Decision 6 above is the argument and it
+  stands: an outage in a separate read is not a reason to hold somebody in a
+  cal, the dialog says plainly that it cannot name what goes, and the two
+  duties that survive are on screen. Worth knowing it was seen and kept.
+- **`CodeToShare` is beyond the ticket's three numbered edits.** It rewrites two
+  shipped dialogs onto a component the leave dialog needed. Small, and it
+  removes a third copy of a block `code-dialog.tsx` already argues must be
+  identical everywhere — but it is scope the ticket did not give, and the
+  orchestrator should see it as such.
+
+### For the orchestrator: §9's redirect did not ship, and this slice did not fix it
+
+Planning ticket 10 §9 settles what a non-Member at `/g/:id` gets: *"Redirect,
+silently, to `/`"*, and rejects the alternative in terms — *"A dedicated 'you're
+not in this cal' screen would be a second place to type a Code."* What is on
+`main` is that screen: `current-cal-provider.tsx` renders *"That is not one of
+your friens cals"* with a link back. Slice 02 built it and its write-up argues
+the link's markup (decision 12) without recording the deviation from §9.
+
+It is not in this ticket's criteria, the control is on `/` so leaving never
+reaches it, and the case it covers (the tab left open on the cal you just left)
+predates leaving — a stranger with a guessed id needs the same answer. So this
+slice left slice 02's shipped screen alone rather than changing it silently,
+which is what `AGENTS.md` asks for when a build contradicts a settled decision.
+One line in `current-cal-provider.tsx` closes it if the orchestrator wants it
+closed.
+
+### What was re-driven after the refactor, and what was not
+
+`HangoutLine` was exercised in both branches through the leave dialog: a plan
+with somebody else on it renders name-and-time only, and a plan the viewer is
+alone on renders the destructive sentence under it. That is the whole of the
+component `drop-dialog.tsx` now renders, and the only other change to that file
+is its import.
+
+**The erase gesture itself was not re-driven.** Synthetic pointers on
+`[data-column]` did not register a stroke in this session — the memory rule
+says every grid drag is drivable that way, and it did not reproduce here, with
+the pane running hidden throughout. `npx tsc -b` covers the prop contract and
+the component is proven; the drop dialog's own path is unchanged code calling a
+proven component. Worth a glance from whoever next erases over a plan.

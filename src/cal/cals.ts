@@ -28,6 +28,30 @@ type Named = Identified & { name: string }
 export const CAL_NAME_MAX = 40
 
 /**
+ * What a typed draft would actually write, or null if it would write nothing.
+ *
+ * Three refusals, and each one is a different thing going wrong:
+ *
+ * - **empty after trimming**, which the column refuses outright
+ *   (`cal_has_a_name` is `length(btrim(name)) between 1 and 60`), so a disabled
+ *   button is what keeps a Friend from meeting a `23514`;
+ * - **longer than the cap**, which nothing downstream would refuse, since the
+ *   column allows sixty. The input's `maxLength` is what a Friend sees stop
+ *   them and this is the line behind it;
+ * - **the name it already has**, so the Rename button says whether pressing it
+ *   would do anything. This is the one that earns its keep in use: the common
+ *   near-miss is an added trailing space.
+ *
+ * The trim is the same one `create_cal` does server-side, so a cal's name means
+ * the same thing however it got there.
+ */
+export const renameTo = (draft: string, current: string): string | null => {
+  const name = draft.trim()
+  if (name === '' || name.length > CAL_NAME_MAX || name === current) return null
+  return name
+}
+
+/**
  * Alphabetical, and the same order on every surface that lists cals.
  *
  * Alphabetical rather than by `joined_at` or by whatever Postgres handed back:

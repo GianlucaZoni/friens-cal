@@ -95,8 +95,8 @@ export const InviteDialog = ({
         <DialogHeader>
           <DialogTitle>Invite a frien</DialogTitle>
           <DialogDescription>
-            Adding someone here lets them create an account. It doesn&rsquo;t message them. That
-            part&rsquo;s on you.
+            Adding someone here lets them create an account. It doesn&apos;t message them. That
+            part&apos;s on you.
           </DialogDescription>
         </DialogHeader>
 

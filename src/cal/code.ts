@@ -92,15 +92,27 @@ export const JOIN_UNAVAILABLE = 'Could not join just now. Try again in a moment.
 export const CREATE_UNAVAILABLE = 'Could not make that cal just now. Try again in a moment.'
 
 /**
- * Renaming failed. Beside the other two rather than beside `renameTo`, so all
- * three sentences a cal write can say are in one file and none of them can
- * drift into a different voice.
+ * Renaming failed. Beside the others rather than beside `renameTo`, so every
+ * sentence a cal write can say is in one file and none of them can drift into a
+ * different voice.
  *
  * One shape again, and here that is a claim rather than laziness: the only
  * refusals reachable are the network, the grant, and a Friend renaming a cal
  * they have just left in another tab. The draft was checked before it was sent.
  */
 export const RENAME_UNAVAILABLE = 'Could not rename it just now. Try again in a moment.'
+
+/**
+ * Leaving failed, and the second half of the sentence is what earns its keep.
+ *
+ * Leaving is **one statement** and everything else is consequence inside its
+ * transaction: the Left markers, the auto-cancels and the Availability cascade
+ * all hang off that one row going. So either all of it happened or none of it
+ * did, and somebody who has just read a dialog naming three plans needs to be
+ * told which — otherwise they assume the worst about the half they cannot see.
+ */
+export const LEAVE_UNAVAILABLE =
+  'Could not leave just now. Nothing has changed. Try again in a moment.'
 
 /**
  * What the Join dialog shows, whatever came back.

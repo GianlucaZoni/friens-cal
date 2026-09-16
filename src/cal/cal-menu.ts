@@ -14,20 +14,14 @@
  * only one reachable by keyboard.
  *
  * Here rather than inside either component so the difference between the two
- * menus is one table a reader takes in at once. Ticket 05 adds Leave to this
- * file in three lines (the union, the `list` menu, the label) and to
- * `CalActionDialogs` as a fourth branch, which the `satisfies never` there will
- * insist on. Neither call site changes. The one thing this file has no room for
- * is Leave's **destructive** treatment: `CAL_ACTION_LABEL` carries labels and
- * nothing else, and every other destructive control in the product is marked,
- * so that is a second map or a case in `cal-overflow.tsx`.
+ * menus is one table a reader takes in at once.
  *
  * **No imports, deliberately**, the same split `cals.ts` and `roster.ts` make.
  * A test file here runs under plain Node, which cannot resolve the `@/` alias.
  */
 
-/** One thing a menu does to one cal. Ticket 05 adds `'leave'`. */
-export type CalAction = 'rename' | 'view-code'
+/** One thing a menu does to one cal. */
+export type CalAction = 'rename' | 'view-code' | 'leave'
 
 /** Which menu: the shell's cal switcher, or a row on `/`. */
 export type CalMenuSurface = 'switcher' | 'list'
@@ -35,12 +29,21 @@ export type CalMenuSurface = 'switcher' | 'list'
 /**
  * The items each menu shows, in the order it shows them.
  *
- * Ticket 05 adds `'leave'` to `list` and to `CalAction` above, and a branch to
- * `CalActionDialogs`. It does not touch `switcher`.
+ * **Leave is on `/` and nowhere else** (groups ticket 10 §8, ticket 06 §1). `/`
+ * is the only screen that shows the complete set of cals, and leaving is a
+ * decision about that set rather than about the cal you are standing in.
+ * Getting there is a deliberate navigation away from the calendar you are
+ * leaving, which is the friction this act is owed, and it puts Leave beside its
+ * inverse. The switcher's dots sits inside the row that switches cal, one slip
+ * from it, which is exactly where this must not be.
+ *
+ * Leave is **last** on its menu, under Rename. Order is the only friction a
+ * two-item menu has, and the row the pointer lands on first should not be the
+ * one-way door.
  */
 const MENUS: Record<CalMenuSurface, readonly CalAction[]> = {
   switcher: ['rename', 'view-code'],
-  list: ['rename'],
+  list: ['rename', 'leave'],
 }
 
 export const calMenu = (surface: CalMenuSurface): readonly CalAction[] => MENUS[surface]
@@ -49,4 +52,23 @@ export const calMenu = (surface: CalMenuSurface): readonly CalAction[] => MENUS[
 export const CAL_ACTION_LABEL: Record<CalAction, string> = {
   rename: 'Rename',
   'view-code': 'View code',
+  leave: 'Leave',
+}
+
+/**
+ * How each item is drawn — the second map this file was left room for.
+ *
+ * `DropdownMenuItem`'s own prop name and its own two values, so
+ * `cal-overflow.tsx` hands it straight through and there is no third vocabulary
+ * in between. A `Set` of destructive actions would say the same thing today and
+ * would let a fourth item join a menu without anybody deciding its colour; a
+ * `Record` makes the compiler ask.
+ *
+ * Leave is the only one, because it is the only act on either menu that
+ * redrawing cannot undo.
+ */
+export const CAL_ACTION_VARIANT: Record<CalAction, 'default' | 'destructive'> = {
+  rename: 'default',
+  'view-code': 'default',
+  leave: 'destructive',
 }

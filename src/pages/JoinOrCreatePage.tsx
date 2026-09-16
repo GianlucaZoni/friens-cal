@@ -179,9 +179,12 @@ const CalList = ({
             {/*
             The row's overflow, and **this is the complete set**: the switcher's
             dots is the shortcut from inside a cal and holds Rename and View
-            code, and this one holds Rename and, from ticket 05, **Leave**.
-            Which items are where is `cal-menu.ts`, and ticket 05 adds Leave to
-            the `list` line there rather than to this file.
+            code, and this one holds Rename and **Leave**. Which items are where
+            is `cal-menu.ts`, so Leave went in there rather than here — and it
+            is on this surface alone because `/` is the only screen that shows
+            the whole set of cals, which is the thing leaving is a decision
+            about. There is no route change either: leaving leaves you where the
+            control was.
 
             No propagation guard, because nothing contains anything: a button
             cannot contain a button, so this is a third sibling beside the

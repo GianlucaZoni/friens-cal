@@ -5,7 +5,7 @@
  *
  *     yarn test
  */
-import { CAL_ACTION_LABEL, calMenu, type CalAction } from './cal-menu.ts'
+import { CAL_ACTION_LABEL, CAL_ACTION_VARIANT, calMenu, type CalAction } from './cal-menu.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -13,19 +13,30 @@ test('the switcher holds Rename and View code, in that order', () => {
   assert.deepEqual(calMenu('switcher'), ['rename', 'view-code'])
 })
 
-test('a row on `/` holds Rename', () => {
-  assert.deepEqual(calMenu('list'), ['rename'])
+test('a row on `/` holds Rename and Leave, in that order', () => {
+  // The order is the claim, not just the membership. It is the only friction a
+  // two-item menu has, and the row the pointer lands on first should not be the
+  // one-way door.
+  assert.deepEqual(calMenu('list'), ['rename', 'leave'])
 })
 
-test('Leave is on neither menu yet, and on the switcher it never will be', () => {
+test('Leave is on `/` and never on the switcher', () => {
   // Groups ticket 10 put Leave on `/`'s row and groups ticket 06 kept it off
   // the switcher: leaving is not a thing to do by accident while switching, and
   // the dialog that confirms it names every Hangout you would be marked Left
-  // on. Ticket 05 adds it to `list` here. Read as strings, so this test still
-  // says something once `CalAction` has a third member.
-  const asStrings = (surface: 'switcher' | 'list') => calMenu(surface) as readonly string[]
-  assert.ok(!asStrings('switcher').includes('leave'))
-  assert.ok(!asStrings('list').includes('leave'))
+  // on.
+  assert.ok(calMenu('list').includes('leave'))
+  assert.ok(!calMenu('switcher').includes('leave'))
+})
+
+test('Leave is the one item drawn as destructive', () => {
+  // Leaving is the only act on either menu that redrawing cannot undo, and the
+  // variant is what the row is coloured by. Asserted over the union rather than
+  // over `leave` alone, so adding a fourth item does not quietly inherit the
+  // destructive treatment or quietly miss it.
+  const listed = [...new Set<CalAction>([...calMenu('switcher'), ...calMenu('list')])]
+  const destructive = listed.filter((action) => CAL_ACTION_VARIANT[action] === 'destructive')
+  assert.deepEqual(destructive, ['leave'])
 })
 
 test('the two menus overlap on Rename and nowhere else', () => {

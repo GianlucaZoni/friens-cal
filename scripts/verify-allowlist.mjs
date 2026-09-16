@@ -1,5 +1,5 @@
 /**
- * friens-cal — issue 14, extended by groups issue 06: prove the allowlist gate
+ * friens-cal, issue 14 extended by groups issue 06: prove the allowlist gate
  * and the one verb that was opened in it, from a browser-shaped client.
  *
  *   node --env-file=.env scripts/verify-allowlist.mjs
@@ -17,10 +17,10 @@
  *
  * WHAT GROUPS ISSUE 06 CHANGED, AND WHY THIS FILE RATHER THAN A NEW ONE.
  * `13-invite.sql` grants `insert` to `authenticated` so a Friend can invite
- * somebody from inside the app. That makes §2's old assertion — that an insert
- * as `authenticated` is refused — false, and a second script would have left
- * this one failing. The lock it describes is now half open, and the file that
- * describes the lock is the file that has to say which half.
+ * somebody from inside the app. That makes §2's old assertion false, the one
+ * that said an insert as `authenticated` is refused, and a second script would
+ * have left this one failing. The lock it describes is now half open, and the
+ * file that describes the lock is the file that has to say which half.
  *
  * IT LEAVES ONE ROW BEHIND, ON PURPOSE. §4 needs a new address to invite, and
  * nothing holding a publishable key can delete one afterwards: `delete` is
@@ -42,6 +42,12 @@
  *
  * There is no way to read a hook's registration back over the Data API, so this
  * is the only check there is. It is also, exactly, the criterion.
+ *
+ * AND IT IS ONLY HALF OF IT. "An invited address can then sign up" cannot be
+ * checked from here at all: proving it means creating a real account, and
+ * nothing in this repo can delete one. §4's probe address is on `.invalid`
+ * precisely so that nobody can ever sign up with it. That half is a human with
+ * a second address, once.
  */
 import { createClient } from '@supabase/supabase-js'
 
@@ -93,7 +99,7 @@ const DRAFT_A = 'We could not create an account with those details.'
  * §4 has to compare two writes for sameness, and "same" has to mean the bytes
  * on the wire rather than the shape the client library hands back. A status
  * code or a header that differed would answer, for any address a Friend cares
- * to type, whether that person already has an account here — which is the
+ * to type, whether that person already has an account here. That is the
  * enumeration leak `07-allowlist.sql` §3 spends its rejection copy closing,
  * walked in from the other side.
  * ---------------------------------------------------------------- */
@@ -186,13 +192,13 @@ await proveReadsAreShut(anon, 'anon')
 const { error: anonInsert } = await anon
   .from('allowlist')
   .insert({ email: `smuggled-${Date.now()}@friens-cal.invalid`, invited_by: null })
-if (!anonInsert) die('`anon` INSERTED A ROW INTO `allowlist` — the grant reaches too far')
+if (!anonInsert) die('`anon` INSERTED A ROW INTO `allowlist`, so the grant reaches too far')
 ok(`insert into \`allowlist\` as \`anon\` is refused (${anonInsert.code})`)
 
 await proveHookIsUncallable(anon, 'anon')
 
 if (!friendEmail || !friendPassword) {
-  skip('FRIEND_TEST_EMAIL / FRIEND_TEST_PASSWORD unset — everything from §2 down is skipped')
+  skip('FRIEND_TEST_EMAIL / FRIEND_TEST_PASSWORD unset, so everything from §2 down is skipped')
   process.exit(0)
 }
 
@@ -214,11 +220,11 @@ const { error: updateErr } = await signedIn
   .from('allowlist')
   .update({ note: 'mine now' })
   .eq('email', friendEmail)
-if (!updateErr) die('`authenticated` UPDATED A ROW IN `allowlist` — only `insert` was granted')
+if (!updateErr) die('`authenticated` UPDATED A ROW IN `allowlist`, and only `insert` was granted')
 ok(`update on \`allowlist\` as \`authenticated\` is refused (${updateErr.code})`)
 
 const { error: deleteErr } = await signedIn.from('allowlist').delete().eq('email', PROBE_ADDRESS)
-if (!deleteErr) die('`authenticated` DELETED FROM `allowlist` — only `insert` was granted')
+if (!deleteErr) die('`authenticated` DELETED FROM `allowlist`, and only `insert` was granted')
 ok(`delete on \`allowlist\` as \`authenticated\` is refused (${deleteErr.code})`)
 
 /* ---------------------------------------------------------------- *
@@ -229,8 +235,8 @@ ok(`delete on \`allowlist\` as \`authenticated\` is refused (${deleteErr.code})`
  * would be worth nothing, and the column exists for no other reason.
  *
  * The constraint is `check (email = lower(btrim(email)))`. The old one let a
- * trailing space through, and such a row matches the signup hook never — the
- * one failure `07-allowlist.sql` §1 says nobody could debug from the outside.
+ * trailing space through, and such a row matches the signup hook never. That is
+ * the one failure `07-allowlist.sql` §1 says nobody could debug from outside.
  * Both probes use addresses that are NOT on the list, so a refusal here is the
  * policy or the constraint speaking and not the duplicate trigger.
  * ---------------------------------------------------------------- */
@@ -241,7 +247,7 @@ const { error: forgedErr } = await signedIn.from('allowlist').insert({
   // the policy compares to `auth.uid()` and does not care whether it exists.
   invited_by: '00000000-0000-4000-8000-000000000000',
 })
-if (!forgedErr) die('A FRIEND RECORDED SOMEBODY ELSE AS THE INVITER — the policy is not holding')
+if (!forgedErr) die('A FRIEND RECORDED SOMEBODY ELSE AS THE INVITER, so the policy is not holding')
 ok(`inviting in another Friend's name is refused (${forgedErr.code})`)
 
 const { error: spacedErr } = await signedIn.from('allowlist').insert({
@@ -249,7 +255,7 @@ const { error: spacedErr } = await signedIn.from('allowlist').insert({
   note: 'verify-allowlist',
   invited_by: friendId,
 })
-if (!spacedErr) die('AN ADDRESS WITH A TRAILING SPACE WAS STORED — run supabase/13-invite.sql')
+if (!spacedErr) die('AN ADDRESS WITH A TRAILING SPACE WAS STORED. Run supabase/13-invite.sql')
 if (spacedErr.code !== '23514') {
   die(
     `a trailing space was refused by something other than the check constraint: ${spacedErr.code}`
@@ -269,7 +275,7 @@ ok(`an address with a trailing space is refused by the constraint (${spacedErr.c
  * signed up, so the hook found them there. `PROBE_ADDRESS` is definitely new on
  * the first run of this script against a given project. On later runs it is
  * there too, and the comparison still passes but stops being the interesting
- * one — delete the row (the statement is printed at the end) to get the strong
+ * one. Delete the row, with the statement printed at the end, to get the strong
  * version back.
  * ---------------------------------------------------------------- */
 const invite = async (email) => {
@@ -321,13 +327,13 @@ const { data: dupe, error: dupeErr } = await createClient(url, key).auth.signUp(
   password: `verify-${Date.now()}`,
 })
 if (!dupeErr && dupe.session)
-  die(`SIGNING UP AN EXISTING ADDRESS RETURNED A SESSION — ${friendEmail}`)
+  die(`SIGNING UP AN EXISTING ADDRESS RETURNED A SESSION: ${friendEmail}`)
 if (!dupeErr) {
   // No error and no session is Supabase obfuscating a duplicate, which it
   // only does when Confirm Email is on. Ticket 13 turned it off, and this
   // whole slice is safe only because it stays off.
   die(
-    'signing up an existing address returned neither a session nor an error — Confirm Email is on'
+    'signing up an existing address returned neither a session nor an error, so Confirm Email is on'
   )
 }
 ok(`an already-registered address is refused (${dupeErr.code}: ${dupeErr.message})`)

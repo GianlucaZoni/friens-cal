@@ -16,7 +16,7 @@ import test from 'node:test'
 const ORIGIN = 'https://friens-cal.vercel.app'
 
 /* ------------------------------------------------------------------ *
- * normaliseAddress — the same rule as `check (email = lower(btrim(email)))`
+ * normaliseAddress, which is `check (email = lower(btrim(email)))` in JS
  * ------------------------------------------------------------------ */
 
 test('normaliseAddress lowercases and trims, which is what the constraint checks', () => {
@@ -40,7 +40,7 @@ test('normaliseAddress leaves the inside of an address alone', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * looksLikeAnAddress — only enough to keep the button honest
+ * looksLikeAnAddress, only enough to keep the button honest
  * ------------------------------------------------------------------ */
 
 test('looksLikeAnAddress accepts an ordinary address, before and after normalising', () => {
@@ -71,7 +71,7 @@ test('looksLikeAnAddress does not try to be RFC 5322', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * pasteableInvite — the half of the invite the product does not send
+ * pasteableInvite, the half of the invite the product does not send
  * ------------------------------------------------------------------ */
 
 const CAL = { name: 'spiritually unemployed', code: 'K4M7PQ' }
@@ -119,7 +119,7 @@ test('pasteableInvite is one line with no double spaces, because it gets pasted'
 })
 
 /* ------------------------------------------------------------------ *
- * canInvite — a foreign key, not a finished profile
+ * canInvite, a foreign key and not a finished profile
  * ------------------------------------------------------------------ */
 
 test('canInvite waits for the Friend row and nothing else', () => {

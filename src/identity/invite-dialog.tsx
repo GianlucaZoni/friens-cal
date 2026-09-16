@@ -1,15 +1,9 @@
 import { CurrentCalContext } from '@/cal/use-current-cal'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { DialogShell } from '@/identity/dialog-shell'
 import { looksLikeAnAddress, normaliseAddress, pasteableInvite } from '@/identity/invite'
 import { SaveError } from '@/identity/save-error'
 import { useSaveAction } from '@/identity/use-save-action'
@@ -85,46 +79,40 @@ export const InviteDialog = ({
     )
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose()
-      }}
+    <DialogShell
+      title="Invite a frien"
+      onClose={onClose}
+      description={
+        <>
+          Adding someone here lets them create an account. It doesn&apos;t message them. That
+          part&apos;s on you.
+        </>
+      }
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Invite a frien</DialogTitle>
-          <DialogDescription>
-            Adding someone here lets them create an account. It doesn&apos;t message them. That
-            part&apos;s on you.
-          </DialogDescription>
-        </DialogHeader>
-
-        {invited === null ? (
-          <InviteForm
-            email={email}
-            note={note}
-            address={address}
-            saving={saving}
-            error={error}
-            onEmail={setEmail}
-            onNote={setNote}
-            onConfirm={onConfirm}
-            onCancel={onClose}
-          />
-        ) : (
-          <InviteSent
-            address={invited}
-            sentence={pasteableInvite({
-              origin: window.location.origin,
-              inviterName,
-              cal: current?.cal ?? null,
-            })}
-            onClose={onClose}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+      {invited === null ? (
+        <InviteForm
+          email={email}
+          note={note}
+          address={address}
+          saving={saving}
+          error={error}
+          onEmail={setEmail}
+          onNote={setNote}
+          onConfirm={onConfirm}
+          onCancel={onClose}
+        />
+      ) : (
+        <InviteSent
+          address={invited}
+          sentence={pasteableInvite({
+            origin: window.location.origin,
+            inviterName,
+            cal: current?.cal ?? null,
+          })}
+          onClose={onClose}
+        />
+      )}
+    </DialogShell>
   )
 }
 

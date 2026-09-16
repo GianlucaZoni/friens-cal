@@ -146,9 +146,23 @@ prints at the end of every run.
 the build note nudged toward a literal.** On production that origin *is*
 `https://friens-cal.vercel.app`, so the note is satisfied where it matters, and
 a preview deploy hands out its own address instead of sending a tester to
-production. The inviter's name is in it, which planning §5's draft did not have
-and the build note asked for. It is one pure function with the origin, the name
-and the cal handed in, so all four shapes are asserted rather than eyeballed.
+production. It is one pure function with the origin, the name and the cal
+handed in, so all four shapes are asserted rather than eyeballed.
+
+**The sentence itself is reworded from planning §7's draft**, which reads
+*Join me on friens cal: <origin> — sign up with this email, then enter the code
+K4M7PQ*. Three changes, none of them taste. The inviter's name goes in, which
+the build note asked for and which "Join me" only implies. The cal is named,
+which §5 requires and §7's line does not do. And the em dash goes, because the
+build brief forbids them in anything this branch writes and a dash pasted into
+a group chat is this branch's prose as much as a comment is.
+
+**`DialogShell` moved out of `profile-dialogs.tsx` into its own file**, which
+is the one edit this slice makes outside its own files. It was a local helper
+carrying the paragraph that explains why `open` is hard-coded, and the invite
+dialog is its fourth caller. Rebuilding the frame by hand would have been a
+second copy of that paragraph, which is the copy that goes stale. Nothing about
+the three existing dialogs changes.
 
 **`canInvite` is `friend !== null` and takes `{ id }`.** Not `identityOf`,
 which is the other disabled item in the same menu and a different question, and

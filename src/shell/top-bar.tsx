@@ -395,6 +395,12 @@ const FriendMenu = () => {
         <ChangePasswordDialog email={user.email} onClose={() => setDialog(null)} />
       ) : null}
 
+      {/*
+      `friend !== null` again rather than `canInvite(friend)`, because the
+      dialog needs `friend.id` and a boolean predicate does not narrow the
+      type. `friend-row.ts` does the same thing for the same reason, where
+      `identityOf` re-checks what `isSetupComplete` just decided.
+    */}
       {dialog === 'invite' && friend !== null ? (
         <InviteDialog
           inviterId={friend.id}

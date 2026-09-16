@@ -97,11 +97,12 @@ export type Database = {
        *
        * **The only table here nothing in the browser can read.** `select`,
        * `update` and `delete` are revoked from `anon` and `authenticated` and
-       * have no policies, so the `Row` below is what
-       * `supabase gen types typescript` would emit and not a shape any query
-       * in this app can produce. It is also the one table banned from the
-       * Realtime publication: RLS is not applied to DELETE events, so
-       * publishing it would broadcast an address.
+       * have no policies, so the `Row` below is a shape no query in this app
+       * can ever produce. It is written out because the generated type has one
+       * and because the SQL Editor reads these columns, not because anything
+       * here will hold it. It is also the one table banned from the Realtime
+       * publication: RLS is not applied to DELETE events, so publishing it
+       * would broadcast an address.
        */
       allowlist: {
         Row: {

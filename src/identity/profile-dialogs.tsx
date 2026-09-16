@@ -1,17 +1,11 @@
 import { useSession } from '@/auth/use-session'
 import { PasswordField } from '@/components/password-field'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { CustomisePanel } from '@/identity/customise-panel'
+import { DialogShell } from '@/identity/dialog-shell'
 import { asIdentityUpdate } from '@/identity/friend-row'
 import type { Identity } from '@/identity/identity'
 import { SaveError } from '@/identity/save-error'
@@ -279,40 +273,3 @@ export const ChangePasswordDialog = ({
     </DialogShell>
   )
 }
-
-/* ------------------------------------------------------------------ */
-
-/**
- * `open` is hard-coded because the caller mounts these on open and unmounts
- * them on close — the dialog's own dismissals (Escape, the backdrop, the close
- * button) all arrive through `onOpenChange`, and every one of them means the
- * same thing here.
- */
-const DialogShell = ({
-  title,
-  description,
-  wide,
-  onClose,
-  children,
-}: {
-  title: string
-  description: React.ReactNode
-  wide?: boolean
-  onClose: () => void
-  children: React.ReactNode
-}) => (
-  <Dialog
-    open
-    onOpenChange={(open) => {
-      if (!open) onClose()
-    }}
-  >
-    <DialogContent className={wide ? 'sm:max-w-2xl' : undefined}>
-      <DialogHeader>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
-      {children}
-    </DialogContent>
-  </Dialog>
-)

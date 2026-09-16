@@ -21,20 +21,26 @@ export type CalActing = { action: CalAction; cal: Cal }
  *
  * Both surfaces render this, so the two menus cannot answer the same item
  * differently. Ticket 05 adds the Leave dialog here, as a third branch.
+ *
+ * It takes the whole `CalsState` rather than the one write it needs today,
+ * which is the difference between ticket 05 adding a branch and ticket 05
+ * threading a second prop through both call sites. This component is the
+ * dispatcher for every act on a cal, so the cal state is its input.
  */
 export const CalActionDialogs = ({
   acting,
-  rename,
+  cals,
   onClose,
 }: {
   acting: CalActing | null
-  rename: CalsState['rename']
+  cals: CalsState
   onClose: () => void
 }) => {
   if (acting === null) return null
 
   const { action, cal } = acting
-  if (action === 'rename') return <RenameCalDialog cal={cal} rename={rename} onClose={onClose} />
+  if (action === 'rename')
+    return <RenameCalDialog cal={cal} rename={cals.rename} onClose={onClose} />
   if (action === 'view-code') return <CalCodeDialog cal={cal} onClose={onClose} />
 
   // Unreachable while `CalAction` has two members, and a compile error the day

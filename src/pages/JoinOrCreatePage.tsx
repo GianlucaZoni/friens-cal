@@ -48,7 +48,8 @@ import { TriangleAlertIcon } from 'lucide-react'
  * the other, which is why there is no `stopPropagation` here to go stale.
  */
 export const JoinOrCreatePage = () => {
-  const { cals, status, create, join, rename } = useCals()
+  const state = useCals()
+  const { cals, status, create, join } = state
   const navigate = useNavigate()
   const [joining, setJoining] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -82,7 +83,7 @@ export const JoinOrCreatePage = () => {
           </CardHeader>
 
           <CardContent>
-            <CalList cals={cals} status={status} rename={rename} />
+            <CalList cals={cals} status={status} state={state} />
           </CardContent>
 
           {/*
@@ -114,11 +115,12 @@ export const JoinOrCreatePage = () => {
 const CalList = ({
   cals,
   status,
-  rename,
+  state,
 }: {
   cals: Cal[]
   status: CalsState['status']
-  rename: CalsState['rename']
+  /** The hook itself, for the dialogs a row's overflow opens. */
+  state: CalsState
 }) => {
   /*
     Which row's menu asked for what, held for the list rather than per row. The
@@ -197,7 +199,7 @@ const CalList = ({
 
       {/* Outside the list, because a dialog inside the menu that opened it
           unmounts on the click that opened it. */}
-      <CalActionDialogs acting={acting} rename={rename} onClose={() => setActing(null)} />
+      <CalActionDialogs acting={acting} cals={state} onClose={() => setActing(null)} />
     </>
   )
 }

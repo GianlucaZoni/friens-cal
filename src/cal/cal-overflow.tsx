@@ -25,8 +25,19 @@ import { MoreHorizontalIcon } from 'lucide-react'
  * 12px of horizontal slack, 8px of vertical slack either side. Driven at 375px,
  * a click 16 CSS px left of its centre **switched cal** instead. `-my-2 h-10
  * w-9` claws back the row's own `py-2` and makes the target the row's full
- * height by 36 wide: no vertical miss is available inside the row at all, and
- * it costs about one character of visible name. The glyph does not move.
+ * height by **36** wide: no vertical miss is available inside the row at all,
+ * and it costs about one character of visible name. The glyph does not move.
+ *
+ * The ticket says 34, and 34 is what a `getBoundingClientRect` reads while the
+ * popup's `zoom-in-95` enter animation is stopped at its first frame, which is
+ * what a browser pane running hidden does to every Base UI popup. `offsetWidth`
+ * and `offsetHeight` say 36 and 40 in the same session. Measure the layout box
+ * rather than the painted one, or the number moves under you.
+ *
+ * `size-6` from `icon-xs` and `h-10 w-9` both survive `cn`: tailwind-merge
+ * drops a `size-*` that a later `w-*`/`h-*` overrides but not the reverse, so
+ * the 40x36 wins on stylesheet order rather than on the merge. Measured, not
+ * assumed. Anybody rewriting this line should measure it again.
  *
  * `/`'s row gets none of that. Nothing there swallows a near miss, the row is
  * shorter than a menu item, and a 40-tall control beside a 24-tall copy button
@@ -39,6 +50,13 @@ import { MoreHorizontalIcon } from 'lucide-react'
  * `click` and `keydown`, and the wrapper only exists on the switcher: a
  * `stopPropagation` on `/` would have nothing above it to stop and would go
  * stale the first time somebody rearranged that row.
+ *
+ * The `keydown` guard is narrower in practice than it looks, and that was
+ * checked rather than reasoned about: while either menu is open, focus is
+ * inside a popup that is portalled to the body, so Escape and the arrows never
+ * pass through this span at all. One Escape closes both menus and returns
+ * focus to the switcher's trigger. What the guard catches is the Enter or
+ * Space that would otherwise reach the `Menu.Item` this button sits in.
  *
  * ## The cost this carries, recorded rather than solved
  *

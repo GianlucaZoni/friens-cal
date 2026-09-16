@@ -83,7 +83,7 @@ export const RenameCalDialog = ({
         {error ? <SaveError message={error} /> : null}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button type="submit" disabled={saving || name === null}>

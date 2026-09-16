@@ -14,8 +14,13 @@
  * only one reachable by keyboard.
  *
  * Here rather than inside either component so the difference between the two
- * menus is one table a reader takes in at once, and so ticket 05 adds Leave by
- * editing a list rather than by editing two `.tsx` files.
+ * menus is one table a reader takes in at once. Ticket 05 adds Leave to this
+ * file in three lines (the union, the `list` menu, the label) and to
+ * `CalActionDialogs` as a fourth branch, which the `satisfies never` there will
+ * insist on. Neither call site changes. The one thing this file has no room for
+ * is Leave's **destructive** treatment: `CAL_ACTION_LABEL` carries labels and
+ * nothing else, and every other destructive control in the product is marked,
+ * so that is a second map or a case in `cal-overflow.tsx`.
  *
  * **No imports, deliberately**, the same split `cals.ts` and `roster.ts` make.
  * A test file here runs under plain Node, which cannot resolve the `@/` alias.

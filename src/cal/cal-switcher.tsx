@@ -61,7 +61,7 @@ import { CheckIcon, ChevronDownIcon, PlusIcon, TicketIcon } from 'lucide-react'
  */
 export const CalSwitcher = () => {
   const { cal: current } = useCurrentCal()
-  const { cals, status, create, join, rename } = useCals()
+  const cals = useCals()
   const navigate = useNavigate()
 
   const [acting, setActing] = useState<CalActing | null>(null)
@@ -76,7 +76,7 @@ export const CalSwitcher = () => {
    * the right row ticked in the first frame rather than with an empty popup,
    * and `withCal` replaces rather than duplicates once the read arrives.
    */
-  const rows = useMemo(() => withCal(cals, current), [cals, current])
+  const rows = useMemo(() => withCal(cals.cals, current), [cals.cals, current])
 
   return (
     <>
@@ -94,7 +94,13 @@ export const CalSwitcher = () => {
             <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
               {current.name}
             </span>
-            <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronDownIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            {/*
+              The name alone does not say this is a control, let alone which
+              one. Same shape as the phone bar's date navigator, which appends
+              "— go to a date" to the label it shows.
+            */}
+            <span className="sr-only">— switch friens cal</span>
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="start">
@@ -124,9 +130,9 @@ export const CalSwitcher = () => {
                 you are standing in. Saying so is cheap and the alternative is a
                 Friend with five cals reading a menu that shows one.
               */}
-              {status === 'ready' ? null : (
+              {cals.status === 'ready' ? null : (
                 <DropdownMenuLabel>
-                  {status === 'loading' ? 'Loading…' : 'We cannot reach your other cals.'}
+                  {cals.status === 'loading' ? 'Loading…' : 'We cannot reach your other cals.'}
                 </DropdownMenuLabel>
               )}
             </DropdownMenuGroup>
@@ -150,12 +156,12 @@ export const CalSwitcher = () => {
         unmounts with the menu on the click that opened it, and here two menus
         close at once.
       */}
-      <CalActionDialogs acting={acting} rename={rename} onClose={() => setActing(null)} />
-      <JoinDialog open={joining} onOpenChange={setJoining} join={join} onJoined={open} />
+      <CalActionDialogs acting={acting} cals={cals} onClose={() => setActing(null)} />
+      <JoinDialog open={joining} onOpenChange={setJoining} join={cals.join} onJoined={open} />
       <CreateCalDialogs
         open={creating}
         onOpenChange={setCreating}
-        create={create}
+        create={cals.create}
         onOpenCal={open}
       />
     </>

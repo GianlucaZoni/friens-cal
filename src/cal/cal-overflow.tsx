@@ -61,10 +61,11 @@ import { MoreHorizontalIcon } from 'lucide-react'
  * ## The cost this carries, recorded rather than solved
  *
  * **The three dots cannot be reached by keyboard, and nothing fixes it in
- * place.** With the menu open, `Tab` closes the whole menu and throws focus out
- * of it, and `ArrowRight` does nothing: a button nested inside a `Menu.Item` is
- * skipped by the composite roving focus. Both were driven on the prototype
- * rather than inferred, and both escapes fail structurally. A **submenu** is
+ * place.** A button nested inside a `Menu.Item` is skipped by the composite
+ * roving focus: `ArrowRight` does nothing, and seven `Tab`s walk the rows of
+ * the switcher's menu one at a time and never land on a dots. (The prototype
+ * found `Tab` throwing focus out of the menu entirely; either way the dots is
+ * not on the path.) Both escapes fail structurally. A **submenu** is
  * keyboard-reachable, but a `SubmenuTrigger` *is* the item, so the row would
  * stop switching cal. **Two items side by side** in one visual row breaks the
  * arrow model, because Base UI's menu is one-dimensional.

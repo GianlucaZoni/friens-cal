@@ -94,6 +94,17 @@ holding the local `API_URL` and `PUBLISHABLE_KEY` and one of the accounts above:
 node --env-file=.env.rehearsal scripts/verify-realtime.mjs
 ```
 
+**Run `verify-realtime.mjs` twice on a fresh stack**, and believe the second
+run. The local Realtime container creates its `realtime.messages` replication
+slot lazily, on the first private channel join, so a broadcast written in the
+same instant as that first join is never delivered — the first run reports "NO
+INSERT MESSAGE" and the trigger is fine. A real project's slot has existed since
+the project did.
+
+A script that writes from the repo has to run from the repo: `node --env-file`
+resolves `@supabase/supabase-js` against the working directory, so a throwaway
+probe placed in a scratch folder cannot import it.
+
 Finish with `npx -y supabase@latest stop`, which leaves nothing behind.
 
 ## Files

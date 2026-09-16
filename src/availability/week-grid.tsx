@@ -1,3 +1,4 @@
+import { withContinuation, type ContinuedRun } from '@/availability/continuation'
 import { heatFraction, heatOpacity } from '@/availability/heat'
 import { LoadState } from '@/availability/load-state'
 import { bandsOf, segmentsOf, type Band } from '@/availability/segments'
@@ -26,7 +27,7 @@ import { useViewerZone } from '@/shell/viewer-zone'
 import { Fragment, useCallback, useMemo, useRef, type CSSProperties } from 'react'
 import { groupBy, maxBy } from 'lodash-es'
 import { format, isToday } from 'date-fns'
-import { Pin } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pin } from 'lucide-react'
 
 /**
  * Half an hour, in pixels, **with a mouse**. The hour is 40px, which is what the
@@ -482,6 +483,43 @@ const boxOf = (run: Run) => box(run.start, run.length)
  */
 const endOf = (slots: Slot[], row: number): string => closingLabel(slots[row + 1]?.label)
 
+/**
+ * The two-pixel ring inside a run's border, as four directional shadows.
+ *
+ * One `inset 0 0 0 2px` spread cannot drop a single side, and an open edge has
+ * to drop one or the block still reads as closed with a gap in its border.
+ * With both edges capped these four are the same two pixels the spread drew.
+ */
+const ringOf = (run: ContinuedRun, colour: string): string =>
+  [
+    `inset 2px 0 0 ${colour}`,
+    `inset -2px 0 0 ${colour}`,
+    run.continuesBefore ? null : `inset 0 2px 0 ${colour}`,
+    run.continuesAfter ? null : `inset 0 -2px 0 ${colour}`,
+  ]
+    .filter((shadow) => shadow !== null)
+    .join(', ')
+
+/**
+ * What the open edge says to a reader who cannot see it.
+ *
+ * The chevron is `aria-hidden`, because a glyph sitting in a boundary is not a
+ * thing to announce, so the block's own sentence is where the crossing lands.
+ * Without it the 30-minute sliver at the foot of a column reads out as *"You
+ * are free 23:30 to 24:00"*, which is exactly the mis-click the marker exists
+ * to stop.
+ *
+ * It names a day and never a direction on screen, for the same reason the
+ * glyph points down rather than right: the column the evening carries on into
+ * may not be one this view is drawing.
+ */
+const crossingOf = (run: ContinuedRun): string => {
+  if (run.continuesBefore && run.continuesAfter) return ', from the day before and on into the next'
+  if (run.continuesBefore) return ', carrying on from the day before'
+  if (run.continuesAfter) return ', carrying on into the next day'
+  return ''
+}
+
 const DayColumn = ({
   index,
   day,
@@ -563,14 +601,28 @@ const DayColumn = ({
    * `06:00→07:59` shows one `06:00–22:00` block *mid-drag*, and releasing just
    * commits what you are already looking at. An erase draft subtracts here for
    * the same reason, so the hole opens under the pointer rather than on release.
+   *
+   * **And each run is told whether the evening carries on past this column**
+   * (issue 08), which is asked of the store and not of the draft. A draft's
+   * cells are keyed by column (`draftCell`), so this column cannot see what its
+   * neighbour's half of an over-midnight drag holds. The cost, stated: a drag
+   * that crosses midnight grows its chevrons when it commits rather than under
+   * the pointer. Everything else about the block does follow the draft, which
+   * is why `withContinuation` is given the *drawn* runs and then declines to
+   * mark any edge they do not actually reach.
    */
   const runs = useMemo(() => {
     if (viewer === null) return []
-    return runsOf(slots.length, (row) => {
-      const held = isFree(viewer.id, slots[row].start)
-      if (draft === null || draft.kind === 'duplicate') return held
-      return draft.kind === 'erase' ? held && !inDraft(row) : held || inDraft(row)
-    })
+    const held = (instant: Date) => isFree(viewer.id, instant)
+    return withContinuation(
+      runsOf(slots.length, (row) => {
+        const drawn = held(slots[row].start)
+        if (draft === null || draft.kind === 'duplicate') return drawn
+        return draft.kind === 'erase' ? drawn && !inDraft(row) : drawn || inDraft(row)
+      }),
+      slots,
+      held
+    )
   }, [slots, isFree, viewer, draft, inDraft])
 
   /**
@@ -692,31 +744,46 @@ const DayColumn = ({
       {viewer === null
         ? null
         : runs.map((run) => (
-            <div
-              key={run.start}
-              role="img"
-              aria-label={`You are free ${slots[run.start].label} to ${endOf(
-                slots,
-                run.start + run.length - 1
-              )} on ${format(day, 'EEEE d MMMM')}`}
-              /*
-                Border and ring, never a solid fill (ticket 15). Your own block
-                used to be solid and on top, which covered precisely the thing
-                you were looking at — the times you are free are the times you
-                care who else is. Issue 07 fills the middle with the density of
-                everyone else, straight through this outline.
+            <Fragment key={run.start}>
+              <div
+                role="img"
+                aria-label={`You are free ${slots[run.start].label} to ${endOf(
+                  slots,
+                  run.start + run.length - 1
+                )} on ${format(day, 'EEEE d MMMM')}${crossingOf(run)}`}
+                /*
+                  Border and ring, never a solid fill (ticket 15). Your own block
+                  used to be solid and on top, which covered precisely the thing
+                  you were looking at — the times you are free are the times you
+                  care who else is. Issue 07 fills the middle with the density of
+                  everyone else, straight through this outline.
 
-                `pointer-events-none` because the gesture owns every pointer on
-                this grid, and a drag begun on your own Availability must reach
-                the column beneath, not stop on a div with no handler.
-              */
-              className="pointer-events-none absolute inset-x-[3px] rounded-[3px] border"
-              style={{
-                ...boxOf(run),
-                borderColor: friendColour(viewer.hue),
-                boxShadow: `inset 0 0 0 2px ${friendColourAlpha(viewer.hue, 0.3)}`,
-              }}
-            />
+                  `pointer-events-none` because the gesture owns every pointer on
+                  this grid, and a drag begun on your own Availability must reach
+                  the column beneath, not stop on a div with no handler.
+
+                  An edge the evening carries on through loses its cap: no
+                  radius, no border, no bar of the ring, so the block reads as
+                  cut rather than as closed (issue 08).
+                */
+                className={cn(
+                  'pointer-events-none absolute inset-x-[3px] rounded-[3px] border',
+                  run.continuesBefore && 'rounded-t-none border-t-0',
+                  run.continuesAfter && 'rounded-b-none border-b-0'
+                )}
+                style={{
+                  ...boxOf(run),
+                  borderColor: friendColour(viewer.hue),
+                  boxShadow: ringOf(run, friendColourAlpha(viewer.hue, 0.3)),
+                }}
+              />
+              {run.continuesBefore && (
+                <ContinuationMark edge="top" atRow={run.start} hue={viewer.hue} />
+              )}
+              {run.continuesAfter && (
+                <ContinuationMark edge="bottom" atRow={run.start + run.length} hue={viewer.hue} />
+              )}
+            </Fragment>
           ))}
 
       {sourceRuns.map((run) => (
@@ -888,6 +955,54 @@ const HeatWash = ({ band, hue, outOf }: { band: Band; hue: number; outOf: number
     </div>
   )
 }
+
+/**
+ * The chevron at an edge a run carries on through.
+ *
+ * Sat **inside** the block rather than beside it: the column has no margin, and
+ * a marker in one would land on its neighbour's border. 11px tall, so it fits
+ * the 30-minute sliver that is the commonest thing it marks. At `SLOT_PX` that
+ * sliver is a 20px block with a cap at each end, and prototype 13 measured it
+ * reading as a mis-click rather than as the start of an evening.
+ *
+ * Off to one side, because the resize handles a touch selection grows sit in
+ * the middle of the very same edge.
+ *
+ * **No words** (prototype 13 §1). The variant that named the far fragment
+ * truncates to `to …` at week-column width, which is exactly the width where
+ * splits are commonest, and the Candidate card two inches to the right already
+ * spells the crossing out. `aria-hidden` for the same reason: the block's own
+ * `aria-label` carries it (`crossingOf`).
+ */
+const ContinuationMark = ({
+  edge,
+  atRow,
+  hue,
+}: {
+  edge: 'top' | 'bottom'
+  /** The row the marked edge sits on: the run's first, or one past its last. */
+  atRow: number
+  hue: number
+}) => (
+  <div
+    aria-hidden
+    className={cn(
+      'pointer-events-none absolute inset-x-[3px] flex items-center px-1',
+      edge === 'top' ? 'justify-start' : 'justify-end'
+    )}
+    style={{
+      top: `calc(${SLOT} * ${atRow}${edge === 'top' ? '' : ' - 11px'})`,
+      height: '11px',
+      color: friendColour(hue),
+    }}
+  >
+    {edge === 'top' ? (
+      <ChevronUp size={10} strokeWidth={3} />
+    ) : (
+      <ChevronDown size={10} strokeWidth={3} />
+    )}
+  </div>
+)
 
 /**
  * The gesture's own contribution, and what time it says.

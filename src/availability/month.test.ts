@@ -13,10 +13,14 @@
  * calendar day it landed on.
  */
 import { DAYS_IN_WEEK, daysBetween, monthLattice, monthWeeks, peakOf, wholeDay } from './month.ts'
+import { segmentsOf } from './segments.ts'
+import { slotsOfDay } from './slots.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
 const ROME = 'Europe/Rome'
+/** +5:30, so +3:30 from Rome in summer: inside the band where an evening splits. */
+const KOLKATA = 'Asia/Kolkata'
 /** Monday, the same as the grid's. */
 const MONDAY = 1
 
@@ -123,6 +127,52 @@ test('a day nobody has marked has no peak at all', () => {
   // Not the foot of the ramp — the absence of a wash. `segmentsOf` emits no
   // segment for a span nobody is free in, so a quiet day has nothing to paint.
   assert.equal(peakOf([]), 0)
+})
+
+/* ================================================================== *
+ * The phantom day, accepted as-is
+ * ================================================================== */
+
+test('a tail across the viewer’s midnight gives the month a day nobody drew on', () => {
+  // Prototype 13 §3, pinned rather than argued about. Three Rome Friends are
+  // free 20:00–23:30 on the Sunday: one evening, one dark cell. A Friend at
+  // +3:30 reads the same instants as 23:30 Sunday plus 02:30 of Monday, so
+  // their month holds ONE MORE DAY than the drawers', alone in the next row,
+  // holding nothing but the tail.
+  //
+  // And it is painted exactly as dark as the whole evening, because `peakOf` is
+  // peak concurrency and both days peak at three. Fixing that needs a duration
+  // channel and ticket 15 spent opacity and forbade a second one, so the wash
+  // oversells the phantom day and the chip and the day panel are what tell the
+  // truth on tap. That is a decision, not an oversight.
+  const SUNDAY = new Date(2026, 8, 20)
+  const MONDAY_AFTER = new Date(2026, 8, 21)
+  const friendIds = ['marco', 'sara', 'gio']
+
+  const held = new Set(
+    slotsOfDay(SUNDAY, ROME)
+      .filter((slot) => slot.label >= '20:00' && slot.label < '23:30')
+      .flatMap((slot) => friendIds.map((id) => `${id}|${slot.start.getTime()}`))
+  )
+  const peakOn = (day: Date, timeZone: string): number => {
+    const slots = slotsOfDay(day, timeZone)
+    return peakOf(
+      segmentsOf(slots.length, friendIds, (friendId, row) =>
+        held.has(`${friendId}|${slots[row].start.getTime()}`)
+      )
+    )
+  }
+
+  assert.deepEqual(
+    [peakOn(SUNDAY, ROME), peakOn(MONDAY_AFTER, ROME)],
+    [3, 0],
+    'the drawers see one evening on one day'
+  )
+  assert.deepEqual(
+    [peakOn(SUNDAY, KOLKATA), peakOn(MONDAY_AFTER, KOLKATA)],
+    [3, 3],
+    'the far viewer sees two days, both as dark as each other'
+  )
 })
 
 /* ================================================================== *

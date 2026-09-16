@@ -135,7 +135,7 @@ export const CurrentCalProvider = ({ children }: { children: React.ReactNode }) 
 
   if (resolved?.failed) {
     return (
-      <DeadEnd role="alert">
+      <DeadEnd>
         <p>We cannot reach that cal. Reload, and if it keeps happening say so in the group chat.</p>
       </DeadEnd>
     )
@@ -163,10 +163,10 @@ export const CurrentCalProvider = ({ children }: { children: React.ReactNode }) 
   )
 }
 
-/** The two dead ends above, which differ in their sentence and in nothing else. */
-const DeadEnd = ({ role, children }: { role: 'alert' | 'status'; children: React.ReactNode }) => (
+/** The one dead end left: a read that failed. A cal you are not in redirects instead. */
+const DeadEnd = ({ children }: { children: React.ReactNode }) => (
   <div
-    role={role}
+    role="alert"
     className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center text-xs text-muted-foreground"
   >
     {children}

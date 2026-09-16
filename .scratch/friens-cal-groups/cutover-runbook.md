@@ -1,6 +1,6 @@
 # Cutover runbook: many cals, joined by Code
 
-Status: draft, completed once tickets 03, 05 and 09 land
+Status: ready-for-human — every agent-side slice is on main; this is what is left
 
 Everything an agent could build for `.scratch/friens-cal-groups/` is on
 `main`. What is left is the part nothing in this repo can do: run SQL against
@@ -157,7 +157,17 @@ whose `### Left for after the cutover` section has the detail.
 - **07** Two browsers in different zones (a VPN, or a laptop with its zone
   changed) read different wall clocks off the same drawn Slot; the roster
   shows `Nh ahead` beside the other one; time strings gain `GMT+x` only then.
-- **03, 05, 09** to be added when those tickets land.
+- **03, 05, 09** need nothing from you. All three were driven end to end on
+  the rehearsal stack, including the 375px hit test on the switcher's three
+  dots, a full leave-and-rejoin with `left_at` checked in psql, and the
+  double-booking mark across three cals. Ticket 05 also confirmed the
+  auto-cancel of an emptied future Hangout already fires from `06`'s trigger,
+  so there is no `14`.
+
+One change made after the merges, worth knowing when you test: a non-Member
+at `/g/:id` (a stale bookmark, a guessed id) is redirected silently to `/`,
+as planning ticket 10 §9 decided. Slice 02 had shipped a dead-end screen
+there instead.
 
 ## The verify scripts that now fail, and why that is fine for today
 

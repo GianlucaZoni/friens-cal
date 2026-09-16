@@ -43,6 +43,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
  */
 export const CodeField = ({
   id,
+  inputRef,
   value,
   onChange,
   onComplete,
@@ -50,6 +51,12 @@ export const CodeField = ({
   invalid,
 }: {
   id: string
+  /**
+   * The one real `<input>` under the six painted slots. The Join dialog holds
+   * it so it can put the caret back after a failed attempt, which is the moment
+   * the field is emptied and nothing else would.
+   */
+  inputRef?: React.Ref<HTMLInputElement>
   value: string
   /** Already uppercased. */
   onChange: (next: string) => void
@@ -61,6 +68,7 @@ export const CodeField = ({
 }) => (
   <InputOTP
     id={id}
+    ref={inputRef}
     maxLength={CODE_LENGTH}
     value={value}
     onChange={(next) => onChange(normaliseCode(next))}

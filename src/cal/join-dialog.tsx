@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import type { Cal } from '@/lib/database.types'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TriangleAlertIcon } from 'lucide-react'
 
 /**
@@ -59,19 +59,66 @@ export const JoinDialog = ({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
+  const field = useRef<HTMLInputElement>(null)
+  /**
+   * Which attempt is the live one.
+   *
+   * This dialog is always mounted — the page renders it whether or not it is
+   * open — so closing it during "Joining…" does not unmount the continuation
+   * below the `await`. Without this, Cancel or Escape mid-flight would still
+   * route the Friend into the cal they just backed out of, or write an error
+   * onto a dialog that is no longer on screen and have it waiting the next time
+   * they open it. Closing bumps the counter; a continuation whose run is no
+   * longer current writes nothing.
+   */
+  const run = useRef(0)
+
+  /**
+   * The caret goes back into the emptied field, and it has to happen here
+   * rather than in the failure branch: the input carries `disabled` while the
+   * attempt is in flight, and a disabled input cannot take focus — calling
+   * `focus()` beside `setBusy(false)` runs a commit too early and does nothing
+   * at all. Verified, rather than reasoned: it silently did nothing.
+   */
+  useEffect(() => {
+    if (error !== null && !busy) field.current?.focus()
+  }, [error, busy])
+
+  /** Back to the state the dialog opens in, with anything in flight abandoned. */
+  const reset = () => {
+    run.current += 1
+    pending.current = false
+    setBusy(false)
+    setCode('')
+    setError(null)
+  }
 
   const submit = async (value: string) => {
     if (pending.current) return
     pending.current = true
+    const mine = ++run.current
     setBusy(true)
     setError(null)
 
     const result = await join(value)
 
+    if (mine !== run.current) return // Closed, or reopened, under us.
     pending.current = false
     setBusy(false)
+
     if (result.error !== undefined) {
       setError(result.error)
+      /*
+       * The field is emptied on a failure, and that is the retry rather than
+       * tidiness. `onComplete` fires on a five-to-six transition, so a field
+       * left holding six wrong characters never auto-submits again — and
+       * `input-otp` splices a paste in at the caret, so pasting the right Code
+       * over the wrong one silently produces a mixture of the two. Emptying it
+       * makes both ways of trying again behave the way they did the first time.
+       * The sentence above says what was wrong with it; the characters
+       * themselves are not worth keeping.
+       */
+      setCode('')
       return
     }
     // Closed first, then routed: the dialog is unmounted by the navigation
@@ -89,10 +136,7 @@ export const JoinDialog = ({
         onOpenChange(next)
         // Cleared on close rather than on open, so a dialog that is reopened
         // does not flash the last attempt before the effect that would clear it.
-        if (!next) {
-          setCode('')
-          setError(null)
-        }
+        if (!next) reset()
       }}
     >
       <DialogContent>
@@ -107,6 +151,7 @@ export const JoinDialog = ({
           <FieldLabel htmlFor="join-code">Code</FieldLabel>
           <CodeField
             id="join-code"
+            inputRef={field}
             value={code}
             onChange={(next) => {
               setCode(next)

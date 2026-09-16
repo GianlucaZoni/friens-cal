@@ -75,11 +75,24 @@ export const useCals = (): CalsState => {
           // supabase/08-cal-and-membership.sql §5.
           console.error('Could not read your cals:', error.message)
           setFailed(true)
-          setCals([])
+          setCals((held) => held ?? [])
           return
         }
         setFailed(false)
-        setCals(calOrder(data))
+        /*
+         * Folded in rather than assigned, because a write can land first. Both
+         * doors are live while this read is in flight, and a cal joined or
+         * created before it returns is one the read was issued too early to
+         * know about — assigning here would drop it off the list until a
+         * reload, which is exactly what the create flow's "Later" button would
+         * leave a Friend staring at.
+         *
+         * `held` is non-null only if a write got there first, so the ordinary
+         * path is still one assignment.
+         */
+        setCals((held) =>
+          held === null ? calOrder(data) : data.reduce((into, cal) => withCal(into, cal), held)
+        )
       })
 
     return () => {

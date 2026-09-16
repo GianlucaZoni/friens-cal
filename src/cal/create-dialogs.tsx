@@ -14,7 +14,7 @@ import {
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import type { Cal } from '@/lib/database.types'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowRightIcon, TriangleAlertIcon } from 'lucide-react'
 
 /**
@@ -49,7 +49,17 @@ export const CreateCalDialogs = ({
   create: CalsState['create']
   onOpenCal: (cal: Cal) => void
 }) => {
+  /**
+   * The cal the second dialog is about, and whether it is on screen — two
+   * pieces of state rather than one, and the split is not redundancy.
+   *
+   * Closing on `setMade(null)` alone empties the dialog in the same frame it
+   * starts animating out, so the Friend watches the Code they were just handed
+   * blink away into a blank rectangle. Keeping the row until the next create
+   * overwrites it lets the exit animation carry its own contents.
+   */
   const [made, setMade] = useState<Cal | null>(null)
+  const [showing, setShowing] = useState(false)
 
   return (
     <>
@@ -60,10 +70,11 @@ export const CreateCalDialogs = ({
         onMade={(cal) => {
           onOpenChange(false)
           setMade(cal)
+          setShowing(true)
         }}
       />
 
-      <Dialog open={made !== null} onOpenChange={(next) => !next && setMade(null)}>
+      <Dialog open={showing} onOpenChange={(next) => !next && setShowing(false)}>
         <DialogContent>
           {made ? (
             <>
@@ -84,9 +95,8 @@ export const CreateCalDialogs = ({
                 <DialogClose render={<Button variant="ghost" />}>Later</DialogClose>
                 <Button
                   onClick={() => {
-                    const cal = made
-                    setMade(null)
-                    onOpenCal(cal)
+                    setShowing(false)
+                    onOpenCal(made)
                   }}
                 >
                   Open it
@@ -127,15 +137,43 @@ const NameDialog = ({
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /**
+   * A ref rather than the `busy` state, and here it is not a nicety.
+   *
+   * Two submits in the same tick — Enter and the button, or a double press —
+   * both read the old `busy`, and `create_cal` has no `on conflict` to make the
+   * second one harmless the way `join_cal` does. There is no delete grant on
+   * `cal` either (`08-cal-and-membership.sql` §5), so the second cal is one
+   * nobody can ever get rid of.
+   */
+  const pending = useRef(false)
+  /** Which attempt is live. Same reasoning as the Join dialog's. */
+  const run = useRef(0)
+
+  const reset = () => {
+    run.current += 1
+    pending.current = false
+    setBusy(false)
+    setName('')
+    setError(null)
+  }
 
   const submit = async () => {
-    if (busy) return
+    if (pending.current) return
+    pending.current = true
+    const mine = ++run.current
     setBusy(true)
     setError(null)
 
     const result = await create(name)
 
+    // Cancelled while it was in flight. The cal exists — nothing can undo that
+    // — but it is on the list behind this dialog, which is where a Friend who
+    // dismissed the flow should find it rather than in a modal they closed.
+    if (mine !== run.current) return
+    pending.current = false
     setBusy(false)
+
     if (result.error !== undefined) {
       setError(result.error)
       return
@@ -149,10 +187,7 @@ const NameDialog = ({
       open={open}
       onOpenChange={(next) => {
         onOpenChange(next)
-        if (!next) {
-          setName('')
-          setError(null)
-        }
+        if (!next) reset()
       }}
     >
       <DialogContent>

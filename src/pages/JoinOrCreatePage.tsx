@@ -2,6 +2,7 @@ import { calPath } from '@/cal/cals'
 import { CopyCode } from '@/cal/copy-code'
 import { CreateCalDialogs } from '@/cal/create-dialogs'
 import { JoinDialog } from '@/cal/join-dialog'
+import type { CalsState } from '@/cal/use-cals'
 import { useCals } from '@/cal/use-cals'
 import { Button } from '@/components/ui/button'
 import {
@@ -62,8 +63,16 @@ export const JoinOrCreatePage = () => {
         <Card>
           <CardHeader>
             <CardTitle>Your friens cals</CardTitle>
+            {/*
+              Gated on `status`, not on `cals.length`. The list is empty while
+              the read is in flight and empty again when it fails, and "You are
+              not in one yet." is the one sentence on this card that decision 05
+              spent real argument on — saying it to a Friend who has five cals,
+              or directly above an alert explaining that we could not read them,
+              is the way to make it mean nothing.
+            */}
             <CardDescription>
-              {cals.length === 0
+              {status === 'ready' && cals.length === 0
                 ? 'You are not in one yet.'
                 : 'The code next to each one is what you send to add somebody.'}
             </CardDescription>
@@ -99,7 +108,7 @@ export const JoinOrCreatePage = () => {
 }
 
 /** The list, or the one sentence standing in for it. */
-const CalList = ({ cals, status }: { cals: Cal[]; status: 'loading' | 'ready' | 'error' }) => {
+const CalList = ({ cals, status }: { cals: Cal[]; status: CalsState['status'] }) => {
   if (status === 'loading') {
     return (
       <p role="status" aria-live="polite" className="p-4 text-center text-xs text-muted-foreground">

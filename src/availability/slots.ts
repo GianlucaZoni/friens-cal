@@ -57,7 +57,16 @@ export type Slot = {
   start: Date
   /** Its wall clock in the viewer's zone, `HH:mm`. */
   label: string
-  /** True when it opens a wall-clock hour. The gutter labels these and no others. */
+  /**
+   * True when it opens a wall-clock hour. The gutter labels these and no
+   * others.
+   *
+   * **Not `label` ending in `:00`.** In a `:45` zone (Kathmandu, Chatham,
+   * Eucla) the rows sit at `00:15, 00:45, 01:15, …`, and testing for `:00`
+   * would mark nothing at all — an hour gutter with no hours in it. It is the
+   * minutes the *day itself* opens on, which is `00` everywhere anybody in a
+   * cal is likely to stand and `15` in Kathmandu.
+   */
   opensHour: boolean
   /**
    * The UTC offset, as `+2` / `+1`, on the slots whose wall clock happens twice
@@ -152,6 +161,19 @@ export const slotsOfDay = (day: Date, timeZone: string): Slot[] => {
     }
   })
 
+  /*
+   * The minutes an hour opens on in this zone. Read off the day's first row
+   * rather than assumed to be `00`, because a day now begins at the first
+   * `epoch % 1800 = 0` instant at or after local midnight — which in a `:45`
+   * zone is `00:15`.
+   *
+   * Read rather than derived from the offset so that the autumn Sunday keeps
+   * *both* of its 02:00 rows marked: they are one hour apart and both open an
+   * hour, and a rule phrased as "the first row whose hour differs from the one
+   * before it" would silently drop the second.
+   */
+  const opensOn = rows[0].label.slice(3)
+
   // Which wall clocks repeat is a fact about *this day*, not about the zone, so
   // it is counted rather than predicted — an autumn Sunday has two, every other
   // day has none, and a zone with a half-hour shift would have its own answer.
@@ -159,7 +181,7 @@ export const slotsOfDay = (day: Date, timeZone: string): Slot[] => {
 
   return rows.map(({ offsetMinutes, ...row }, index) => ({
     ...row,
-    opensHour: row.label.endsWith(':00'),
+    opensHour: row.label.slice(3) === opensOn,
     offset: byLabel[row.label].length > 1 ? signedOffset(offsetMinutes) : null,
     // `index > 0` rather than a comparison against the day before: midnight has
     // no previous slot here, and a day that *begins* at a transition is not a

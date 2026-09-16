@@ -167,8 +167,18 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
   const [failed, setFailed] = useState(false)
   const [confirming, setConfirming] = useState<string | null>(null)
 
-  /** The floor both stores share, so neither can draw into a range the other has not read. */
-  const wantedFrom = useMemo(() => floorOfView(days, deviceTimeZone()), [days])
+  /**
+   * The floor both stores share, so neither can draw into a range the other has
+   * not read.
+   *
+   * `deviceTimeZone()` rather than `useViewerZone()` because this hook is
+   * instantiated above the zone provider, and named in the dependencies rather
+   * than called inside the memo so that a device changing zone moves the floor
+   * with it. `useAvailability` spells it the same way, which is the whole point
+   * of the two sharing one function.
+   */
+  const timeZone = deviceTimeZone()
+  const wantedFrom = useMemo(() => floorOfView(days, timeZone), [days, timeZone])
 
   /**
    * How far back Postgres has already been asked — a **request log**, so it is

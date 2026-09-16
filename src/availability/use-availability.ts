@@ -161,12 +161,19 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
    * The earliest instant the view needs — see `floorOfView`, which is shared
    * with `useHangouts` precisely so the two reads cannot disagree about it.
    *
-   * `deviceTimeZone()` rather than `useViewerZone()`, here and at the two sites
-   * below: this hook is instantiated in `AppShell` *above* the zone provider,
-   * and it never renders a frame anyway. The zone itself is the same value
-   * either way — the provider puts this very function's answer in the context.
+   * `deviceTimeZone()` rather than `useViewerZone()`: this hook is instantiated
+   * in `AppShell` *above* the zone provider, and it never renders a frame
+   * anyway. The zone is the same value either way — the provider puts this very
+   * function's answer in the context.
+   *
+   * Read in the render body and named in the dependencies rather than called
+   * inside the memo, so a device that changes zone re-derives the floor and the
+   * timeline instead of leaving them on the lattice of the country you left.
+   * The failed-write toast calls it again where it stands, because a toast is
+   * written once and thrown away and the live answer is the right one.
    */
-  const wantedFrom = useMemo(() => floorOfView(days, deviceTimeZone()), [days])
+  const timeZone = deviceTimeZone()
+  const wantedFrom = useMemo(() => floorOfView(days, timeZone), [days, timeZone])
 
   /**
    * How far back Postgres has already been asked. A ref, not state, because it
@@ -341,8 +348,8 @@ export const useAvailability = (days: readonly Date[]): AvailabilityStore => {
    * Sunday holds 02:00 twice.
    */
   const viewInstants = useMemo(
-    () => days.flatMap((day) => slotsOfDay(day, deviceTimeZone()).map((slot) => slot.start)),
-    [days]
+    () => days.flatMap((day) => slotsOfDay(day, timeZone).map((slot) => slot.start)),
+    [days, timeZone]
   )
 
   /**

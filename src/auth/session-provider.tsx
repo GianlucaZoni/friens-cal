@@ -178,6 +178,14 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
    * token ever since — this fires whenever a session resolves and the device
    * disagrees with what is stored, which includes the sign-in that made it.
    *
+   * **And again on focus**, which is what makes it follow a device that changed
+   * zone rather than only a session that resolved. A phone that lands and
+   * updates its clock does so with the tab in the background; `focus` and
+   * `visibilitychange` are the two events that fire when somebody comes back to
+   * it, and they are the same pair `useSlotClock` leans on for the sleeping
+   * laptop. Without them a Friend who flies stays on yesterday's zone in
+   * everybody else's roster until they reload.
+   *
    * **Not through `saveFriend`**, and not into local state at all. Nothing on
    * this screen reads your own mirrored zone — the grid reads the device and
    * the roster never measures you against yourself — so writing it back would
@@ -196,20 +204,32 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
 
   useEffect(() => {
     if (userId === null || fetched === null || fetched.forUserId !== userId) return
-    if (fetched.friend === null) return
+    const stored = fetched.friend
+    if (stored === null) return
 
-    const device = deviceTimeZone()
-    const written = `${userId}|${device}`
-    if (fetched.friend.time_zone === device || mirroredFor.current === written) return
-    mirroredFor.current = written
+    const mirror = () => {
+      const device = deviceTimeZone()
+      const written = `${userId}|${device}`
+      if (stored.time_zone === device || mirroredFor.current === written) return
+      mirroredFor.current = written
 
-    void supabase
-      .from('friend')
-      .update({ time_zone: device })
-      .eq('id', userId)
-      .then(({ error }) => {
-        if (error) console.error('Could not mirror the time zone:', error.message)
-      })
+      void supabase
+        .from('friend')
+        .update({ time_zone: device })
+        .eq('id', userId)
+        .then(({ error }) => {
+          if (error) console.error('Could not mirror the time zone:', error.message)
+        })
+    }
+
+    mirror()
+    window.addEventListener('focus', mirror)
+    document.addEventListener('visibilitychange', mirror)
+
+    return () => {
+      window.removeEventListener('focus', mirror)
+      document.removeEventListener('visibilitychange', mirror)
+    }
   }, [fetched, userId])
 
   const value = useMemo<SessionValue>(() => {

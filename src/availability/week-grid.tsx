@@ -453,10 +453,14 @@ const Gutter = ({ slots, className }: { slots: Slot[]; className?: string }) => 
           lattice, not a reading. On the Sunday the clocks go back, TWO of them
           read `02`, and the offset beside them is the only thing that says
           which is which.
+
+          The hour digits alone, except in a zone whose hours do not open on the
+          hour: a Friend in Kathmandu reads `00:15` down the gutter, and `00`
+          beside a row that begins a quarter past would be a fifteen-minute lie.
         */}
         {slot.opensHour ? (
           <>
-            {slot.label.slice(0, 2)}
+            {slot.label.endsWith(':00') ? slot.label.slice(0, 2) : slot.label}
             {slot.offset === null ? null : (
               <span className="text-[8px] text-muted-foreground/60">{slot.offset}</span>
             )}

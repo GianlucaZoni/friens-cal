@@ -402,3 +402,25 @@ test('a uuid survives the round trip through the key', () => {
 
   assert.deepEqual(heldFrom(store, 0), [{ friendId: id, start: EVENING }])
 })
+
+test('a quarter-hour zone has an hour gutter, on its own quarter', () => {
+  // The rule is the minutes the *day* opens on, not the string `:00`. Testing
+  // for `:00` in Kathmandu marks nothing, which is an hour gutter with no hours
+  // in it — and it also drops the heavier hour-boundary rule between rows.
+  const opens = slotsOfDay(ORDINARY, KATHMANDU).filter((slot) => slot.opensHour)
+
+  assert.equal(opens.length, 24)
+  assert.deepEqual(
+    opens.slice(0, 3).map((slot) => slot.label),
+    ['00:15', '01:15', '02:15']
+  )
+})
+
+test('both 02:00 rows of the autumn Sunday still open an hour', () => {
+  // The rule could have been "the first row whose hour differs from the one
+  // before", and that would silently drop the second 02:00 — two rows an hour
+  // apart that both open an hour, which is the case the gutter exists for.
+  const opens = slotsOfDay(CLOCKS_BACK, ROME).filter((slot) => slot.opensHour)
+
+  assert.equal(opens.filter((slot) => slot.label === '02:00').length, 2)
+})

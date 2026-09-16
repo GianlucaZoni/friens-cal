@@ -201,6 +201,11 @@ two Hangouts (one past, one future) with everyone on them. Then `08`–`11`.
   one.
 - The publication holds exactly `public.friend`.
 - `availability_on_the_slot_grid` rejects an off-grid instant (`23514`).
+- **All four files re-run cleanly, twice**, which found two idempotence bugs
+  that would only ever have bitten a second paste: `hangout_cal_id_fkey` had no
+  `drop constraint if exists` in front of it, and `hangout_id_cal_id_key` cannot
+  be dropped at all once §4's foreign key points at its index, so it is added
+  only if absent. Both are fixed and both are commented.
 - And the outage, demonstrated rather than predicted: an upsert with
   `onConflict: 'cal_id,friend_id,slot_start'` succeeds and is idempotent; the
   deployed client's `'friend_id,slot_start'` comes back `42P10 there is no

@@ -239,6 +239,13 @@ update public.hangout
 alter table public.hangout
   alter column cal_id set not null;
 
+-- No `on delete` action, which is the honest spelling of "a cal is never
+-- deleted" (`08-cal-and-membership.sql` §2 withholds the grant and the policy):
+-- the default `no action` means that if anybody ever reaches for one from the
+-- SQL Editor, the Hangouts in it refuse rather than vanishing quietly.
+alter table public.hangout
+  drop constraint if exists hangout_cal_id_fkey;
+
 alter table public.hangout
   add constraint hangout_cal_id_fkey
   foreign key (cal_id) references public.cal (id);
@@ -281,11 +288,23 @@ alter table public.hangout
 -- never has to be right about `friend_id`: make the wrong state
 -- unrepresentable rather than merely unlikely.
 -- ---------------------------------------------------------------------------
-alter table public.hangout
-  drop constraint if exists hangout_id_cal_id_key;
-
-alter table public.hangout
-  add constraint hangout_id_cal_id_key unique (id, cal_id);
+-- **Added if absent rather than dropped and re-added**, which is the one place
+-- in this file that breaks the pattern. §4's foreign key points at this
+-- constraint's index, so a re-run that dropped it would be refused (`2BP01`,
+-- "other objects depend on it") or, with `cascade`, would quietly take the
+-- foreign key with it and leave the table looking fine. Found by running this
+-- file twice, which is what `supabase/README.md` is for.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.hangout'::regclass
+       and conname  = 'hangout_id_cal_id_key'
+  ) then
+    alter table public.hangout
+      add constraint hangout_id_cal_id_key unique (id, cal_id);
+  end if;
+end $$;
 
 -- A plain btree on `cal_id`, which the exclusion constraint does not give us.
 -- That constraint builds a GiST index whose leading column *is* `cal_id`, and

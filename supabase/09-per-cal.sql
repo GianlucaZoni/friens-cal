@@ -72,9 +72,16 @@ declare
   the_cal uuid;
   attempt integer := 0;
 begin
+  -- `order by created_at limit 1`: a cal's name is not unique, and a Friend
+  -- may legitimately `create_cal('spiritually unemployed')` after the cutover.
+  -- Without the limit a re-run of this file would pass this block and then
+  -- fail two sections down with `21000 more than one row returned by a
+  -- subquery`, halfway through the outage. The oldest row is the seeded one.
   select c.id into the_cal
     from public.cal c
-   where c.name = 'spiritually unemployed';
+   where c.name = 'spiritually unemployed'
+   order by c.created_at
+   limit 1;
 
   if the_cal is null then
     loop
@@ -123,7 +130,8 @@ alter table public.availability
   add column if not exists cal_id uuid;
 
 update public.availability
-   set cal_id = (select c.id from public.cal c where c.name = 'spiritually unemployed')
+   set cal_id = (select c.id from public.cal c where c.name = 'spiritually unemployed'
+                  order by c.created_at limit 1)
  where cal_id is null;
 
 alter table public.availability
@@ -233,7 +241,8 @@ alter table public.hangout
   add column if not exists cal_id uuid;
 
 update public.hangout
-   set cal_id = (select c.id from public.cal c where c.name = 'spiritually unemployed')
+   set cal_id = (select c.id from public.cal c where c.name = 'spiritually unemployed'
+                  order by c.created_at limit 1)
  where cal_id is null;
 
 alter table public.hangout
@@ -489,13 +498,33 @@ create policy "a Member reads their cal's Participants"
 -- Flat trust again, and `05-hangout.sql` §4's long argument for it stands word
 -- for word — confirming seeds rows for other Friends, so a narrow policy would
 -- be a fence beside an open gate. What the cal adds is that the gate is now
--- inside a boundary.
+-- inside a boundary, and the boundary has to hold on BOTH columns.
+--
+-- The second clause is new and it is not optional. Inside one implicit Group
+-- every Friend was a Member, so "any friend_id" and "any Member" were the same
+-- set. With many cals they are not: without it a Member of cal A could seed a
+-- Friend who is not in cal A onto a cal-A Hangout, and that Friend could
+-- neither see the row (the select policy is cal-scoped) nor clear it (the
+-- update policy needs the same scope), and 10-lifecycle-per-cal.sql's drop
+-- trigger would never remove it (it only drops current Members). A Participant
+-- must be a Member of the cal at the moment they are seeded. Later they may
+-- leave; that is what `left_at` and the membership trigger are for, and it is
+-- why this is a policy rather than a foreign key to `membership`, which would
+-- cascade a departure straight through the cal's past Hangouts.
 drop policy if exists "any Friend seeds a Participant" on public.hangout_participant;
 drop policy if exists "any Member seeds a Participant in their cal" on public.hangout_participant;
 create policy "any Member seeds a Participant in their cal"
   on public.hangout_participant for insert
   to authenticated
-  with check (cal_id in (select private.my_cal_ids()));
+  with check (
+    cal_id in (select private.my_cal_ids())
+    and exists (
+      select 1
+        from public.membership m
+       where m.cal_id    = hangout_participant.cal_id
+         and m.friend_id = hangout_participant.friend_id
+    )
+  );
 
 -- Your own `left_at`, in a cal you are in. The grant is column-scoped to
 -- `left_at`, so `cal_id` cannot be written from a browser at all and this

@@ -26,7 +26,7 @@ Availability. Ticket 12 then found the publication drop has to land in the same
 window, or a deployed client is subscribed to a firehose that has stopped and
 has not yet learned to listen anywhere else.
 
-**Five files, run in order.**
+**Four files, run in order.**
 
 - `08-cal-and-membership.sql` — the `private` schema and the single policy
   helper `private.my_cal_ids() returns setof uuid`; `cal` and `membership`; the
@@ -73,7 +73,7 @@ shield is one predicate asking whether the Friend is still a Member.
 
 ## Acceptance criteria
 
-- [ ] The five migration files exist, are commented, and have been run in order
+- [ ] The four migration files exist, are commented, and have been run in order
       against the live project
 - [ ] `cal` and `membership` exist; one cal named "spiritually unemployed" holds
       every existing Friend, and every `availability`, `hangout` and

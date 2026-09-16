@@ -153,7 +153,7 @@ writing. Issue 04 caught leaving a Group, issue 07 caught inviting.
 Two things carry over to a grant even though it is not a function:
 
 - **Condition 4 applies unchanged.** The reasoning is a comment in
-  `11-invite.sql` beside the grant, because the file it contradicts
+  `13-invite.sql` beside the grant, because the file it contradicts
   (`07-allowlist.sql`) says in prose that this table grants nothing to
   `authenticated`, ever. A reader finding the grant without the comment will
   read it as a mistake and be right to.

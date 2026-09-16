@@ -307,6 +307,21 @@ begin
               ) as g(slot)
    where p.hangout_id = moved.id
      and p.left_at is null
+     /*
+      * Still a Member, as well as not Left. `mark_left_on_leaving_cal` marks
+      * Left on FUTURE Hangouts only, deliberately, so a Friend who left the
+      * cal keeps `left_at is null` on its past ones. `availability` now
+      * references `membership`, so writing a row for them here would abort the
+      * whole call with 23503. The UI never retimes a past Hangout, but this
+      * function has no past guard of its own and the API is reachable, so the
+      * membership check is what keeps a departed name from breaking a retime.
+      */
+     and exists (
+       select 1
+         from public.membership m
+        where m.cal_id    = moved.cal_id
+          and m.friend_id = p.friend_id
+     )
       on conflict (cal_id, friend_id, slot_start) do nothing;
 
   return moved;

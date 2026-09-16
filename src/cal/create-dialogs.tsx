@@ -13,9 +13,10 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { SaveError } from '@/identity/save-error'
 import type { Cal } from '@/lib/database.types'
 import { useRef, useState } from 'react'
-import { ArrowRightIcon, TriangleAlertIcon } from 'lucide-react'
+import { ArrowRightIcon } from 'lucide-react'
 
 /**
  * Creating a cal: the name, then the Code, in two dialogs in a row.
@@ -218,15 +219,7 @@ const NameDialog = ({
             </Field>
           </FieldGroup>
 
-          {error ? (
-            <div
-              role="alert"
-              className="flex gap-2 border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
-            >
-              <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          ) : null}
+          {error ? <SaveError message={error} /> : null}
 
           <DialogFooter>
             <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>

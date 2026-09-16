@@ -12,9 +12,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { SaveError } from '@/identity/save-error'
 import type { Cal } from '@/lib/database.types'
 import { useEffect, useRef, useState } from 'react'
-import { TriangleAlertIcon } from 'lucide-react'
 
 /**
  * Typing a Code, and being in.
@@ -164,15 +164,7 @@ export const JoinDialog = ({
           <FieldDescription>Paste works too, dashes and all.</FieldDescription>
         </Field>
 
-        {error ? (
-          <div
-            role="alert"
-            className="flex gap-2 border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
-          >
-            <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
-            <span>{error}</span>
-          </div>
-        ) : null}
+        {error ? <SaveError message={error} /> : null}
 
         <DialogFooter>
           <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>

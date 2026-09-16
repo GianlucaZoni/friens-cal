@@ -5,7 +5,7 @@ import { useSlotClock } from '@/candidates/use-slot-clock'
 import { Toaster } from '@/components/ui/toast'
 import { useHangouts } from '@/hangouts/use-hangouts'
 import { identityOf } from '@/identity/friend-row'
-import { setUpOnly, useRoster } from '@/roster/use-roster'
+import { useRoster } from '@/roster/use-roster'
 import { Calendar } from '@/shell/calendar'
 import { LeftPane } from '@/shell/left-pane'
 import { OfflineBanner } from '@/shell/offline-banner'
@@ -149,24 +149,10 @@ export const AppShell = () => {
    * has every Friend's rows and the roster has the Friends. `friends` rather
    * than `visible`, so a Hidden Friend's row still says whether they have said
    * anything — hiding is a query tool, not a reason to stop reporting.
-   */
-  /**
-   * The **whole** roster by id, Hidden included — the Hangouts' faces.
    *
-   * Here for the reason `silent` is here: two columns need it and neither can
-   * compute it for the other. The grid draws a Hangout's Participants on every
-   * Friend's calendar and the right pane draws them again on the pinned card,
-   * and both need the map the sidebar's filter has **not** touched — hiding
-   * never hides a Hangout (ticket 01), and ticket 16 rejected even muting a
-   * Hidden Participant's blob as a partial hide through the back door.
-   *
-   * `setUpOnly`, as everywhere: a Friend mid-setup has no hue and no face.
+   * `roster.friends` is the cal's **Members** as of issue 04, so a Friend in
+   * another cal no longer wears a silence dot on this one's sidebar.
    */
-  const friendsById = useMemo(
-    () => new Map(setUpOnly(roster.friends).map((friend) => [friend.id, friend])),
-    [roster.friends]
-  )
-
   const rosterIds = useMemo(() => roster.friends.map((friend) => friend.id), [roster.friends])
   /*
    * `silentAmong` is pulled off the store first, rather than reached through it
@@ -202,13 +188,15 @@ export const AppShell = () => {
                   availability={availability}
                   viewer={viewer}
                   /*
-                    Two rosters, because the grid draws two different objects
-                    from them: the wash is `visible` (a query — who you are
+                    Two sets, because the grid draws two different objects from
+                    them: the wash is `visible` (a query — the Members you are
                     currently trying to meet) and a Hangout's faces come from
-                    `friendsById` (a fact — hiding never hides a Hangout).
+                    `friendsById` (a fact — hiding never hides a Hangout, and
+                    neither does leaving the cal). The hook holds both, so
+                    nothing here can pick the wrong one.
                   */
                   visible={roster.visible}
-                  friendsById={friendsById}
+                  friendsById={roster.friendsById}
                   hangouts={hangouts.hangouts}
                   now={now}
                   tools={tools}
@@ -219,7 +207,6 @@ export const AppShell = () => {
                   roster={roster}
                   availability={availability}
                   hangouts={hangouts}
-                  friendsById={friendsById}
                   now={now}
                 />
               </ShellSidebar>

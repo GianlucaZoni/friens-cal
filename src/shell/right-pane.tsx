@@ -49,19 +49,11 @@ export const RightPane = ({
   roster,
   availability,
   hangouts,
-  friendsById,
   now,
 }: {
   roster: RosterState
   availability: AvailabilityStore
   hangouts: HangoutStore
-  /**
-   * The whole roster by id, Hidden included — **not** `list.friendsById`, which
-   * is built from `roster.visible` because that is the Candidate scan's query.
-   * A Hangout card draws a Hidden Friend's blob in full (ticket 01, ticket 16).
-   * Held in `AppShell`, because the grid reads the same map.
-   */
-  friendsById: ReadonlyMap<string, SetUpFriend>
   /** The start of the current Slot — the app's one clock, held in `AppShell`. */
   now: number
 }) => {
@@ -69,22 +61,18 @@ export const RightPane = ({
   const { state } = useSession()
   const viewerId = state.status === 'signed-in' ? state.user.id : null
 
-  /**
-   * Every Friend's **name** by id, including the ones mid-setup.
+  /*
+   * Both maps come off the roster as of issue 04, and neither is built here or
+   * in `AppShell` any more. They are every Friend in the product rather than
+   * the cal's Members: a Hangout card draws a Hidden Friend's blob in full
+   * (ticket 01, ticket 16), and a Participant who has left the cal keeps their
+   * face and their name on the Hangouts that already happened. `useRoster` owns
+   * that distinction now, so nothing down here can reach for the wrong array.
    *
-   * A second map beside `friendsById`, and the two really are different
-   * queries: a face needs a finished identity (`setUpOnly`) and a provenance
-   * line needs only a name. A Hangout confirmed by somebody who has not
-   * finished setup would otherwise read as *confirmed by someone else*, which
-   * is the fallback for a genuine race and not for a real Friend.
-   *
-   * Built here rather than in `AppShell` because the detail is the only reader
-   * — unlike `friendsById`, which the grid needs too.
+   * Still not `list.friendsById`, which is built from `roster.visible` because
+   * that is the Candidate scan's query.
    */
-  const namesById = useMemo(
-    () => new Map(roster.friends.map((friend) => [friend.id, friend.name])),
-    [roster.friends]
-  )
+  const { friendsById, namesById } = roster
 
   /**
    * The five lifecycle writes, as one object.

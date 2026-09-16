@@ -38,8 +38,21 @@ export type RowChange<Row> = {
   old_record: Row | null
 }
 
-/** The topic a cal's changes are published on. One per hook, per cal. */
-export const calTopic = (calId: string, stream: 'availability' | 'hangouts'): string =>
+/**
+ * The topic a cal's changes are published on. One per hook, per cal.
+ *
+ * Three streams for three hooks, and that is a rule rather than a coincidence:
+ * supabase-js discourages two channels on one topic, so two hooks sharing one
+ * would need a shared channel provider. `useHangouts` carries `hangout` and
+ * `hangout_participant` on a single topic because it is a single hook.
+ *
+ * `members` is the roster's, added by issue 04 and by ADR-0004's issue 14
+ * amendment (`supabase/12-cal-members-topic.sql`). `useRoster` is the one hook
+ * that also runs a channel on the other mechanism: `friend` stays table-wide on
+ * `postgres_changes`, because identity is global and a brand-new account
+ * reaches a running client nowhere else.
+ */
+export const calTopic = (calId: string, stream: 'availability' | 'hangouts' | 'members'): string =>
   `cal:${calId}:${stream}`
 
 const OPERATIONS: readonly string[] = ['INSERT', 'UPDATE', 'DELETE']

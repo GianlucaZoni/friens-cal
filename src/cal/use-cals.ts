@@ -1,14 +1,15 @@
 import { useSession } from '@/auth/use-session'
 import { calOrder, withCal } from '@/cal/cals'
-import { CREATE_UNAVAILABLE, joinErrorMessage, normaliseCode } from '@/cal/code'
+import { CREATE_UNAVAILABLE, RENAME_UNAVAILABLE, joinErrorMessage, normaliseCode } from '@/cal/code'
+import { CurrentCalContext } from '@/cal/use-current-cal'
 import type { Cal } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 /**
- * What a Join or a Create came back with: the cal, or one sentence.
+ * What a Join, a Create or a Rename came back with: the cal, or one sentence.
  *
- * A union rather than a throw, because both callers are dialogs and a dialog's
+ * A union rather than a throw, because every caller is a dialog and a dialog's
  * two jobs on a failure are to stay open and to say something. The sentence is
  * chosen here (`joinErrorMessage`) rather than in the dialog, so a second
  * caller cannot invent a different one.
@@ -23,10 +24,20 @@ export type CalsState = {
   create: (name: string) => Promise<CalResult>
   /** `join_cal(code)`. Idempotent: a Code you already hold returns its cal. */
   join: (code: string) => Promise<CalResult>
+  /**
+   * The one write to `cal` the client has, from both surfaces that list cals.
+   *
+   * Not an RPC: the update grant is column-scoped to `name` and the policy is
+   * Member-scoped (`08-cal-and-membership.sql` §5), so a plain update says
+   * everything a function would have and is audited by the grant rather than
+   * by ADR-0003.
+   */
+  rename: (calId: string, name: string) => Promise<CalResult>
 }
 
 /**
- * Every cal the signed-in Friend is in, and the two RPCs that change that set.
+ * Every cal the signed-in Friend is in, the two RPCs that change that set, and
+ * the one update that changes a name.
  *
  * ## It reads `cal`, and the Membership is the policy
  *
@@ -45,7 +56,13 @@ export type CalsState = {
  * There is no Realtime on this list and no poll. A Membership only changes
  * because this Friend did something, in this tab — nobody can add you to a cal
  * and nobody can remove you (CONTEXT.md) — so there is no remote write to hear
- * about. A rename in another tab is ticket 03's problem, not this one's.
+ * about.
+ *
+ * A **rename** is the one thing here that another Friend can change under you,
+ * and slice 03 left it that way rather than closing it: `cal` has no broadcast
+ * trigger, so hearing about one means a new migration for a name that is read
+ * in a dropdown and a dialog title. The name you see is the name as of your
+ * last read of it, and the next navigation corrects it.
  *
  * ## Not the same read as `CurrentCalProvider`'s
  *
@@ -59,6 +76,13 @@ export const useCals = (): CalsState => {
 
   const [cals, setCals] = useState<Cal[] | null>(null)
   const [failed, setFailed] = useState(false)
+  /*
+   * The cal on screen, when there is one. `useContext` rather than
+   * `useCurrentCal`, which throws: `/` is outside the provider and renames cals
+   * from a list, and the switcher is inside it and renames the one you are
+   * standing in. Only the second has anything to tell.
+   */
+  const renamed = useContext(CurrentCalContext)?.renamed
 
   useEffect(() => {
     if (userId === null) return
@@ -127,13 +151,40 @@ export const useCals = (): CalsState => {
     return { cal: data }
   }, [])
 
+  const rename = useCallback(
+    async (calId: string, name: string): Promise<CalResult> => {
+      const { data, error } = await supabase
+        .from('cal')
+        .update({ name: name.trim() })
+        .eq('id', calId)
+        .select('id, name, code, created_at')
+        // `maybeSingle` for the same reason the provider's read uses it: a
+        // Friend who is not a Member updates no rows, and the policy refusing
+        // an update is not a PostgREST error. Without it that comes back as
+        // `PGRST116` mixed in with the failures that really are failures.
+        .maybeSingle()
+      if (error || !data) {
+        console.error('Could not rename a cal:', error?.code, error?.message)
+        return { error: RENAME_UNAVAILABLE }
+      }
+      setCals((held) => withCal(held ?? [], data))
+      // And the cal on screen, if this is it. Doing it here rather than in the
+      // dialog is what stops a second caller renaming the cal in the list and
+      // leaving the shell around it saying the old name.
+      renamed?.(data)
+      return { cal: data }
+    },
+    [renamed]
+  )
+
   return useMemo(
     () => ({
       cals: cals ?? [],
       status: cals === null ? 'loading' : failed ? 'error' : 'ready',
       create,
       join,
+      rename,
     }),
-    [cals, failed, create, join]
+    [cals, failed, create, join, rename]
   )
 }

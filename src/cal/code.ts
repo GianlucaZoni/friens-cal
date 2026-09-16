@@ -1,6 +1,6 @@
 /**
  * The Code as a string: what a field may accept, what a paste becomes, and the
- * one sentence a failed Join is allowed to say.
+ * one sentence each failed write to `cal` is allowed to say.
  *
  * **No imports, deliberately.** These are the claims worth a test, and a test
  * file here runs under plain Node (`yarn test`), which cannot resolve the `@/`
@@ -90,6 +90,17 @@ export const JOIN_UNAVAILABLE = 'Could not join just now. Try again in a moment.
 
 /** Creating failed, which has only the one shape worth showing. */
 export const CREATE_UNAVAILABLE = 'Could not make that cal just now. Try again in a moment.'
+
+/**
+ * Renaming failed. Beside the other two rather than beside `renameTo`, so all
+ * three sentences a cal write can say are in one file and none of them can
+ * drift into a different voice.
+ *
+ * One shape again, and here that is a claim rather than laziness: the only
+ * refusals reachable are the network, the grant, and a Friend renaming a cal
+ * they have just left in another tab. The draft was checked before it was sent.
+ */
+export const RENAME_UNAVAILABLE = 'Could not rename it just now. Try again in a moment.'
 
 /**
  * What the Join dialog shows, whatever came back.

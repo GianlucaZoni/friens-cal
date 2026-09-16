@@ -1,0 +1,27 @@
+---
+name: "source-command-refactor"
+description: "Migrated source command `refactor`"
+---
+
+# source-command-refactor
+
+Use this skill when the user asks to run the migrated source command `refactor`.
+
+## Command Template
+
+# Refactor Code
+
+Refactor the selected code to improve:
+
+1. Readability: Clear naming, logical structure
+2. Maintainability: DRY principles, single responsibility
+3. Performance: Remove unnecessary operations (only if no behavior change)
+4. Modern patterns: Use current language features and idioms
+
+Rules:
+- Do not change external behavior or API
+- Preserve all existing functionality
+- Keep changes minimal and focused
+- Add brief comments for complex logic if helpful
+
+Show the refactored code and explain the key changes made.

@@ -10,6 +10,87 @@
 export type Database = {
   public: {
     Tables: {
+      /**
+       * A Group — named `cal` because `group` is a fully reserved word in
+       * Postgres (supabase/08-cal-and-membership.sql).
+       *
+       * No `time_zone`: a cal has no clock of its own, and every grid is drawn
+       * in its own viewer's zone. No provenance either — who made a cal is the
+       * Member with the earliest `joined_at`, and a `created_by` would be the
+       * first hint of an ownership model CONTEXT.md refuses.
+       */
+      cal: {
+        Row: {
+          id: string
+          name: string
+          code: string
+          created_at: string
+        }
+        /**
+         * Present because the generated shape has it, not because the browser
+         * can use it: `authenticated` holds no insert grant on `cal`. The one
+         * legitimate creator is the `create_cal` RPC, which also mints the
+         * Code.
+         */
+        Insert: {
+          id?: string
+          name: string
+          code: string
+          created_at?: string
+        }
+        /**
+         * `name` alone, because the update grant is column-scoped to it. The
+         * Code never changes (CONTEXT.md) and that is what makes it true.
+         */
+        Update: {
+          name?: string
+        }
+        Relationships: []
+      }
+      /**
+       * A Friend in a Group, and the hottest object in the schema:
+       * `private.my_cal_ids()` reads it, so every policy in the product depends
+       * on it.
+       *
+       * No `left_at`. Leaving is a hard delete — nothing asks whether somebody
+       * was ever in a cal, and the Hangouts they were on keep their name
+       * regardless.
+       */
+      membership: {
+        Row: {
+          cal_id: string
+          friend_id: string
+          joined_at: string
+        }
+        /**
+         * No insert grant either: `create_cal` and `join_cal` are the only
+         * legitimate creators, and a browser-side insert would make the Code
+         * unnecessary, which is the entire gate.
+         */
+        Insert: {
+          cal_id: string
+          friend_id: string
+          joined_at?: string
+        }
+        /** Empty: there is nothing on the row to change, and no update grant. */
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: 'membership_cal_id_fkey'
+            columns: ['cal_id']
+            isOneToOne: false
+            referencedRelation: 'cal'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'membership_friend_id_fkey'
+            columns: ['friend_id']
+            isOneToOne: false
+            referencedRelation: 'friend'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       friend: {
         Row: {
           id: string
@@ -61,33 +142,53 @@ export type Database = {
       }
       availability: {
         Row: {
+          /**
+           * Which cal this statement was made in. Availability is
+           * *(group, friend, slot)* — a Friend free on Saturday in two cals has
+           * said so twice, and neither row says anything about the other.
+           */
+          cal_id: string
           friend_id: string
           slot_start: string
         }
         Insert: {
+          cal_id: string
           friend_id: string
           slot_start: string
         }
         /**
          * Empty because there is **no update grant at all** on this table
-         * (supabase/02-availability.sql). The row is two columns and both are
-         * the key: changing either one is not an edit, it is a different row.
-         * Editing Availability is `insert` and `delete`.
+         * (supabase/02-availability.sql). The row is three columns and all
+         * three are the key: changing any one is not an edit, it is a different
+         * row. Editing Availability is `insert` and `delete`.
          */
         Update: Record<string, never>
         Relationships: [
           {
-            foreignKeyName: 'availability_friend_id_fkey'
-            columns: ['friend_id']
+            /**
+             * To `membership`, not to `friend` (supabase/09-per-cal.sql §2).
+             * That is what makes "you cannot hold Availability in a cal you are
+             * not in" structural, and what erases your Availability when you
+             * leave, by cascade rather than by anybody remembering to.
+             */
+            foreignKeyName: 'availability_membership_fkey'
+            columns: ['cal_id', 'friend_id']
             isOneToOne: false
-            referencedRelation: 'friend'
-            referencedColumns: ['id']
+            referencedRelation: 'membership'
+            referencedColumns: ['cal_id', 'friend_id']
           },
         ]
       }
       hangout: {
         Row: {
           id: string
+          /**
+           * The cal the plan is in. The exclusion constraint is
+           * `(cal_id with =, tstzrange(starts_at, ends_at) with &&)`, so the
+           * calendar holds one plan at a time **per cal** rather than one plan
+           * at a time.
+           */
+          cal_id: string
           starts_at: string
           ends_at: string
           title: string | null
@@ -118,6 +219,7 @@ export type Database = {
          */
         Insert: {
           id?: string
+          cal_id: string
           starts_at: string
           ends_at: string
           title?: string | null
@@ -136,6 +238,12 @@ export type Database = {
          * Hangout — and so is `edited_at`, which
          * `06-hangout-lifecycle.sql` §2 stamps from a trigger so that
          * provenance never carries a browser's clock.
+         *
+         * `cal_id` is absent for a third reason, which is neither of those: a
+         * plan does not move between cals. The update grant is table-wide, so
+         * `10-lifecycle-per-cal.sql` §1 pins the column in the same trigger
+         * that pins `created_by` — this type is what says so before the round
+         * trip silently does nothing.
          */
         Update: {
           starts_at?: string
@@ -143,11 +251,28 @@ export type Database = {
           title?: string | null
           edited_by: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'hangout_cal_id_fkey'
+            columns: ['cal_id']
+            isOneToOne: false
+            referencedRelation: 'cal'
+            referencedColumns: ['id']
+          },
+        ]
       }
       hangout_participant: {
         Row: {
           hangout_id: string
+          /**
+           * Redundant with its Hangout's, and **unable to disagree with it**:
+           * `hangout` carries a `unique (id, cal_id)` so this table can
+           * reference both columns together (supabase/09-per-cal.sql §4). It is
+           * here so the policy reads like every other one rather than being a
+           * per-row join through `hangout` — and it is what lets the broadcast
+           * trigger find the topic with no join at all.
+           */
+          cal_id: string
           friend_id: string
           left_at: string | null
         }
@@ -158,24 +283,25 @@ export type Database = {
          */
         Insert: {
           hangout_id: string
+          cal_id: string
           friend_id: string
           left_at?: string | null
         }
         /**
          * `left_at` alone, because the **grant** is column-scoped to it
-         * (05-hangout.sql §4). `hangout_id` and `friend_id` are the key and
-         * cannot be written at all, so RLS never has to defend them.
+         * (05-hangout.sql §4). `hangout_id`, `cal_id` and `friend_id` cannot be
+         * written at all, so RLS never has to defend them.
          */
         Update: {
           left_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: 'hangout_participant_hangout_id_fkey'
-            columns: ['hangout_id']
+            foreignKeyName: 'hangout_participant_hangout_fkey'
+            columns: ['hangout_id', 'cal_id']
             isOneToOne: false
             referencedRelation: 'hangout'
-            referencedColumns: ['id']
+            referencedColumns: ['id', 'cal_id']
           },
           {
             foreignKeyName: 'hangout_participant_friend_id_fkey'
@@ -208,6 +334,46 @@ export type Database = {
         }
         Returns: Database['public']['Tables']['hangout']['Row']
       }
+      /**
+       * Make a cal and become its first Member, in one transaction —
+       * `08-cal-and-membership.sql` §7.
+       *
+       * Two inserts that must not come apart: a failed second one orphans a cal
+       * nobody is in and nobody can ever reach, because you cannot join it
+       * without its Code and you cannot read its Code without being in it.
+       *
+       * One argument, and it says *what*, never *who* — ADR-0003 condition 1.
+       * The Code is minted inside, with retry on collision, which a column
+       * default cannot do for itself.
+       */
+      create_cal: {
+        Args: {
+          name: string
+        }
+        Returns: Database['public']['Tables']['cal']['Row']
+      }
+      /**
+       * Resolve a Code and become a Member — `08-cal-and-membership.sql` §7.
+       *
+       * Exposed and `security definer` because `cal` reads are
+       * membership-scoped, so a Friend cannot look up a cal they are not in
+       * yet. **Idempotent**: a Code for a cal you already hold returns the row
+       * rather than erroring, so a double-submit is harmless. A Code matching
+       * nothing raises, and the caller replaces the message — there is no
+       * enumeration oracle to protect, because guessing right puts you in a
+       * roster five friends look at.
+       *
+       * Case and surrounding space are normalised server-side, which is what
+       * lets the client's field accept `^[A-Za-z0-9]*$` — deliberately wider
+       * than the server's thirty characters, so it can never reject a keystroke
+       * the RPC would have accepted.
+       */
+      join_cal: {
+        Args: {
+          code: string
+        }
+        Returns: Database['public']['Tables']['cal']['Row']
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
@@ -222,6 +388,21 @@ export type Database = {
  * the account exists; the setup flow fills it in.
  */
 export type Friend = Database['public']['Tables']['friend']['Row']
+
+/**
+ * A Group, as Postgres holds it — `cal` in the schema, "friens cal" on screen.
+ *
+ * The domain term is Group; `group` is a fully reserved word in Postgres, so
+ * the identifier could not be it without quoting every reference.
+ */
+export type Cal = Database['public']['Tables']['cal']['Row']
+
+/**
+ * A Friend in a Group. `(cal_id, friend_id)` and when they arrived, and
+ * nothing else: identity is global (CONTEXT.md), so nothing varies per
+ * Membership.
+ */
+export type Membership = Database['public']['Tables']['membership']['Row']
 
 /**
  * The columns a Friend may write on their own row.

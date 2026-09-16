@@ -267,6 +267,15 @@ export const ShellSidebar = ({
           side="left"
           data-slot="sidebar"
           data-mobile="true"
+          /*
+            Ticket 12 decision 5 says there is no close button in this pane, and
+            until slice 03 nothing had noticed that `SheetContent` renders one
+            anyway. It sits `absolute top-3 right-3`, which was empty while the
+            header held a centred wordmark and is now where the cal switcher's
+            chevron is: a press meant for the switcher closed the drawer. The
+            backdrop and Escape still close it, which is what a sheet is for.
+          */
+          showCloseButton={false}
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground sm:max-w-(--sidebar-width)"
         >
           <SheetHeader className="sr-only">

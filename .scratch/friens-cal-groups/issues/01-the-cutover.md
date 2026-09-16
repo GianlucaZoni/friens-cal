@@ -206,6 +206,10 @@ two Hangouts (one past, one future) with everyone on them. Then `08`–`11`.
   which is what the write policies' second clause buys.
 - The publication holds exactly `public.friend`.
 - `availability_on_the_slot_grid` rejects an off-grid instant (`23514`).
+- **`00` through `11` apply cleanly to an empty database**, which is the run a
+  human's live paste most resembles and a different test from the incremental
+  one above. With no Friends on it the backfill makes the cal and no
+  Memberships, which is right rather than an edge case to handle.
 - **All four files re-run cleanly, twice**, which found two idempotence bugs
   that would only ever have bitten a second paste: `hangout_cal_id_fkey` had no
   `drop constraint if exists` in front of it, and `hangout_id_cal_id_key` cannot

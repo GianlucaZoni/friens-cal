@@ -13,11 +13,26 @@
  * that are easy to get wrong live — a range ending at midnight, and a range
  * that crosses one — and both are worth a test.
  *
+ * ## Where the `GMT+2` goes, and why only here
+ *
+ * This is the one function feeding the Candidate card, Hangout card, Hangout
+ * detail, drop dialog, retime dialog and day panel, so putting the frame on
+ * `range` is what makes **every string a person copies as text carry its own
+ * frame**. A screenshot pasted into the group chat otherwise says `Sat 20:00`
+ * with no way for the reader to tell whose evening that is.
+ *
+ * The suppression is already decided by the time it arrives: `zone.frame` is
+ * null unless at least one other Member reads a different clock, so every cal
+ * in existence today renders exactly what v1 rendered. `describeSlots` is
+ * deliberately left out — the "2 blocks from Mon 20:00" toast is gone in four
+ * seconds and nobody screenshots it.
+ *
  * **No `@/` imports, deliberately** — `when.test.ts` runs under plain Node.
  * `./…` and `../…` carry their extensions because Node's own resolver needs
  * them.
  */
 import { closingLabel } from '../availability/slots.ts'
+import type { ViewerZone } from '../shell/zone.ts'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 
@@ -27,7 +42,8 @@ export type When = {
   date: string
   /**
    * `20:00 – 23:30`, or `22:00 – 01:00 Sun` when it crosses midnight, or
-   * `22:00 – 24:00` when it ends at one.
+   * `22:00 – 24:00` when it ends at one — and `20:00 – 23:30 GMT+2` in a cal
+   * that spans zones.
    */
   range: string
 }
@@ -42,12 +58,15 @@ export type When = {
  * it ends at. `closingLabel` in `slots.ts` owns the `24:00` spelling and three
  * other call sites already use it.
  */
-export const whenOf = (start: number, end: number, timeZone: string): When => ({
-  date: format(zoned(start, timeZone), 'EEE d LLL'),
-  range: `${wallClock(start, timeZone)} – ${endLabel(end, timeZone)}${
-    crossesMidnight(start, end, timeZone) ? ` ${format(zoned(end, timeZone), 'EEE')}` : ''
-  }`,
-})
+export const whenOf = (start: number, end: number, zone: ViewerZone): When => {
+  const { timeZone, frame } = zone
+  return {
+    date: format(zoned(start, timeZone), 'EEE d LLL'),
+    range: `${wallClock(start, timeZone)} – ${endLabel(end, timeZone)}${
+      crossesMidnight(start, end, timeZone) ? ` ${format(zoned(end, timeZone), 'EEE')}` : ''
+    }${frame === null ? '' : ` ${frame}`}`,
+  }
+}
 
 /**
  * How a card names the Candidate it sits inside — ticket 16's annotation, so
@@ -62,10 +81,10 @@ export const whenOf = (start: number, end: number, timeZone: string): When => ({
 export const insideLabel = (
   container: { start: number; end: number },
   card: { start: number },
-  timeZone: string
+  zone: ViewerZone
 ): string => {
-  const { date, range } = whenOf(container.start, container.end, timeZone)
-  return civilDay(container.start, timeZone) === civilDay(card.start, timeZone)
+  const { date, range } = whenOf(container.start, container.end, zone)
+  return civilDay(container.start, zone.timeZone) === civilDay(card.start, zone.timeZone)
     ? `inside ${range}`
     : `inside ${date}, ${range}`
 }

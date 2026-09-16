@@ -275,13 +275,17 @@ test('an instant exactly on a boundary is its own slot', () => {
   assert.equal(slotContaining(onTheHalf, ROME).getTime(), onTheHalf.getTime())
 })
 
-test('the horizon is read off the wall clock, so a quarter-hour zone lands on its own lattice', () => {
-  // Kathmandu is UTC+05:45, so its slots begin at :00 and :30 *local* — which
-  // is :15 and :45 UTC. Dividing the epoch would put the horizon between two
-  // rows, and a Candidate clipped there would start at a time no row begins at.
+test('the horizon is on the absolute grid, in a quarter-hour zone as in any other', () => {
+  // **Reversed** by ticket 07 of `friens-cal-groups`. The horizon used to floor
+  // to the *wall clock's* half hour, which in Kathmandu (UTC+05:45) is :15 and
+  // :45 UTC — a lattice of its own. That was harmless while one zone was drawn
+  // for everybody. Now that every Friend draws in their own, two viewers on two
+  // lattices hold disjoint sets of instants, their overlap is empty, and no
+  // Candidate ever appears. So a Slot **is** an `epoch % 1800 = 0` instant, and
+  // this floors on the epoch in every zone.
   const instant = new Date(Date.UTC(2026, 8, 1, 7, 20))
 
-  assert.equal(slotContaining(instant, KATHMANDU).toISOString(), '2026-09-01T07:15:00.000Z')
+  assert.equal(slotContaining(instant).toISOString(), '2026-09-01T07:00:00.000Z')
 })
 
 test('the horizon is a real slot start on the day the clocks go back', () => {
@@ -290,7 +294,72 @@ test('the horizon is a real slot start on the day the clocks go back', () => {
   const inTheRepeatedHour = new Date(Date.UTC(2026, 9, 25, 0, 47))
   const starts = new Set(slotsOfDay(CLOCKS_BACK, ROME).map((slot) => slot.start.getTime()))
 
-  assert.ok(starts.has(slotContaining(inTheRepeatedHour, ROME).getTime()))
+  assert.ok(starts.has(slotContaining(inTheRepeatedHour).getTime()))
+})
+
+/* ================================================================== *
+ * One lattice, whoever is drawing on it
+ * ================================================================== */
+
+/** Whole-hour, half-hour and quarter-hour zones, plus one that shifts by 30. */
+const EVERY_KIND_OF_ZONE = [
+  ROME,
+  'America/New_York',
+  'Asia/Kolkata',
+  KATHMANDU,
+  'Australia/Eucla',
+  'Australia/Lord_Howe',
+  'UTC',
+]
+
+test('every slot of every day begins on the absolute half-hour grid', () => {
+  // The claim overlap depends on. Held-ness is `keys.has(slotKey(friend,
+  // instant))`, so two Friends drawing on lattices that do not coincide can
+  // never overlap — and `hangout_on_the_slot_grid` pins Hangouts to this same
+  // grid at the database, so the one path out of that state fails a check
+  // constraint rather than being merely empty.
+  for (const zone of EVERY_KIND_OF_ZONE) {
+    for (const day of [ORDINARY, CLOCKS_BACK, CLOCKS_FORWARD]) {
+      assert.ok(
+        slotsOfDay(day, zone).every((slot) => slot.start.getTime() % SLOT_MS === 0),
+        `${zone} on ${day.toDateString()} is off the grid`
+      )
+    }
+  }
+})
+
+test('a quarter-hour zone reads 00:15 rather than 00:00, and is still 48 rows', () => {
+  // The trade, stated: Kathmandu, Chatham and Eucla get a gutter whose hours
+  // are offset by a quarter, instead of a product that silently never works.
+  // Every whole- and half-hour zone — Europe, the Americas, India — is
+  // byte-identical to what v1 drew.
+  const day = slotsOfDay(ORDINARY, KATHMANDU)
+
+  assert.equal(day.length, 48)
+  assert.deepEqual(
+    day.slice(0, 3).map((slot) => slot.label),
+    ['00:15', '00:45', '01:15']
+  )
+})
+
+test('two Friends can have their short day on different dates in one week', () => {
+  // The EU moved its clocks on 2026-10-25 and the US moves on 2026-11-01, so
+  // one week holds both — and which day is short is a fact about the viewer,
+  // not about the cal (CONTEXT.md, **Slot**).
+  const usClocksBack = new Date(2026, 10, 1)
+
+  assert.equal(slotsOfDay(CLOCKS_BACK, ROME).length, 50)
+  assert.equal(slotsOfDay(CLOCKS_BACK, 'America/New_York').length, 48)
+  assert.equal(slotsOfDay(usClocksBack, ROME).length, 48)
+  assert.equal(slotsOfDay(usClocksBack, 'America/New_York').length, 50)
+})
+
+test('a zone that shifts by half an hour keeps a whole number of slots', () => {
+  // Lord Howe moves the clock 30 minutes rather than 60, which is the case a
+  // grid built on hours would drop a row on.
+  const shiftsBack = new Date(2027, 3, 4)
+
+  assert.equal(slotsOfDay(shiftsBack, 'Australia/Lord_Howe').length, 49)
 })
 
 /* ================================================================== *

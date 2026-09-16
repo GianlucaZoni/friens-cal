@@ -11,12 +11,7 @@
  * `BETWEEN` sits in the ten days of autumn where the EU has moved and the US
  * has not.
  */
-import {
-  deviceTimeZone,
-  offsetLabel,
-  spansZones,
-  zoneFrame,
-} from './zone.ts'
+import { deviceTimeZone, offsetLabel, spansZones, zoneFrame } from './zone.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

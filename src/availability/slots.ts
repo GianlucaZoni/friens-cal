@@ -24,7 +24,25 @@
  * way — only the drawing would be wrong.
  *
  * The time zone is a parameter rather than a constant here, because it is what
- * the tests vary. Its one home is `GROUP_TIME_ZONE` in `use-calendar-view.ts`.
+ * the tests vary. In the app it is always the **viewer's own** — see
+ * `deviceTimeZone` in `@/shell/zone`.
+ *
+ * ## Why a row is an `epoch % 1800 = 0` instant
+ *
+ * A day's first row is the first such instant *at or after* local midnight,
+ * rather than local midnight itself. Held-ness is `keys.has(slotKey(friend,
+ * instant))` and overlap is exact-instant matching, so two Friends drawing on
+ * their own local-midnight grids, in zones whose offsets differ by something
+ * that is not a multiple of thirty minutes, would hold **disjoint sets of
+ * instants**: the overlap count is zero, no Candidate ever appears, and nothing
+ * raises. At the database it is worse than silent — `hangout_on_the_slot_grid`
+ * pins Hangouts to this same absolute grid, so the one path out of that state
+ * fails a check constraint on confirm.
+ *
+ * For every whole-hour and half-hour zone, which is Europe, the Americas, India
+ * and nearly everywhere anyone in a cal will stand, this is byte-identical to
+ * what v1 drew. A `:45` zone (Kathmandu, Chatham, Eucla) gets a gutter reading
+ * `00:15, 00:45` instead of a product that silently never works.
  */
 import { TZDate, tzOffset } from '@date-fns/tz'
 import { groupBy, times } from 'lodash-es'
@@ -114,13 +132,10 @@ const civilMidnight = (year: number, month: number, date: number, timeZone: stri
  * the zone says the day is worth, divided by thirty minutes.
  */
 export const slotsOfDay = (day: Date, timeZone: string): Slot[] => {
-  const start = startOfDayInZone(day, timeZone).getTime()
-  const end = civilMidnight(
-    day.getFullYear(),
-    day.getMonth(),
-    day.getDate() + 1,
-    timeZone
-  ).getTime()
+  const start = onGrid(startOfDayInZone(day, timeZone).getTime())
+  const end = onGrid(
+    civilMidnight(day.getFullYear(), day.getMonth(), day.getDate() + 1, timeZone).getTime()
+  )
 
   const rows = times(Math.round((end - start) / SLOT_MS), (index) => {
     const instant = new Date(start + index * SLOT_MS)
@@ -146,6 +161,15 @@ export const slotsOfDay = (day: Date, timeZone: string): Slot[] => {
     shiftsClock: index > 0 && rows[index - 1].offsetMinutes !== offsetMinutes,
   }))
 }
+
+/**
+ * The first Slot at or after this instant.
+ *
+ * Rounding **up** rather than to the nearest: a day's first row must not begin
+ * before the day does, or the last half hour of the day before would be drawn
+ * twice — once at the bottom of one column and once at the top of the next.
+ */
+const onGrid = (instant: number): number => Math.ceil(instant / SLOT_MS) * SLOT_MS
 
 const pad = (value: number): string => String(value).padStart(2, '0')
 
@@ -247,25 +271,18 @@ export const heldFrom = (keys: ReadonlySet<string>, from: number): FreeSlot[] =>
  * The Slot containing this instant — the Candidate scan's **horizon**
  * (ticket 09 step 1), and the thing its timer is aligned to.
  *
- * Floors to the half hour *in the group's zone*, by reading the wall clock's
- * minutes rather than by dividing the epoch. For Rome the two agree — every
- * offset it has ever had is a whole number of hours, so its lattice is the
- * epoch's — but a zone at `+05:45` sits a quarter hour off it, and a horizon
- * that landed between two Slots would clip a Candidate to a time no row begins
- * at. Reading the minutes is right in every zone and costs one `TZDate`.
+ * **No zone**, and that is the point. v1 floored to the half hour of the
+ * *group's* wall clock, which for Rome is the same arithmetic and for a `+05:45`
+ * zone is a quarter hour off the epoch's grid. With every Friend drawing in
+ * their own zone that would be one lattice per viewer, which is the state in
+ * which nobody overlaps anybody; a Slot is an `epoch % 1800 = 0` instant
+ * instead, and this floors onto it.
  *
- * DST needs no special case for the same reason: the offset applies to the
- * instant handed in, so the answer is always the wall clock as it actually
- * reads at that moment.
+ * DST needs no case of its own for a stronger reason than before: nothing here
+ * reads a wall clock at all.
  */
-export const slotContaining = (instant: Date, timeZone: string): Date => {
-  const local = new TZDate(instant.getTime(), timeZone)
-  const intoSlot =
-    (local.getMinutes() % SLOT_MINUTES) * 60_000 +
-    local.getSeconds() * 1000 +
-    local.getMilliseconds()
-  return new Date(instant.getTime() - intoSlot)
-}
+export const slotContaining = (instant: Date): Date =>
+  new Date(instant.getTime() - (instant.getTime() % SLOT_MS))
 
 /**
  * The wall clock the end of a day reads as.

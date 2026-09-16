@@ -12,11 +12,17 @@
  * midnight must read `24:00` and stay on the day it was offered on, and one
  * that crosses midnight must name the day it lands on.
  */
+import type { ViewerZone } from '../shell/zone.ts'
 import { insideLabel, whenOf } from './when.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const ROME = 'Europe/Rome'
+/** A cal nobody is abroad in — every cal today, and no string names a frame. */
+const ROME: ViewerZone = { timeZone: 'Europe/Rome', frame: null }
+/** The same viewer, in a cal that does span zones. */
+const ROME_ABROAD: ViewerZone = { timeZone: 'Europe/Rome', frame: 'GMT+2' }
+/** Another Member of that cal, reading the same instants six hours earlier. */
+const NEW_YORK: ViewerZone = { timeZone: 'America/New_York', frame: 'GMT-4' }
 
 /** Rome is UTC+2 in September, so 18:00 UTC is 20:00 on the card. */
 const rome = (hour: number, minute = 0, day = 5) => Date.UTC(2026, 8, day, hour - 2, minute)
@@ -57,5 +63,41 @@ test('a sub-Candidate on the far side of midnight names the containing day too',
   assert.equal(
     insideLabel({ start: rome(22), end: rome(2, 0, 6) }, { start: rome(0, 30, 6) }, ROME),
     'inside Sat 5 Sep, 22:00 – 02:00 Sun'
+  )
+})
+
+/* ================================================================== *
+ * Naming the frame, in a cal that spans zones
+ * ================================================================== */
+
+test('a card names its frame as an offset when the cal spans zones', () => {
+  assert.deepEqual(whenOf(rome(20), rome(23, 30), ROME_ABROAD), {
+    date: 'Sat 5 Sep',
+    range: '20:00 – 23:30 GMT+2',
+  })
+})
+
+test('the frame goes last, after the day a crossing range lands on', () => {
+  assert.equal(whenOf(rome(22), rome(1, 0, 6), ROME_ABROAD).range, '22:00 – 01:00 Sun GMT+2')
+})
+
+test('two Members read the same Candidate as two evenings, each named', () => {
+  // One Candidate, one pair of instants, two cards. Neither is translated into
+  // anything: there is no third clock to translate into (CONTEXT.md,
+  // **Availability**).
+  assert.deepEqual(whenOf(rome(20), rome(23), ROME_ABROAD), {
+    date: 'Sat 5 Sep',
+    range: '20:00 – 23:00 GMT+2',
+  })
+  assert.deepEqual(whenOf(rome(20), rome(23), NEW_YORK), {
+    date: 'Sat 5 Sep',
+    range: '14:00 – 17:00 GMT-4',
+  })
+})
+
+test('a sub-Candidate names the frame once, on the containing range', () => {
+  assert.equal(
+    insideLabel({ start: rome(19), end: rome(21, 30) }, { start: rome(20) }, ROME_ABROAD),
+    'inside 19:00 – 21:30 GMT+2'
   )
 })

@@ -286,3 +286,16 @@ Two things for a human, neither of them the cutover:
    are unrun against the live project, so this page cannot work there until
    they are. Deploying this client before them turns `/` into the error state, since
    `cal` does not exist yet.
+
+## Comments
+
+### The non-Member dead end became the settled redirect — 2026-09-16
+
+Slice 05's review noticed that planning ticket 10 §9 decided a non-Member at
+`/g/:id` redirects silently to `/`, and rejected a dedicated screen by name: it
+would be a second place to type a Code, and against an opaque id it confirms
+to a guesser that a cal exists. This slice shipped that screen. The
+orchestrator replaced it with `<Navigate to="/" replace />` in
+`current-cal-provider.tsx` after the merge, with the reasoning beside it. The
+"cannot reach that cal" failure state stays, because a network failure is not
+a membership answer.

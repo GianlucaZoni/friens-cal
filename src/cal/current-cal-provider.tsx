@@ -1,11 +1,10 @@
 import { useSession } from '@/auth/use-session'
 import { isCalId } from '@/cal/cals'
 import { CurrentCalContext } from '@/cal/use-current-cal'
-import { buttonVariants } from '@/components/ui/button'
 import type { Cal } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Navigate, useParams } from 'react-router'
 
 /**
  * A resolved read, tagged with which id it answers.
@@ -143,27 +142,18 @@ export const CurrentCalProvider = ({ children }: { children: React.ReactNode }) 
   }
 
   if (current === null) {
-    return (
-      <DeadEnd role="status">
-        <p>
-          That is not one of your friens cals. Either the address is wrong, or you need its
-          six-character code.
-        </p>
-        {/*
-          `buttonVariants` on a `Link`, not `Button render={<Link/>}`. Base UI's
-          Button defaults `nativeButton` to true and warns when what it renders
-          is not a `<button>`; turning that off makes it write
-          `role="button"` onto an `<a>`, which is worse than the warning — this
-          control goes somewhere, and a link that claims to be a button loses
-          the middle-click, the context menu and the "open in new tab" a Friend
-          staring at a dead end is quite likely to want. So it stays a link and
-          only borrows the look.
-        */}
-        <Link to="/" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          Your friens cals
-        </Link>
-      </DeadEnd>
-    )
+    /*
+     * Not one of your cals, or not a cal at all: the same answer for both, and
+     * the answer is `/`, silently (planning ticket 10 §9). `/` is always the
+     * join-or-create page and already carries the Code field, so a screen here
+     * would be a second place to type a Code. And the id is opaque (planning
+     * ticket 01): a page that says "not one of yours" to a guessed id tells the
+     * guesser a cal exists behind it, where the redirect tells them nothing.
+     * The `cal` read cannot tell the two cases apart either, which is the
+     * policy working. Slice 02 shipped a dead-end screen here; this reverts it
+     * to the settled decision.
+     */
+    return <Navigate to="/" replace />
   }
 
   return (

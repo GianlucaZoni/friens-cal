@@ -23,6 +23,21 @@ export type CurrentCal = {
   cal: Cal
   /** Its id, which is what every query and every Realtime topic needs. */
   calId: string
+  /**
+   * A row this tab has just written, folded back into the cal on screen.
+   *
+   * Renaming is the only write to `cal` there is, the update grant being scoped
+   * to `name` and the Code never changing, and it can be issued from two
+   * places: the switcher, which is inside this provider, and `/`'s row, which
+   * is not. Both go through `useCals`, which calls this when there is a
+   * provider above it. Without it the switcher's own trigger and the invite
+   * dialog's sentence would keep saying the old name until the next
+   * navigation, and that is the one moment a Friend is looking straight at it.
+   *
+   * A row for any other cal is ignored, so a rename on `/` needs no branch of
+   * its own.
+   */
+  renamed: (cal: Cal) => void
 }
 
 export const CurrentCalContext = createContext<CurrentCal | null>(null)

@@ -4,7 +4,7 @@ import { CurrentCalContext } from '@/cal/use-current-cal'
 import { buttonVariants } from '@/components/ui/button'
 import type { Cal } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 
 /**
@@ -93,6 +93,23 @@ export const CurrentCalProvider = ({ children }: { children: React.ReactNode }) 
     }
   }, [userId, calId])
 
+  /**
+   * A rename this tab just wrote, folded in.
+   *
+   * The id is checked rather than assumed. The same `useCals` renames cals
+   * from `/`'s list too, where most of them are not the one on screen, and
+   * checking here is what lets that call site stay one line with no branch.
+   *
+   * Not a re-read. The row PostgREST hands back is the row that was written,
+   * so asking for it again would be a second round trip to learn what the
+   * first one already said.
+   */
+  const renamed = useCallback((next: Cal) => {
+    setFetched((held) =>
+      held === null || held.forCalId !== next.id ? held : { ...held, cal: next }
+    )
+  }, [])
+
   // Derived, never assigned in the effect: a stale answer is one whose
   // `forCalId` is not the id in the URL, and comparing is what makes routing
   // from one cal to another show the loading branch rather than the cal you
@@ -100,7 +117,10 @@ export const CurrentCalProvider = ({ children }: { children: React.ReactNode }) 
   // effect, which is a cascading render for the same result.
   const resolved = calId !== null && fetched?.forCalId === calId ? fetched : null
   const cal = resolved?.cal ?? null
-  const current = useMemo(() => (cal === null ? null : { cal, calId: cal.id }), [cal])
+  const current = useMemo(
+    () => (cal === null ? null : { cal, calId: cal.id, renamed }),
+    [cal, renamed]
+  )
 
   if (calId !== null && resolved === null) {
     return (

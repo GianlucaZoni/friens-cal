@@ -5,7 +5,7 @@
  *
  *     yarn test
  */
-import { CAL_NAME_MAX, calOrder, calPath, isCalId, withCal } from './cals.ts'
+import { CAL_NAME_MAX, calOrder, calPath, isCalId, renameTo, withCal } from './cals.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -122,4 +122,48 @@ test('a name caps at forty characters where it is typed', () => {
   // cal name sits in a list row beside a six-character Code and, from ticket
   // 03, in a dropdown pinned to its trigger's width.
   assert.equal(CAL_NAME_MAX, 40)
+})
+
+/* ================================================================== *
+ * Renaming: what a typed draft is worth
+ * ================================================================== */
+
+test('a rename trims, the way `create_cal` does server-side', () => {
+  assert.equal(renameTo('  climbing crew  ', 'padel'), 'climbing crew')
+})
+
+test('a draft that is empty or all spaces renames nothing', () => {
+  // `cal_has_a_name` is `length(btrim(name)) between 1 and 60`, so a name of
+  // spaces is a 23514 rather than a rename. The disabled button is what keeps a
+  // Friend from meeting it.
+  assert.equal(renameTo('', 'padel'), null)
+  assert.equal(renameTo('   ', 'padel'), null)
+})
+
+test('a draft that is the name it already has renames nothing', () => {
+  // Not tidiness: it is what makes the Rename button say whether pressing it
+  // would do anything. Trailing space is the case that would otherwise write a
+  // row for no change.
+  assert.equal(renameTo('padel', 'padel'), null)
+  assert.equal(renameTo(' padel ', 'padel'), null)
+})
+
+test('changing only the case is a rename', () => {
+  // `calOrder` sorts case-insensitively, so the list will not move. The name a
+  // Friend typed is still the name they meant.
+  assert.equal(renameTo('Padel', 'padel'), 'Padel')
+})
+
+test('a name at the cap is fine and one over it is refused', () => {
+  const atCap = 'x'.repeat(CAL_NAME_MAX)
+  assert.equal(renameTo(atCap, 'padel'), atCap)
+  // The input's `maxLength` is what a Friend sees stop them. This is the second
+  // line, for a draft that reached here some other way: the column allows
+  // sixty, so nothing downstream would refuse it.
+  assert.equal(renameTo('x'.repeat(CAL_NAME_MAX + 1), 'padel'), null)
+})
+
+test('the cap is measured after trimming', () => {
+  const atCap = 'x'.repeat(CAL_NAME_MAX)
+  assert.equal(renameTo(`  ${atCap}  `, 'padel'), atCap)
 })

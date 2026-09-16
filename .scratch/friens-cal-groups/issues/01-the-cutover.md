@@ -73,9 +73,9 @@ shield is one predicate asking whether the Friend is still a Member.
 
 ## Acceptance criteria
 
-- [ ] The four migration files exist, are commented, and have been run in order
+- [x] The four migration files exist, are commented, and have been run in order
       against the live project
-- [ ] `cal` and `membership` exist; one cal named "spiritually unemployed" holds
+- [x] `cal` and `membership` exist; one cal named "spiritually unemployed" holds
       every existing Friend, and every `availability`, `hangout` and
       `hangout_participant` row is backfilled to it
 - [x] `create_cal` and `join_cal` satisfy all four of ADR-0003's conditions, with
@@ -326,3 +326,10 @@ criterion here:
   advisories train everybody to ignore the advisor.
 - **The other verify scripts need their own pass** before they mean anything
   again. See "What this leaves behind" above.
+
+### Run against the live project, 2026-09-16
+
+Applied with `supabase db query --linked --project-ref mvvxyzqbdkkauxkltavw -f <file>`
+rather than the SQL Editor. The post-checks are recorded in
+`.scratch/friens-cal-groups/cutover-runbook.md`. The criteria above that waited
+on the run are ticked; the browser criteria still wait on real accounts.

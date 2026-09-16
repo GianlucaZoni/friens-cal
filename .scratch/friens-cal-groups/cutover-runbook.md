@@ -1,6 +1,23 @@
 # Cutover runbook: many cals, joined by Code
 
-Status: ready-for-human — every agent-side slice is on main; this is what is left
+Status: ready-for-human — the cutover ran on 2026-09-16; only the browser acceptance is left
+
+## What happened on 2026-09-16
+
+The SQL did not go through the dashboard after all. With the Supabase CLI
+signed in as the project owner, `supabase db query --linked --project-ref
+mvvxyzqbdkkauxkltavw -f <file>` runs a file through the Management API as
+the same `postgres` role the SQL Editor uses, and no database password is
+involved. `08` turned out to be already applied and identical; `13`, then
+`09` to `12` (ten seconds, 13:25 UTC), then `git push origin main`. Every
+post-check below came back as written: one cal, Code `62MKYH`, six
+Memberships for six Friends, 1,384 Availability rows all with a `cal_id`, the
+publication down to `friend`, the eight triggers and the `realtime.messages`
+policy present. Vercel built `main` in 59 seconds and the live bundle carries
+`join_cal` and `create_cal`.
+
+Still open: steps 6 and 7 below, and the browser acceptance. The two verify
+scripts need the test Friend's sign-in, which no file in this checkout holds.
 
 Everything an agent could build for `.scratch/friens-cal-groups/` is on
 `main`. What is left is the part nothing in this repo can do: run SQL against

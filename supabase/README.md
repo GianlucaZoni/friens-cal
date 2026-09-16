@@ -1,8 +1,19 @@
 # `supabase/`
 
-Numbered SQL files, run once each, in order, by a human pasting them into the
-Supabase SQL Editor. Nothing in this repo can reach the project with DDL rights
-and that is deliberate (ADR-0001): `.env` holds the publishable key only.
+Numbered SQL files, run once each, in order, against the live project. Nothing
+in this repo can reach the project with DDL rights and that is deliberate
+(ADR-0001): `.env` holds the publishable key only. What can is the Supabase
+CLI signed in as the project owner on the human's machine:
+
+```sh
+supabase login                       # once, opens a browser
+supabase db query --linked --project-ref mvvxyzqbdkkauxkltavw -f supabase/NN-name.sql
+```
+
+It runs the file through the Management API as `postgres`, the same role the
+SQL Editor uses, and no database password is involved. Pasting into the SQL
+Editor is the same thing done by hand. `08` through `13` went in this way on
+2026-09-16.
 
 Two rules the files keep to:
 

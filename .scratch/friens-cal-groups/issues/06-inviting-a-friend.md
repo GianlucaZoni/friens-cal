@@ -47,8 +47,8 @@ cal. What a human pastes into a message is not what the row holds.
 
 ## Acceptance criteria
 
-- [ ] `13-invite.sql` exists, is commented, and has been run
-- [ ] `allowlist` has `invited_by`; the five seeded rows are null and stay null
+- [x] `13-invite.sql` exists, is commented, and has been run
+- [x] `allowlist` has `invited_by`; the five seeded rows are null and stay null
 - [x] The check constraint rejects a trailing space
 - [x] A Friend can insert an allowlist row only with their own id as inviter
 - [x] No client can read `allowlist`, and this is asserted rather than assumed
@@ -256,3 +256,10 @@ be pasted before or after it.
 Then, from the repo, `node --env-file=.env scripts/verify-allowlist.mjs`. It
 will leave `invite-probe@friens-cal.invalid` on the list and print the
 statement that removes it.
+
+### Run against the live project, 2026-09-16
+
+Applied with `supabase db query --linked --project-ref mvvxyzqbdkkauxkltavw -f <file>`
+rather than the SQL Editor. The post-checks are recorded in
+`.scratch/friens-cal-groups/cutover-runbook.md`. The criteria above that waited
+on the run are ticked; the browser criteria still wait on real accounts.

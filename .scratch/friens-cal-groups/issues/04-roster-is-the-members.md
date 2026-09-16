@@ -64,7 +64,7 @@ before you belong anywhere, and hue is global.
 
 ## Acceptance criteria
 
-- [ ] `12-cal-members-topic.sql` exists, is commented, and has been run
+- [x] `12-cal-members-topic.sql` exists, is commented, and has been run
 - [x] The sidebar lists only the current cal's Members
 - [x] `friendsById` and `namesById` are built inside `useRoster` from the full
       `friend` set, and no call site builds its own
@@ -225,3 +225,10 @@ production — the sidebar's Members, and a Friend joining appearing live — ar
 worth repeating once on the live project, with two browsers, after the cutover.
 They are ticked because they were run end to end against a stack built from
 these exact migrations, not because they were reasoned about.
+
+### Run against the live project, 2026-09-16
+
+Applied with `supabase db query --linked --project-ref mvvxyzqbdkkauxkltavw -f <file>`
+rather than the SQL Editor. The post-checks are recorded in
+`.scratch/friens-cal-groups/cutover-runbook.md`. The criteria above that waited
+on the run are ticked; the browser criteria still wait on real accounts.

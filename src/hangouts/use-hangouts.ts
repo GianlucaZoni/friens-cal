@@ -1,6 +1,7 @@
 import { useSession } from '@/auth/use-session'
 import { floorOfView } from '@/availability/slots'
 import { withRetries } from '@/availability/write-model'
+import { useCurrentCal } from '@/cal/use-current-cal'
 import type { Candidate, HangoutRange } from '@/candidates/candidates'
 import { whenOf } from '@/candidates/when'
 import { toast } from '@/components/ui/toast-manager'
@@ -11,6 +12,7 @@ import {
   wouldAutoCancel,
   type Hangout,
 } from '@/hangouts/hangout'
+import { calTopic, rowChange } from '@/lib/broadcast'
 import type { HangoutParticipantRow, HangoutRow } from '@/lib/database.types'
 import { PAGE_SIZE, readEveryPage } from '@/lib/paged-read'
 import { supabase } from '@/lib/supabase'
@@ -90,10 +92,18 @@ export type HangoutStore = {
  * which looks exactly like a Hangout nobody has edited.
  */
 const HANGOUT_COLUMNS =
-  'id, starts_at, ends_at, title, created_at, created_by, edited_by, edited_at'
+  'id, cal_id, starts_at, ends_at, title, created_at, created_by, edited_by, edited_at'
 
-/** The three Participant columns, for the same reason. */
-const PARTICIPANT_COLUMNS = 'hangout_id, friend_id, left_at'
+/**
+ * The four Participant columns, for the same reason.
+ *
+ * `cal_id` is in both lists even though the store never reads it and every row
+ * in the store is in the same cal. The reason is that a broadcast payload
+ * carries the **whole** row, so a row that arrived over Realtime and a row that
+ * arrived over the read would otherwise be two different shapes folded into one
+ * map — and the one this list leaves out is the one a later reader trips over.
+ */
+const PARTICIPANT_COLUMNS = 'hangout_id, cal_id, friend_id, left_at'
 
 /**
  * The sibling case of ticket 08 §8, and it needs client copy because there is
@@ -160,6 +170,7 @@ const participantKey = (hangoutId: string, friendId: string) => `${hangoutId}|${
 export const useHangouts = (days: readonly Date[]): HangoutStore => {
   const { state } = useSession()
   const userId = state.status === 'signed-in' ? state.user.id : null
+  const { calId } = useCurrentCal()
 
   const [rows, setRows] = useState<ReadonlyMap<string, HangoutRow>>(() => new Map())
   const [people, setPeople] = useState<ReadonlyMap<string, HangoutParticipantRow>>(() => new Map())
@@ -204,6 +215,10 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
       supabase
         .from('hangout')
         .select(HANGOUT_COLUMNS)
+        // One cal's plans. The select policy scopes this to the cals the Friend
+        // is a Member of; this narrows it to the one on screen, which the policy
+        // cannot do and should not try to.
+        .eq('cal_id', calId)
         // `ends_at`, not `starts_at`: a Hangout that began before the floor and
         // is still running is the one case where the two differ, and it is the
         // one the grid must not lose.
@@ -217,6 +232,9 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
       supabase
         .from('hangout_participant')
         .select(PARTICIPANT_COLUMNS)
+        // Still unfiltered by Hangout — orphans are simply never looked up —
+        // but scoped to the cal, which is what the redundant column bought.
+        .eq('cal_id', calId)
         .order('hangout_id')
         .range(index * PAGE_SIZE, index * PAGE_SIZE + PAGE_SIZE - 1)
 
@@ -261,30 +279,40 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
         setLoadedFrom((current) => (current === null ? wantedFrom : Math.min(current, wantedFrom)))
       }
     )
-  }, [userId, wantedFrom])
+  }, [userId, calId, wantedFrom])
 
   /**
-   * Everyone else's confirmations, cancellations and departures, as they happen.
+   * Everyone else's confirmations, cancellations and departures in this cal, as
+   * they happen.
    *
-   * `postgres_changes` and **unfiltered**, the choices `useAvailability`
-   * documents at length: Broadcast's scale is three orders of magnitude past a
-   * group of nine, and there is no filter expression for "rows overlapping the
-   * visible week" that would not need the channel torn down on every calendar
-   * navigation.
+   * **Broadcast, on one private topic carrying two tables.** Both tables left
+   * the `supabase_realtime` publication in `11-realtime-per-cal.sql`, so
+   * `postgres_changes` delivers nothing here at all; the argument is
+   * [ADR-0004](../../docs/adr/0004-broadcast-for-cal-scoped-realtime.md)'s and
+   * `use-availability.ts` carries the version worth reading at a call site.
    *
-   * All three events on both tables, and each one is reachable here where
+   * `cal:<id>:hangouts` is one topic for both tables because this hook was
+   * always one channel, and the topics were chosen to map onto the hooks rather
+   * than onto the tables. The cost is that every handler has to say which table
+   * it is folding, which is `rowChange`'s second argument and the only thing
+   * keeping a Participant row out of the Hangout map.
+   *
+   * All three operations on both tables, and each one is reachable here where
    * `availability` could skip `update`:
    *
-   * - `hangout` **update** is issue 10's retime, which moves a plan under
+   * - `hangout` **UPDATE** is issue 10's retime, which moves a plan under
    *   everyone at once — the one event in this product that changes a fact
    *   somebody has already read.
-   * - `hangout` **delete** is cancellation, which is a hard delete with no
-   *   tombstone (ticket 08 §3), so this stream *is* the notification. The
-   *   payload carries the primary key, which is what the store is keyed on —
-   *   hence no `replica identity full` (`05-hangout.sql` §5).
-   * - `hangout_participant` **update** is Leave and re-Join; its **delete** is
-   *   the drop trigger (issue 10) removing somebody whose Availability shrank,
-   *   and its payload carries `(hangout_id, friend_id)`, again the whole key.
+   * - `hangout` **DELETE** is cancellation, which is a hard delete with no
+   *   tombstone (ticket 08 §3), so this stream *is* the notification.
+   * - `hangout_participant` **UPDATE** is Leave and re-Join — and now also the
+   *   Left that leaving a *cal* writes, from `10-lifecycle-per-cal.sql` §4. Its
+   *   **DELETE** is the drop trigger removing somebody whose Availability
+   *   shrank.
+   *
+   * The delete payloads now carry the whole `OLD` row rather than the primary
+   * key, which changes nothing here — the store is keyed on the id and the
+   * pair — but it is why these handlers read the row rather than a `Partial`.
    *
    * Your own echo is a no-op rather than filtered out, for the reason issue 07
    * settled: the keys are natural, so an echo folds onto the row it came from —
@@ -293,67 +321,65 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
   useEffect(() => {
     if (userId === null) return
 
+    const foldRow = (payload: unknown) => {
+      const change = rowChange<HangoutRow>(payload, 'hangout')
+      if (change === null) return
+
+      if (change.operation === 'DELETE') {
+        const id = change.old_record?.id
+        if (id === undefined) return
+        setRows((current) => without(current, [id]))
+        /*
+         * The participants go with it. `on delete cascade` has already removed
+         * them in Postgres, and their own DELETE events may or may not arrive
+         * first — so the store drops them here rather than waiting, or a
+         * cancelled plan would leave its Participant rows behind as orphans
+         * that the next Hangout at the same id could never have.
+         */
+        setPeople((current) => withoutHangout(current, id))
+        return
+      }
+
+      const row = change.record
+      if (row === null) return
+      setRows((current) => merged(current, [row], (it) => it.id))
+    }
+
+    const foldPerson = (payload: unknown) => {
+      const change = rowChange<HangoutParticipantRow>(payload, 'hangout_participant')
+      if (change === null) return
+
+      if (change.operation === 'DELETE') {
+        const gone = change.old_record
+        if (gone === null) return
+        setPeople((current) => without(current, [participantKey(gone.hangout_id, gone.friend_id)]))
+        return
+      }
+
+      const row = change.record
+      if (row === null) return
+      setPeople((current) =>
+        merged(current, [row], (it) => participantKey(it.hangout_id, it.friend_id))
+      )
+    }
+
+    /** One handler per operation, each offered to both tables. */
+    const fold = (payload: unknown) => {
+      foldRow(payload)
+      foldPerson(payload)
+    }
+
     const channel = supabase
-      .channel('hangout')
-      .on<HangoutRow>(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'hangout' },
-        ({ new: row }) => setRows((current) => merged(current, [row], (it) => it.id))
-      )
-      .on<HangoutRow>(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'hangout' },
-        ({ new: row }) => setRows((current) => merged(current, [row], (it) => it.id))
-      )
-      .on<HangoutRow>(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'hangout' },
-        ({ old: { id } }) => {
-          // `old` is `Partial<HangoutRow>` in the types, and honestly so: under
-          // a narrower replica identity than this table happens to have, it
-          // would be. Nothing to do without the key.
-          if (id === undefined) return
-          setRows((current) => without(current, [id]))
-          /*
-           * The participants go with it. `on delete cascade` has already
-           * removed them in Postgres, and their own DELETE events may or may
-           * not arrive first — so the store drops them here rather than waiting,
-           * or a cancelled plan would leave its Participant rows behind as
-           * orphans that the next Hangout at the same id could never have.
-           */
-          setPeople((current) => withoutHangout(current, id))
-        }
-      )
-      .on<HangoutParticipantRow>(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'hangout_participant' },
-        ({ new: row }) =>
-          setPeople((current) =>
-            merged(current, [row], (it) => participantKey(it.hangout_id, it.friend_id))
-          )
-      )
-      .on<HangoutParticipantRow>(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'hangout_participant' },
-        ({ new: row }) =>
-          setPeople((current) =>
-            merged(current, [row], (it) => participantKey(it.hangout_id, it.friend_id))
-          )
-      )
-      .on<HangoutParticipantRow>(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'hangout_participant' },
-        ({ old: { hangout_id: hangoutId, friend_id: friendId } }) => {
-          if (hangoutId === undefined || friendId === undefined) return
-          setPeople((current) => without(current, [participantKey(hangoutId, friendId)]))
-        }
-      )
+      .channel(calTopic(calId, 'hangouts'), { config: { private: true } })
+      .on('broadcast', { event: 'INSERT' }, ({ payload }) => fold(payload))
+      .on('broadcast', { event: 'UPDATE' }, ({ payload }) => fold(payload))
+      .on('broadcast', { event: 'DELETE' }, ({ payload }) => fold(payload))
       .subscribe()
 
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [userId])
+  }, [userId, calId])
 
   const hangouts = useMemo(
     () => hangoutsFrom([...rows.values()], [...people.values()]),
@@ -412,7 +438,7 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
       if (userId === null || inFlight.current) return
       inFlight.current = true
       setConfirming(candidate.id)
-      void performConfirm(candidate, userId)
+      void performConfirm(candidate, userId, calId)
         .then(({ hangout, participants }) => {
           /*
            * Folded in here rather than left to the Realtime echo. The echo is
@@ -432,7 +458,7 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
           setConfirming(null)
         })
     },
-    [userId]
+    [userId, calId]
   )
 
   /* ------------------------------------------------------------------ *
@@ -647,20 +673,24 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
       if (missing.length > 0) {
         const { error: drawError } = await supabase.from('availability').upsert(
           missing.map((slotStart) => ({
+            cal_id: calId,
             friend_id: userId,
             slot_start: new Date(slotStart).toISOString(),
           })),
-          { onConflict: 'friend_id,slot_start', ignoreDuplicates: true }
+          // All three key columns, or PostgREST answers `42P10` — the same line
+          // `use-availability.ts`'s `writeStroke` carries, for the same reason.
+          { onConflict: 'cal_id,friend_id,slot_start', ignoreDuplicates: true }
         )
         if (drawError !== null) return drawError.message
       }
 
-      const { error: seatError } = await supabase
-        .from('hangout_participant')
-        .upsert(
-          { hangout_id: hangout.id, friend_id: userId },
-          { onConflict: 'hangout_id,friend_id', ignoreDuplicates: true }
-        )
+      const { error: seatError } = await supabase.from('hangout_participant').upsert(
+        { hangout_id: hangout.id, cal_id: calId, friend_id: userId },
+        // The conflict target is still the key, which has not moved:
+        // `cal_id` on this table is redundant with the Hangout's and is not
+        // part of its identity.
+        { onConflict: 'hangout_id,friend_id', ignoreDuplicates: true }
+      )
       if (seatError !== null) return seatError.message
 
       const { data, error } = await supabase
@@ -676,7 +706,7 @@ export const useHangouts = (days: readonly Date[]): HangoutStore => {
       foldParticipant(data)
       return null
     },
-    [userId, foldParticipant]
+    [userId, calId, foldParticipant]
   )
 
   return {
@@ -713,13 +743,25 @@ type Landed = {
  * over — the async half of a write, lifted out of the hook so the synchronous
  * half stays synchronous.
  */
-const performConfirm = async (candidate: Candidate, userId: string): Promise<Landed> => {
+const performConfirm = async (
+  candidate: Candidate,
+  userId: string,
+  calId: string
+): Promise<Landed> => {
   const when = whenOf(candidate.start, candidate.end, GROUP_TIME_ZONE)
   const range = `${when.date}, ${when.range}`
 
   const { data: hangout, error } = await supabase
     .from('hangout')
     .insert({
+      /*
+       * Which cal the plan is in, and it is what the exclusion constraint now
+       * keys on: the calendar holds one plan at a time **per cal**, so a
+       * `23P01` here means somebody in *this* cal got there first. Another
+       * cal booking the same evening is not a collision and never reaches this
+       * path.
+       */
+      cal_id: calId,
       starts_at: new Date(candidate.start).toISOString(),
       ends_at: new Date(candidate.end).toISOString(),
       /*
@@ -743,12 +785,17 @@ const performConfirm = async (candidate: Candidate, userId: string): Promise<Lan
 
   if (error !== null) {
     return isOverlapRejection(error)
-      ? await joinTheWinner(candidate, userId, range)
+      ? await joinTheWinner(candidate, userId, calId, range)
       : reportFailure(`Couldn't confirm ${range}`, error.message)
   }
 
   const seeded = candidate.friendIds.map((friendId) => ({
     hangout_id: hangout.id,
+    // From the row that just landed rather than from `calId`, so the redundant
+    // column is copied from its source. The composite foreign key would refuse
+    // a disagreement anyway; taking it from `hangout` means there is never one
+    // to refuse.
+    cal_id: hangout.cal_id,
     friend_id: friendId,
   }))
 
@@ -807,11 +854,16 @@ const performConfirm = async (candidate: Candidate, userId: string): Promise<Lan
 const joinTheWinner = async (
   candidate: Candidate,
   userId: string,
+  calId: string,
   range: string
 ): Promise<Landed> => {
   const { data: winner, error } = await supabase
     .from('hangout')
     .select(HANGOUT_COLUMNS)
+    // In this cal, and it is not a tidying: the constraint that rejected us is
+    // per-cal, so an overlapping plan in another of the viewer's cals is not
+    // the winner and joining it would put them on a stranger's evening.
+    .eq('cal_id', calId)
     // Half-open, matching `tstzrange`'s `[)`: a plan ending exactly where this
     // Candidate starts is not the one that beat us to it.
     .lt('starts_at', new Date(candidate.end).toISOString())
@@ -836,7 +888,7 @@ const joinTheWinner = async (
   const { error: joinError } = await supabase
     .from('hangout_participant')
     .upsert(
-      { hangout_id: winner.id, friend_id: userId },
+      { hangout_id: winner.id, cal_id: winner.cal_id, friend_id: userId },
       { onConflict: 'hangout_id,friend_id', ignoreDuplicates: true }
     )
 
@@ -866,7 +918,9 @@ const joinTheWinner = async (
 
   return {
     hangout: winner,
-    participants: [{ hangout_id: winner.id, friend_id: userId, left_at: null }],
+    participants: [
+      { hangout_id: winner.id, cal_id: winner.cal_id, friend_id: userId, left_at: null },
+    ],
   }
 }
 
